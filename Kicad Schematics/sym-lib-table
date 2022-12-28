@@ -1,0 +1,3 @@
+(sym_lib_table
+  (lib (name "Sinclair QL Parts")(type "KiCad")(uri "${KIPRJMOD}/Sinclair QL Parts.kicad_sym")(options "")(descr ""))
+)
