@@ -1,0 +1,1138 @@
+2.18 Peripheral and SuperBASIC initialisation.
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=CHKPROMS         CHECK FOR PERIPHERAL ROMS                                   ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³JOB:                                                                          ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:                                                                        ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+4AF8 CHKPROMS      BRA.S    L04B2E
+
+4AFA L04AFA        CMPI.L   #$4AFB0001,(A3)        ;any ROMS ?
+                   BNE.S    L04B22                 ;exit if no ROM exists in the first ROM slot
+                   LEA      ROM.NAME(A3),A1        ;point at the start of the ROM name
+                   JSR      UT_MTEXT(PC)           ;and print it
+                   MOVE.W   ROM.PROC(A3),D0        ;get word offset to procedures and functions list
+                   BEQ.S    L04B18                 ;and jump forward if no list otherwise
+                   LEA      0(A3,D0.W),A1          ;point at the procedures and functions list
+                   JSR      BP_INIT(PC)            ;and add them to SuperBASIC if any present
+4B18 L04B18        MOVE.W   ROM.INIT(A3),D0        ;get word offset to initialisation routine
+                   BEQ.S    L04B22                 ;and exit if there isn't one
+                   JSR      0(A3,D0.W)             ;otherwise call it
+4B22 L04B22        RTS
+
+4B24 L04B24        JSR      UT_CON(PC)
+4B28 L04B28        MOVE.L   D4,D1
+                   JMP      L060A0(PC)
+
+4B2E L04B2E        JSR      L050F6(PC)             ;initialise the SuperBASIC data structures
+4B32 L04B32        LEA      CON_I_0(PC),A1         ;point at definition block for ROM messages window
+                   MOVEQ    #0,D4
+                   BSR.S    L04B24                 ;open the window
+                   MOVEA.L  #$C000,A3              ;A3 points at start of external ROM slot in memory
+                   BSR.S    L04AFA                 ;check for the presence of an external ROM here
+                   MOVEA.L  #$C0000,A3             ;A3 points at start of first peripheral ROM slot
+4B48 L04B48        BSR.S    L04AFA                 ;check for the presence of a peripheral ROM here
+                   ADDA.W   #$4000,A3              ;point at next slot 
+                   CMPA.L   #$100000,A3            ;after last slot ?
+
+   The following instruction should have been BLT.S because the code is only
+   excecuted once with the BGE.S instruction and this prevents any further
+   peripheral ROM's being searched for and initialised. 
+
+                   BGE.S    L04B48                 ;no check for more ROM's
+
+   The procedures and functions which are used to extend the interpreter are
+   added during the initialisation stage. The external ROM and the peripheral
+   ROM's are allowed to add their definitions first so that their definitions
+   take precedence over the SuperBASIC ones. They take precedence because the
+   interpreter searches through the name list from the beginning when parsing
+   a line or command and so it will come across and use the first definition 
+   it finds and will therfore ignore any further ones.
+
+                   JSR      SB_INIT(PC)            ;add in the SuperBASIC procedures and functions
+                   LEA      CON_I_1(PC),A1         ;point at definition block for copyright message
+                   MOVEQ    #1,D4
+                   BSR.S    L04B24                 ;open the window
+                   LEA      COPYRIGHT(PC),A1       ;point at copyright message
+                   JSR      UT_MTEXT(PC)           ;and print it
+                   LEA      CON_I_2(PC),A1         ;point at definition block for "F1/F2" prompt window
+                   MOVEQ    #2,D4
+                   BSR.S    L04B24                 ;open the window
+                   LEA      F1F2_MESS(PC),A1       ;point at "F1/F2" prompt message
+                   JSR      UT_MTEXT(PC)           ;and print it
+4B7A L04B7A        MOVEQ    #IO.FBYTE,D0           ;TRAP to fetch a byte
+                   MOVEQ    #-1,D3                 ;use an infinite timeout
+                   TRAP     #3                     ;wait for a single key press
+                   MOVEQ    #0,D6                  ;set display mode to 0 giving 4 colours
+                   MOVEQ    #0,D7                  ;in monitor mode
+                   MOVEQ    #$20,D5
+                   SUBI.B   #$E8,D1                ;subtract code for F1 key
+                   BEQ.S    L04B96                 ;and jump forward if the F1 key was pressed
+                   SUBQ.B   #4,D1                  ;check for the F4 key
+                   BNE.S    L04B7A                 ;get another key press if it wasn't F2 either
+                   MOVEQ    #8,D6                  ;set display mode to 8 giving 8 colours
+                   MOVEQ    #1,D7                  ;in tv mode
+                   MOVEQ    #$44,D5
+4B96 L04B96        MOVE.B   D6,D1                  ;get display mode
+                   MOVE.B   D7,D2                  ;and display type
+                   MOVEQ    #MT.DMODE,D0           ;TRAP to read or set the display mode
+                   TRAP     #1                     ;set it
+
+   If thee F1 key was pressed then the following instructions will open the
+   windows defined in the parameter blocks for the mode 4 windows. If the F2
+   key was pressed instead then the windows defined in the parameter blocks
+   for the mode 8 windows will be opened in their place.
+
+                   LEA      CONM4_2-32(PC,D5.W),A1 ;point at definition block for channel 2
+                   BSR.S    L04BF6                 ;open the window
+                   MOVEA.L  #$00010001,A0          ;channel ID for channel 1
+                   LEA      CONM4_1-32(PC,D5.W),A1 ;point at definition block for channel 1
+                   BSR.S    L04BF6                 ;open the window
+                   SUBA.L   A0,A0                  ;form channel ID for channel ($00000000)
+                   LEA      CONM4_0-32(PC,D5.W),A1 ;point at definition block for channel 0
+                   BSR.S    L04BF6                 ;open the window
+
+                   LEA      L04C9E(PC),A0          ;point at "BOOT" device name
+                   BSR.S    L04BCE                 ;try and open a channel to a device with this name
+                   BEQ.S    L04BC8                 ;jump forward if successful otherwise
+                   LEA      L04CA4(PC),A0          ;point at microdrive one boot file name
+                   BSR.S    L04BCE                 ;and try and open a channel to this instead
+                   BNE.S    L04BDA                 ;and jump forward if unsuccessful
+4BC8 L04BC8        CLR.W    BV,NXLIN(A6)           ;signal "no program"
+                   BRA.S    L04BDC                 ;jump forward to interpreter
+
+4BCE L04BCE        MOVEQ    #IO.OPEN,D0            ;TRAP to open a channel
+4BD0 L04BD0        MOVEQ    #-1,D1                 ;for this job
+                   MOVEQ    #0,D3                  ;to an old exclusive file
+                   TRAP     #2                     ;open it
+                   TST.L    D0                     ;set flags to signal any errors
+                   RTS
+
+4BDA L04BDA        SUBA.L   A0,A0
+4BDC L04BDC        MOVE.L   (A6),BV.BFP(A6)        ;empty out any existing basic program
+4BE0 L04BE0        MOVEQ    #0,D7
+                   MOVEQ    #$7E,D1
+                   JSR      CA_ALBFP(PC)
+                   MOVE.L   A0,BV.COMCH(A6)        ;set SuperBASIC command channel ID
+                   LEA      L04CB0(PC),A5
+                   MOVE.L   A5,-(A7)
+4BF2 L04BF2        JMP      L04CC4(PC)
+
+4BF6 L04BF6        JMP      L03A70(PC)
+
+   The following data blocks define the three mode 4 windows which will become
+   channels #0,#1 and #2 respectively.
+
+4BFA CONM4_0       DC.B     0                      ;no border
+                   DC.B     0
+                   DC.B     0                      ;black paper
+                   DC.B     7                      ;green ink
+                   DC.W     512                    ;512 pixels wide and
+                   DC.W     50                     ;50 pixels high
+                   DC.W     0                      ;at 2,206
+                   DC.W     206
+
+4C06 CONM4_1       DC.B     $FF                    ;black and white checkerboard border
+                   DC.B     1                      ;one pixel wide
+                   DC.B     2                      ;red paper
+                   DC.B     7                      ;white ink
+                   DC.W     256                    ;256 pixels wide and
+                   DC.W     202                    ;202 pixels high
+                   DC.W     256                    ;at 256,0
+                   DC.W     0
+
+4C12 CONM4_2       DC.B     $FF                    ;black and white checkerboard border
+                   DC.B     1                      ;one pixel wide
+                   DC.B     7                      ;white paper
+                   DC.B     2                      ;red ink
+                   DC.W     256                    ;256 pixels wide and
+                   DC.W     202                    ;202 pixels high
+                   DC.W     0                      ;at 0,0
+                   DC.W     0
+
+   The following data blocks define the three mode 8 windows which will become
+   channels #0,#1 and #2 respectively.
+
+4C1E CONM8_0       DC.B     0                      ;no border
+                   DC.B     0
+                   DC.B     0                      ;black paper
+                   DC.B     7                      ;green ink
+                   DC.W     448                    ;448 pixels wide and
+                   DC.W     40                     ;40 pixels high
+                   DC.W     32                     ;at 32,216
+                   DC.W     216
+
+4C2A CONM8_1       DC.B     0                      ;no border
+                   DC.B     0
+                   DC.B     2                      ;red paper
+                   DC.B     7                      ;white ink
+                   DC.W     448                    ;448 pixels wide and
+                   DC.W     216                    ;216 pixels high
+                   DC.W     32                     ;at 32,16
+                   DC.W     16
+
+4C36 CONM8_2       DC.B     0                      ;no border
+                   DC.B     0
+                   DC.B     1                      ;blue paper
+                   DC.B     7                      ;white ink
+                   DC.W     448                    ;448 pixels wide and
+                   DC.W     216                    ;216 pixels high
+                   DC.W     32                     ;at 32,16
+                   DC.W     16
+
+   The following data blocks define the three mode 8 windows which are printed
+   at initialisation for the external ROM names, the Sinclair copyright message
+   and the "F1/F2" prompt respectively.
+
+4C42 CON_I_0       DC.B     0                      ;no border
+                   DC.B     0
+                   DC.B     0                      ;black paper
+                   DC.B     4                      ;green ink
+                   DC.W     448                    ;448 pixels wide and
+                   DC.W     170                    ;170 pixels high
+                   DC.W     32                     ;at 32,32
+                   DC.W     32
+
+4C4E CON_I_1       DC.B     7                      ;white border
+                   DC.B     2                      ;two pixels wide
+                   DC.B     2                      ;red paper
+                   DC.B     7                      ;white ink
+                   DC.W     368                    ;368 pixels wide and
+                   DC.W     14                     ;14 pixels high
+                   DC.W     72                     ;at 72,238
+                   DC.W     238
+
+4C5A CON_I_2       DC.B     4                      ;green border
+                   DC.B     4                      ;four pixels wide
+                   DC.B     7                      ;white paper
+                   DC.B     2                      ;red ink
+                   DC.W     168                    ;168 pixels wide and
+                   DC.W     28                     ;28 pixels high
+                   DC.W     174                    ;at 174,206
+                   DC.W     206
+
+4C66 COPYRIGHT     DC.B     0,29,'  1983 Sinclair Research Ltd',0
+4C86 F1F2_MESS     DC.B     0,21,'F1...monitor',10,'F2...TV',10,0
+4C9E L04C9E        DC.B     0,4,'BOOT'
+4CA4 L04CA4        DC.B     0,9,'MDV1_BOOT',10
+
+4CB0 L04CB0        JSR      L09F92(PC)
+                   LEA      L04CB0(PC),A5	;push the address of this routine on the stack
+                   MOVE.L   A5,-(A7)            ;so that it is always executed on restarting
+4CBA L04CBA        MOVE.L   D7,BV.COMCH(A6)     ;set SuperBASIC command channel ID
+                   MOVEQ    #0,D1               ;SuperBASIC channel number equals zero
+                   JSR      GETCHID(PC)         ;get the QDOS channel ID for this channel
+4CC4 L04CC4        CLR.L    BV.SSSAV(A6)
+                   MOVE.L   (A6),BV.BFP(A6)
+                   TST.B    BV.AUTO(A6)
+                   BEQ.S    L04CEC
+                   MOVE.W   BV.EDLIN(A6),D4
+                   MOVE.W   D4,D6
+                   SF       BV.PRINT(A6)
+                   JSR      L06E68(PC)
+                   MOVE.W   BV.EDINC(A6),D0
+                   SNE      BV.AUTO(A6)
+                   ADD.W    D0,BV.EDLIN(A6)
+4CEC L04CEC        MOVEQ    #0,D4
+4CEE L04CEE        MOVEQ    #4,D0
+                   TRAP     #4
+                   MOVEQ    #-1,D3                 ;use an infinite timeout
+                   MOVEA.L  BV.BFP(A6),A1
+                   MOVE.L   BV.TKBAS(A6),D2
+                   SUB.L    (A6),D2
+4CFE L04CFE        MOVE.L   A1,D1
+                   SUB.L    (A6),D1
+                   MOVE.W   D1,D4
+                   MOVE.L   D4,D1
+4D06 L04D06        CMP.L    A0,D7
+                   BEQ.S    L04D0E
+                   MOVEQ    #2,D0
+                   SUB.W    D1,D2
+4D0E L04D0E        TRAP     #3
+                   TST.L    D0
+                   BEQ.S    L04D5E
+                   BGT.S    L04D34
+                   CMPI.B   #$F6,D0
+                   BEQ.S    L04D4A
+                   CMPI.B   #$FB,D0
+                   BNE.S    L04D34
+                   MOVE.L   D1,D4
+                   MOVE.L   A1,BV.BFP(A6)
+                   MOVE.L   A0,-(A7)
+                   MOVEQ    #$7E,D1
+                   JSR      CA_ALBFP(PC)
+                   MOVEA.L  (A7)+,A0
+                   BRA.S    L04CEE
+
+4D34 L04D34        SF       BV.AUTO(A6)
+4D38 L04D38        JSR      L092EC(PC)
+4D3C L04D3C        BSR      L04DF4
+                   BEQ.S    L04D46
+                   MOVEQ    #2,D0
+                   TRAP     #2
+4D46 L04D46        BRA      L04CBA
+
+4D4A L04D4A        MOVEQ    #2,D0
+4D4C L04D4C        TRAP     #2
+                   MOVE.L   D7,BV.COMCH(A6)
+                   TST.W    BV.NXLIN(A6)
+                   BLT      L04E64
+                   BRA      L04E98
+
+4D5E L04D5E        TAS      BV.BRK(A6)
+4D62 L04D62        MOVE.L   A1,D1
+                   SUB.L    (A6),D1
+                   SF       BV.ARROW(A6)
+                   MOVE.B   -1(A6,A1.L),D0
+                   SUBI.B   #$D0,D0
+                   BCS.S    L04D80
+                   ST       BV.ARROW(A6)
+                   BEQ.S    L04D80
+                   MOVE.B   #1,BV.ARROW(A6)
+4D80 L04D80        SUBQ.W   #1,D1
+                   BLE      L04CC4
+                   CMPI.B   #$20,-2(A6,A1.L)
+                   BNE.S    L04D92
+                   SUBQ.W   #1,A1
+                   BRA.S    L04D80
+
+4D92 L04D92        MOVE.B   #10,-1(A6,A1.L)
+4D98 L04D98        MOVE.L   A1,BV.BFP(A6)
+4D9C L04D9C        JSR      L080EE(PC)
+                   LEA      L0833C(PC),A2
+                   JSR      L07FB6(PC)
+                   BEQ.S    L04DCA
+                   BLT.S    L04DB2
+                   JSR      L08F9A(PC)
+                   BRA.S    L04D9C
+
+4DB2 L04DB2        TST.L    BV.COMCH(A6)
+4DB6 L04DB6        BNE.S    L04DC6
+                   MOVEQ    #-$15,D0
+                   JSR      L092EC(PC)
+                   SUBQ.L   #1,BV.BFP(A6)
+                   BRA      L04CEC
+
+4DC6 L04DC6        JSR      L08230(PC)
+4DCA L04DCA        JSR      L08296(PC)
+4DCE L04DCE        JSR      L08674(PC)
+                   BRA.S    L04DFC
+
+4DD4 L04DD4        SF       BV.SING(A6)
+                   ST       BV.EDIT(A6)
+                   MOVE.L   D0,D5
+                   BSR.S    L04DF4
+                   BNE      L04CC4
+                   MOVEQ    #2,D1
+                   JSR      GETCHID(PC)
+                   BLT.S    L04DF0
+                   JSR      L087D2(PC)
+4DF0 L04DF0        BRA      L04CBA
+
+4DF4 L04DF4        MOVEA.L  BV.COMCH(A6),A0
+4DF8 L04DF8        MOVE.L   A0,D0
+                   RTS
+
+4DFC L04DFC        MOVEA.L  BV.TKBAS(A6),A4
+4E00 L04E00        MOVE.B   #1,BV.STMNT(A6)
+                   SF       BV.INLIN(A6)
+                   ST       BV.CONT(A6)
+4E0E L04E0E        ST       BV.SING(A6)
+                   MOVE.L   D7,BV.LINUM(A6)
+                   JSR      L09AE0(PC)
+                   JSR      L09EC8(PC)
+                   BNE      L04D3C
+                   TST.B    BV.COMLN(A6)
+                   BEQ.S    L04E58
+                   SUBQ.W   #4,BV.STOPN(A6)
+                   BEQ.S    L04DF0
+                   BLT.S    L04E0E
+                   MOVEA.L  BV.TKBAS(A6),A0
+                   MOVE.L   BV.TKP(A6),D0
+                   SUBA.L   A0,A4
+                   SUB.L    A0,D0
+                   MOVE.L   D0,D1
+                   SUBA.L   D0,A7
+4E40 L04E40        MOVE.W   0(A6,A0.L),(A7)+
+                   ADDQ.W   #2,A0
+                   SUBQ.W   #2,D1
+                   BGT.S    L04E40
+                   SUBA.L   D0,A7
+                   MOVE.W   D0,-(A7)
+                   MOVE.W   A4,-(A7)
+                   MOVE.B   BV.STMNT(A6),-(A7)
+                   MOVE.L   BV.INLIN(A6),-(A7)
+4E58 L04E58        TST.W    BV.NXLIN(A6)
+                   BGE.S    L04E92
+                   BSR.S    L04DF4
+4E60 L04E60        BNE      L04CC4
+4E64 L04E64        TST.B    BV.COMLN(A6)
+                   BEQ.S    L04DF0
+                   SF       BV.COMLN(A6)
+                   MOVE.L   (A7)+,BV.INLIN(A6)
+                   MOVE.B   (A7)+,BV.STMNT(A6)
+                   MOVEA.L  BV.TKBAS(A6),A0
+                   MOVEA.L  A0,A4
+                   ADDA.W   (A7)+,A4
+                   MOVE.W   (A7)+,D0
+4E80 L04E80        MOVE.W   (A7)+,0(A6,A0.L)
+                   ADDQ.W   #2,A0
+                   SUBQ.W   #2,D0
+                   BGT.S    L04E80
+                   MOVE.L   A0,BV.TKP(A6)
+                   BRA      L04E0E
+
+4E92 L04E92        BSR      L04DF4
+4E96 L04E96        BNE.S    L04E60
+4E98 L04E98        JSR      L09AE0(PC)
+                   MOVEA.L  BV.PFBAS(A6),A4
+                   SF       BV.SING(A6)
+                   MOVE.L   D7,BV.LINUM(A6)
+                   MOVE.B   #1,BV.STMNT(A6)
+                   MOVE.W   BV.NXLIN(A6),D4
+                   BEQ.S    L04ED0
+                   JSR      L096B0(PC)
+                   BNE      L04CBA
+                   MOVE.B   BV.NXSTM(A6),D4
+                   BEQ.S    L04ED0
+                   JSR      L09F46(PC)
+                   JSR      L096FC(PC)
+4ECA L04ECA        JSR      L09F1C(PC)
+                   BRA.S    L04ED4
+
+4ED0 L04ED0        JSR      L09EBA(PC)
+4ED4 L04ED4        BNE      L04CBA
+4ED8 L04ED8        TST.W    BV.STOPN(A6)
+                   BNE      L04E58
+                   BRA.S    L04ECA
+
+4EE2 L04EE2        JSR      CA_ALNTP(PC)
+                   MOVEA.L  BV.NTP(A6),A2
+                   ADDQ.L   #8,BV.NTP(A6)
+                   RTS
+
+4EF0 L04EF0        MOVE.L   D1,-(A7)
+4EF2 L04EF2        ADDQ.L   #7,D1
+                   ANDI.W   #$FFF8,D1
+4EF8 L04EF8        MOVEA.W  #$72,A0
+                   MOVEQ    #12,D0
+                   TRAP     #1
+                   TST.L    D0
+                   BLT.S    L04F06
+                   BRA.S    L04F20
+
+4F06 L04F06        MOVE.L   D1,-(A7)
+4F08 L04F08        JSR      CA_ALVVP(PC)
+                   MOVEA.L  BV.VVP(A6),A0
+                   ADD.L    D1,BV.VVP(A6)
+                   MOVEA.W  #$72,A1
+                   MOVEQ    #13,D0
+                   TRAP     #1
+                   MOVE.L   (A7)+,D1
+                   BRA.S    L04EF8
+
+4F20 L04F20        MOVE.L   (A7)+,D1
+4F22 L04F22        RTS
+
+4F24 L04F24        DC.W     $0100,$0100
+                   DC.W     $0100,$0100
+
+4F2C L04F2C        LEA      L04F24(PC),A1
+                   ADD.W    D0,D0
+                   MOVEQ    #0,D1
+                   MOVE.W   0(A1,D0.W),D1
+                   MOVEQ    #$60,D2
+                   MOVE.L   A7,BV.SSP(A6)
+                   MOVE.L   A6,D0
+                   SUB.L    D0,BV.SSP(A6)
+                   BRA.S    CA_ALSBS               ;allocate space on basic stack
+
+2.19 SuperBASIC stack management.
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=CA_ALRIP         RESERVE SPACE ON MATHS STACK 2                              ³
+³=BV_CHRIX         RESERVE SPACE ON MATHS STACK                                ³
+³=BV_ALBTP         ALLOCATE SPACE ON BACKTRACK STACK                           ³
+³=BV_ALTGP         ALLOCATE SPACE ON TEMPORARY GRAPH STACK                     ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³JOB:                                                                          ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D1.L     the number of bytes required if BV_CHRIX            ³
+³                                                                              ³
+³EXIT:            A0,A1,A2,A3 preserved                                        ³
+³                 D1,D2,D3 corrupted                                           ³
+³                                                                              ³
+³ERRORS:          none                                                         ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   Each call to the following routines allocates enough space on the appropriate
+   stack for one element or record of the type which normally exists on that
+   stack. 
+
+4F46 CA_ALRIP      MOVEQ    #32,D1                 ;reserve 32 bytes
+4F48 BV_CHRIX      MOVEQ    #BV.RIP,D2             ;on the maths stack
+                   BRA.S    CA_ALSBS
+
+4F4C CA_ALBTP      MOVEQ    #12,D1                 ;reserve 12 bytes
+                   MOVEQ    #BV.BTP,D2             ;on the back track stack
+                   BRA.S    CA_ALSBS
+
+4F52 CA_ALTGP      MOVEQ    #4,D1                  ;reserve 4 bytes
+                   MOVEQ    #BV.TGP,D2             ;on the temporary graph stack
+                   BRA.S    CA_ALSBS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=CA_ALNTP         ALLOCATE SPACE IN NAME TABLE                                ³
+³=CA_ALRTP         ALLOCATE SPACE IN RETURN STACK                              ³
+³=CA_ALBFP         ALLOCATE SPACE IN BUFFER                                    ³
+³=CA_ALTKP         ALLOCATE SPACE IN TOKEN TABLE                               ³
+³=CA_ALNLP         ALLOCATE SPACE IN NAME LIST                                 ³
+³=CA_ALVVP         ALLOCATE SPACE IN VARIABLE VALUES                           ³
+³=CA_ALCHB         RESERVE SPACE IN SUPERBASIC CHANNEL TABLE                   ³
+³=CA_ALLNP         ALLOCATE SPACE IN LINE NUMBER TABLE                         ³                                  ³
+³=CA_ALPFP         ALLOCATE SPACE IN PROGRAM FILE                              ³
+³=CA_ALSBT         ALLOCATE SPACE IN SUPERBASIC TABLE                          ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³JOB:                                                                          ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:                                                                        ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+4F58 CA_ALNTP      MOVEQ    #8,D1                  ;reserve 8 bytes
+                   MOVEQ    #BV.NTP,D2             ;in the name table
+                   BRA.S    CA_ALSBT
+
+4F5E CA_ALRTP      MOVEQ    #22,D1                 ;reserve 22 bytes
+                   MOVEQ    #BV.RTP,D2             ;in the return stack
+                   BRA.S    CA_ALSBT
+
+4F64 CA_ALBFP      MOVEQ    #BV.BFP,D2             ;reserve D1.L bytes
+                   BRA.S    CA_ALSBT               ;in the buffer
+
+4F68 CA_ALTKP      MOVEQ    #BV.TKP,D2             ;reserve D1.L bytes
+                   BRA.S    CA_ALSBT               ;in the token table
+
+4F6C CA_ALNLP      MOVEQ    #BV.NLP,D2             ;reserve D1.L bytes
+                   BRA.S    CA_ALSBT               ;in the name list
+
+4F70 CA_ALVVP      MOVEQ    #BV.VVP,D2             ;reserve D1.L bytes
+                   BRA.S    CA_ALSBT               ;in the variable values area
+
+4F74 CA_ALCHB      MOVEQ    #BV.CHP,D2             ;reserve D1.L bytes
+                   BRA.S    CA_ALSBT               ;in the SuperBASIC channel table
+
+4F78 CA_ALLNP      MOVEQ    #BV.LNP,D2             ;reserve D1.L bytes
+                   BRA.S    CA_ALSBT               ;in the line number table
+
+4F7C CA_ALPFP      MOVEQ    #BV.PFP,D2             ;reserve D1.L bytes in the program file
+4F7E CA_ALSBT      MOVEQ    #0,D0                  ;
+                   MOVE.L   4(A6,D2.L),D3          ;get the address of the start of the area above
+                   SUB.L    0(A6,D2.L),D3          ;and form the length of the area to move
+                   BRA.S    L04F94
+
+4F8A CA_ALSBS      MOVEQ    #-1,D0
+4F8C L04F8C        MOVE.L   0(A6,D2.L),D3
+                   SUB.L    -4(A6,D2.L),D3
+4F94 L04F94        CMP.L    D1,D3
+                   BGE.S    L04FDC
+                   MOVEM.L  A0-3,-(A7)
+                   ADDI.L   #15,D1
+                   ANDI.W   #$FFF0,D1
+4FA6 L04FA6        MOVE.L   BV.CHANG(A6),D3
+                   SUB.L    BV.LNBAS(A6),D3
+                   CMP.L    D1,D3
+                   BGT.S    L0500E
+                   MOVEM.L  D0-2,-(A7)
+                   MOVEQ    #$16,D0
+                   TRAP     #1
+                   TST.L    D0
+                   BEQ.S    L04FDE
+                   MOVE.W   #$12,BV.STOPN(A6)
+                   TRAP     #0
+                   MOVEA.L  BV.SSBAS(A6),A5
+                   ADDA.L   A6,A5
+                   SUBA.L   BV.SSSAV(A6),A5
+                   SUBQ.W   #4,A5
+                   MOVE.L   A5,USP
+                   MOVE.W   #4,SR
+                   SF       BV.CONT(A6)
+4FDC L04FDC        RTS
+
+4FDE L04FDE        MOVEA.L  BV.CHANG(A6),A0
+4FE2 L04FE2        MOVEA.L  BV.SSBAS(A6),A1
+                   LEA      0(A1,D1.L),A2
+4FEA L04FEA        SUBQ.W   #4,A2
+                   SUBQ.W   #4,A1
+                   MOVE.L   0(A6,A1.L),0(A6,A2.L)
+                   CMPA.L   A0,A1
+                   BGT.S    L04FEA
+                   MOVEQ    #$48,D0
+                   MOVEQ    #$64,D2
+4FFC L04FFC        ADD.L    D1,0(A6,D0.L)
+                   ADDQ.W   #4,D0
+                   CMP.L    D2,D0
+                   BLE.S    L04FFC
+                   ADDA.L   D1,A7
+                   MOVEM.L  (A7)+,D0-2
+                   BRA.S    L04FA6
+
+500E L0500E        TST.B    D0
+5010 L05010        BMI.S    L0504E
+                   CMPI.L   #$44,D2
+                   BEQ.S    L0507E
+                   MOVEA.L  BV.LNBAS(A6),A1
+                   MOVEA.L  4(A6,D2.L),A0
+                   LEA      0(A1,D1.L),A2
+5026 L05026        SUBQ.W   #4,A1
+                   SUBQ.W   #4,A2
+                   MOVE.L   0(A6,A1.L),0(A6,A2.L)
+                   CMPA.L   A0,A1
+                   BGT.S    L05026
+                   MOVEQ    #4,D0
+                   ADD.W    D2,D0
+                   MOVEQ    #$48,D2
+                   TST.L    BV.VVFRE(A6)
+                   BEQ.S    L05074
+                   CMPI.L   #$28,D0
+                   BGT.S    L05074
+                   ADD.L    D1,BV.VVFRE(A6)
+                   BRA.S    L05074
+
+504E L0504E        CMPI.L   #$48,D2
+5054 L05054        BEQ.S    L0507E
+                   MOVEA.L  -4(A6,D2.L),A1
+                   MOVEA.L  BV.CHANG(A6),A0
+                   NEG.L    D1
+                   LEA      0(A0,D1.L),A2
+5064 L05064        MOVE.L   0(A6,A0.L),0(A6,A2.L)
+                   ADDQ.W   #4,A0
+                   ADDQ.W   #4,A2
+                   CMPA.L   A1,A0
+                   BLE.S    L05064
+                   MOVEQ    #$48,D0
+5074 L05074        ADD.L    D1,0(A6,D0.L)
+                   ADDQ.W   #4,D0
+                   CMP.L    D2,D0
+                   BLT.S    L05074
+507E L0507E        MOVEM.L  (A7)+,A0-3
+                   RTS
+
+5084 CA_REPFP      MOVEQ    #BV.PFP,D2
+                   BRA.S    CA_RESBT
+
+5088 CA_RENLP      MOVEQ    #BV.NLP,D2
+                   BRA.S    CA_RESBT
+
+508C CA_RENTP      MOVEQ    #BV.NTP,D2
+                   BRA.S    CA_RESBT
+
+5090 CA_REVVP      MOVEQ    #BV.VVP,D2
+                   BRA.S    CA_RESBT
+
+5094 CA_RECHP      MOVEQ    #BV.CHP,D2
+                   BRA.S    CA_RESBT
+
+5098 CA_RERTP      MOVEQ    #BV.RTP,D2
+509A CA_RESBT      MOVEA.L  4(A6,D2.L),A1          ;get base of area above
+                   MOVE.L   A1,D1
+                   MOVE.L   0(A6,D2.L),D0          ;get running pointer
+                   ADDQ.W   #1,D0
+                   BCLR     #0,D0
+                   MOVEA.L  D0,A0
+                   SUB.L    A0,D1                  ;find length
+                   BEQ.S    L050E0                 ;and exit if zero
+
+   Shift area above location pointed to by A1.L to location pointed to by A0.L.
+
+50B0 L050B0        MOVE.L   0(A6,A1.L),0(A6,A0.L)  ;move area down
+                   ADDQ.W   #4,A1                  ;increment pointers
+                   ADDQ.W   #4,A0
+                   CMPA.L   BV.LNBAS(A6),A1        ;last long word ?
+                   BLT.S    L050B0                 ;move more if not
+
+                   MOVEQ    #4,D0
+                   ADD.B    D2,D0
+                   TST.L    BV.VVFRE(A6)
+                   BEQ.S    L050D4
+                   CMPI.B   #$28,D2
+                   BGE.S    L050D4
+                   SUB.L    D1,BV.VVFRE(A6)
+50D4 L050D4        MOVEQ    #$48,D2
+50D6 L050D6        SUB.L    D1,0(A6,D0.L)
+                   ADDQ.B   #4,D0
+                   CMP.B    D2,D0
+                   BLT.S    L050D6
+50E0 L050E0        RTS
+
+50E2 L050E2        ADDQ.L   #7,D1
+50E4 L050E4        ANDI.L   #$FFFFFFF8,D1
+                   BEQ.S    L050F4
+                   MOVEA.W  #$72,A1
+                   MOVEQ    #13,D0
+                   TRAP     #1
+50F4 L050F4        RTS
+
+50F6 L050F6        SUBA.L   A3,A3
+50F8 L050F8        MOVEQ    #$48,D0
+50FA L050FA        MOVE.L   #$100,0(A6,A3.L)
+                   ADDQ.W   #4,A3
+                   CMPA.W   D0,A3
+                   BLT.S    L050FA
+                   MOVEQ    #$64,D0
+510A L0510A        MOVE.L   A5,0(A6,A3.L)
+                   ADDQ.W   #4,A3
+                   CMPA.W   D0,A3
+                   BLE.S    L0510A
+                   DC.W     $51EE,$006E
+                   DC.W     $50EE,$006D
+                   DC.W     $50EE,$0082
+                   DC.W     $51EE,$00AA
+                   DC.W     $50EE,$00AB
+                   MOVE.W   #$FFFF,BV.NXLIN(A6)
+                   CLR.L    BV.COMCH(A6)
+                   MOVEQ    #0,D0
+                   MOVE.L   D0,BV.VVFRE(A6)
+                   JMP      L04F2C(PC)
+
+513C L0513C        MOVEA.L  BV.CHANG(A6),A1
+                   MOVE.L   A1,D1
+                   SUB.L    BV.LNBAS(A6),D1
+                   ANDI.L   #$FFFFFE00,D1
+                   BEQ.S    L05176
+                   MOVEA.L  A1,A0
+                   SUBA.L   D1,A0
+5152 L05152        MOVE.L   0(A6,A1.L),0(A6,A0.L)
+                   ADDQ.W   #4,A1
+                   ADDQ.W   #4,A0
+                   CMPA.L   BV.SSBAS(A6),A1
+                   BLT.S    L05152
+                   MOVEQ    #$48,D0
+                   MOVEQ    #$64,D2
+5166 L05166        SUB.L    D1,0(A6,D0.L)
+                   ADDQ.B   #4,D0
+                   CMP.B    D2,D0
+                   BLE.S    L05166
+                   SUBA.L   D1,A7
+                   MOVEQ    #$17,D0
+                   TRAP     #1
+5176 L05176        RTS
+
+5178 L05178        CMPA.L   BV.NTP(A6),A5
+517C L0517C        BNE.S    L05182
+                   MOVE.L   A3,BV.NTP(A6)
+5182 L05182        CMPA.L   A5,A3
+                   BGE      L05264
+                   ANDI.B   #%00001111,1(A6,A3.L)
+                   BEQ.S    L051EE
+                   CMPI.W   #-1,2(A6,A3.L)
+                   BNE.S    L0519E
+                   MOVEA.L  A3,A2
+                   BSR.S    L051FA
+                   BRA.S    L051EE
+
+519E L0519E        MOVEQ    #1,D0
+51A0 L051A0        SUB.B    0(A6,A3.L),D0
+                   BGE.S    L051EE
+                   MOVE.W   2(A6,A3.L),D0
+                   LSL.L    #3,D0
+                   MOVEA.L  BV.NTBAS(A6),A2
+                   ADDA.L   D0,A2
+                   CMPI.B   #3,0(A6,A2.L)
+                   BNE.S    L051E2
+                   CMPI.B   #2,0(A6,A3.L)
+                   BEQ.S    L051EE
+                   MOVEA.L  BV.BFP(A6,A3.L),A0
+                   ADDA.L   BV.VVBAS(A6),A0
+                   MOVEQ    #0,D1
+                   MOVE.W   BV.BFP(A6,A0.L),D1
+                   LSL.W    #2,D1
+                   ADDQ.W   #6,D1
+                   MOVEM.L  D2/A1-3,-(A7)
+                   JSR      L050E2(PC)
+                   MOVEM.L  (A7)+,D2/A1-3
+                   BRA.S    L051EE
+
+51E2 L051E2        MOVE.L   4(A6,A3.L),4(A6,A2.L)
+51E8 L051E8        MOVE.B   0(A6,A3.L),0(A6,A2.L)
+51EE L051EE        MOVE.L   D7,0(A6,A3.L)
+                   MOVE.L   D7,4(A6,A3.L)
+                   ADDQ.W   #8,A3
+                   BRA.S    L05182
+
+51FA L051FA        MOVEM.L  D2/D4/D6/A1-3,-(A7)
+51FE L051FE        MOVEA.L  BV.VVBAS(A6),A0
+                   MOVE.L   4(A6,A2.L),D1
+                   BLT.S    L0525E
+                   ADDA.L   D1,A0
+                   MOVE.B   0(A6,A2.L),D0
+                   SUBQ.B   #2,D0
+                   BLE.S    L05236
+                   SUBQ.B   #1,D0
+                   BNE.S    L05222
+                   MOVE.L   D1,D4
+                   MOVE.B   1(A6,A2.L),D6
+                   JSR      L091CC(PC)
+                   BRA.S    L0525E
+
+5222 L05222        SUBQ.B   #3,D0
+5224 L05224        BEQ.S    L05232
+                   SUBQ.B   #1,D0
+                   BEQ.S    L0522E
+                   MOVEQ    #-12,D0
+                   BRA.S    L05260
+
+522E L0522E        MOVEQ    #$1A,D1
+5230 L05230        BRA.S    L05252
+
+5232 L05232        MOVEQ    #12,D1
+5234 L05234        BRA.S    L05252
+
+5236 L05236        MOVE.B   1(A6,A2.L),D0
+523A L0523A        SUBQ.B   #2,D0
+                   BLT.S    L05248
+                   BEQ.S    L05244
+                   MOVEQ    #2,D1
+                   BRA.S    L05252
+
+5244 L05244        MOVEQ    #6,D1
+5246 L05246        BRA.S    L05252
+
+5248 L05248        MOVEQ    #3,D1
+524A L0524A        ADD.W    0(A6,A0.L),D1
+                   BCLR     #0,D1
+5252 L05252        MOVE.L   #-1,4(A6,A2.L)
+                   JSR      L050E2(PC)
+525E L0525E        MOVEQ    #0,D0
+5260 L05260        MOVEM.L  (A7)+,D2/D4/D6/A1-3
+5264 L05264        RTS
+
+5266 L05266        MOVE.L   A0,-(A7)
+                   MOVE.W   0(A6,A1.L),D0
+                   ADDQ.W   #2,A1
+                   MOVEQ    #0,D1
+                   MOVE.W   D0,D1
+                   BEQ      L05300
+                   SWAP     D0
+                   ADDQ.W   #1,D1
+                   BCLR     #0,D1
+                   MOVE.W   D1,D0
+                   SUBA.L   BV.RIBAS(A6),A1
+                   MOVEM.L  D0-2/A1,-(A7)
+                   JSR      L04EF0(PC)
+                   MOVEM.L  (A7)+,D0-2/A1
+                   ADDA.L   BV.RIBAS(A6),A1
+5294 L05294        MOVE.W   0(A6,A1.L),0(A6,A0.L)
+                   ADDQ.W   #2,A1
+                   ADDQ.W   #2,A0
+                   SUBQ.W   #2,D1
+                   BGT.S    L05294
+                   SUBA.W   D0,A0
+                   MOVE.W   0(A6,A1.L),D2
+                   ADDQ.W   #2,A1
+                   MOVEA.L  A1,A2
+                   MOVE.W   D2,D1
+                   ADDQ.W   #1,D1
+                   BCLR     #0,D1
+                   ADDA.W   D1,A1
+                   MOVE.W   D2,D1
+                   SWAP     D0
+                   ADD.W    D0,D1
+                   ADDQ.W   #1,D1
+                   BMI.S    L05306
+                   BCLR     #0,D1
+                   SUBA.W   D1,A1
+                   MOVE.W   D2,D1
+                   BEQ.S    L052D8
+52CA L052CA        MOVE.B   0(A6,A2.L),0(A6,A1.L)
+                   ADDQ.W   #1,A2
+                   ADDQ.W   #1,A1
+                   SUBQ.W   #1,D1
+                   BGT.S    L052CA
+52D8 L052D8        ADD.W    D0,D2
+                   MOVE.L   D0,D1
+52DC L052DC        MOVE.B   0(A6,A0.L),0(A6,A1.L)
+                   ADDQ.W   #1,A0
+                   ADDQ.W   #1,A1
+                   SUBQ.W   #1,D0
+                   BGT.S    L052DC
+                   SUBA.W   D1,A0
+                   SUBA.W   D2,A1
+                   SUBQ.W   #2,A1
+                   MOVE.W   D2,0(A6,A1.L)
+                   CLR.W    D1
+                   SWAP     D1
+                   MOVE.L   A1,-(A7)
+                   JSR      L050E2(PC)
+                   MOVEA.L  (A7)+,A1
+5300 L05300        MOVEQ    #0,D0
+5302 L05302        MOVEA.L  (A7)+,A0
+                   RTS
+
+5306 L05306        LEA      -2(A2),A1
+530A L0530A        MOVE.W   D0,D1
+                   MOVE.L   A1,-(A7)
+                   JSR      L050E2(PC)
+                   MOVEA.L  (A7)+,A1
+                   MOVEQ    #-$12,D0
+                   BRA.S    L05302
+
+5318 L05318        DC.W     $0002,$0202
+                   DC.W     $0205,$0505
+                   DC.W     $0505,$0505
+                   DC.W     $0303,$0302
+                   DC.W     $0102
+
+                   ANDI.B   #3,D2
+                   BTST     D0,D2
+                   ANDI.B   #0,D3
+5334 L05334        ANDI.B   #$0F,-7(A6,A5.L)
+                   MOVEQ    #0,D0
+                   MOVE.B   L05318(PC,D4.W),D0
+                   CMPI.B   #$16,D4
+                   BGT      L05402
+                   ANDI.B   #$0F,-$0F(A6,A5.L)
+                   CMP.B    -7(A6,A5.L),D0
+                   BEQ.S    L0537A
+                   CMPI.B   #5,D0
+                   BNE.S    L05370
+                   MOVE.B   -7(A6,A5.L),D2
+                   CMP.B    -15(A6,A5.L),D2
+                   BNE.S    L0536E
+                   SUBQ.B   #1,D2
+                   BNE.S    L0536E
+                   SUBQ.W   #8,A5
+536A L0536A        BRA      L05408
+
+536E L0536E        MOVEQ    #2,D0
+5370 L05370        BSR      L0540C
+5374 L05374        BNE      L0540A
+                   MOVE.B   D2,D0
+537A L0537A        SUBQ.W   #8,A5
+                   CMP.B    -7(A6,A5.L),D0
+                   BEQ.S    L0536A
+                   MOVE.B   1(A6,A5.L),D1
+                   SUBQ.B   #2,D1
+                   BLT.S    L053A0
+                   BEQ.S    L05394
+                   MOVE.W   0(A6,A1.L),-(A7)
+                   ADDQ.W   #2,A1
+                   BRA.S    L053BC
+
+5394 L05394        MOVE.L   2(A6,A1.L),-(A7)
+5398 L05398        MOVE.W   0(A6,A1.L),-(A7)
+                   ADDQ.W   #6,A1
+                   BRA.S    L053BC
+
+53A0 L053A0        MOVEQ    #3,D2
+53A2 L053A2        ADD.W    0(A6,A1.L),D2
+                   BCLR     #0,D2
+                   SUBA.L   D2,A7
+                   MOVE.L   D2,D1
+                   SUBQ.W   #1,D1
+53B0 L053B0        MOVE.W   0(A6,A1.L),(A7)+
+                   ADDQ.W   #2,A1
+                   SUBQ.W   #2,D1
+                   BGE.S    L053B0
+                   SUBA.L   D2,A7
+53BC L053BC        MOVE.B   D1,-(A7)
+                   MOVE.L   A1,BV.RIP(A6)
+                   BSR.S    L0540C
+                   MOVE.B   (A7)+,D2
+                   BLT.S    L053DE
+                   BEQ.S    L053D2
+                   SUBQ.W   #2,A1
+                   MOVE.W   (A7)+,0(A6,A1.L)
+                   BRA.S    L053F6
+
+53D2 L053D2        SUBQ.W   #6,A1
+53D4 L053D4        MOVE.W   (A7)+,0(A6,A1.L)
+                   MOVE.L   (A7)+,2(A6,A1.L)
+                   BRA.S    L053F6
+
+53DE L053DE        MOVEQ    #3,D2
+53E0 L053E0        ADD.W    (A7),D2
+                   BCLR     #0,D2
+                   SUBA.L   D2,A1
+                   MOVE.L   D2,D1
+53EA L053EA        MOVE.W   (A7)+,0(A6,A1.L)
+                   ADDQ.W   #2,A1
+                   SUBQ.W   #2,D1
+                   BGT.S    L053EA
+                   SUBA.L   D2,A1
+53F6 L053F6        MOVE.L   A1,BV.RIP(A6)
+                   TST.L    D0
+                   BEQ.S    L0540A
+                   ADDQ.W   #8,A5
+                   RTS
+
+5402 L05402        CMP.B    -7(A6,A5.L),D0
+5406 L05406        BNE.S    L0540C
+5408 L05408        MOVEQ    #0,D0
+540A L0540A        RTS
+
+540C L0540C        MOVE.L   D7,-(A7)
+540E L0540E        MOVE.L   A0,-(A7)
+                   MOVE.B   D0,-(A7)
+                   MOVE.B   -7(A6,A5.L),D2
+                   MOVEQ    #15,D1
+                   AND.L    D1,D0
+                   AND.L    D1,D2
+                   SUB.B    D2,D0
+                   BEQ.S    L05480
+                   SUBQ.B   #2,D2
+                   BLT.S    L05454
+                   BEQ.S    L0543A
+                   ADDQ.B   #1,D0
+                   BLT.S    L05430
+                   JSR      L04852(PC)
+                   BRA.S    L05480
+
+5430 L05430        MOVEA.L  (A6),A0
+5432 L05432        JSR      CN_ITOD(PC)
+                   BSR.S    L05496
+                   BRA.S    L05480
+
+543A L0543A        TST.B    D0
+543C L0543C        BLT.S    L0544A
+                   JSR      RI_NINT(PC)
+                   MOVE.B   #3,-7(A6,A5.L)
+                   BRA.S    L05480
+
+544A L0544A        MOVEA.L  (A6),A0
+544C L0544C        JSR      CN_FTOD(PC)
+                   BSR.S    L05496
+                   BRA.S    L05480
+
+5454 L05454        SUBQ.B   #1,D0
+5456 L05456        BLT.S    L05480
+                   BEQ.S    L05466
+                   BSR.S    L054AA
+                   MOVE.L   A0,-(A7)
+                   ADDQ.W   #2,A0
+                   JSR      CN_DTOI(PC)
+                   BRA.S    L05470
+
+5466 L05466        BSR.S    L054AA
+5468 L05468        MOVE.L   A0,-(A7)
+                   ADDQ.W   #2,A0
+                   JSR      CN_DTOF(PC)
+5470 L05470        MOVEA.L  (A7)+,A0
+                   MOVE.L   D0,-(A7)
+                   BSR.S    L054DC
+                   MOVE.L   (A7)+,D0
+                   BEQ.S    L05480
+                   SUBQ.W   #2,A1
+                   CLR.W    0(A6,A1.L)
+5480 L05480        MOVE.B   (A7)+,D2
+                   MOVEA.L  (A7)+,A0
+                   MOVE.L   (A7)+,D7
+                   MOVE.L   A1,BV.RIP(A6)
+                   TST.L    D0
+                   BNE.S    L05494
+                   MOVE.B   D2,-7(A6,A5.L)
+                   MOVEQ    #0,D0
+5494 L05494        RTS
+
+5496 L05496        MOVE.L   A1,BV.RIP(A6)
+549A L0549A        MOVE.L   A4,-(A7)
+                   MOVE.L   A0,D1
+                   MOVEA.L  (A6),A4
+                   SUB.L    A4,D1
+                   JSR      L059FE(PC)
+                   MOVEA.L  (A7)+,A4
+                   BRA.S    L054D8
+
+54AA L054AA        MOVEQ    #3,D1
+54AC L054AC        ADD.W    0(A6,A1.L),D1
+                   BCLR     #0,D1
+                   JSR      L04EF0(PC)
+                   MOVEA.L  BV.RIP(A6),A1
+                   MOVE.L   A0,-(A7)
+54BE L054BE        MOVE.W   0(A6,A1.L),0(A6,A0.L)
+                   ADDQ.W   #2,A0
+                   ADDQ.W   #2,A1
+                   SUBQ.L   #2,D1
+                   BGT.S    L054BE
+                   MOVEA.L  (A7)+,A0
+                   MOVE.L   A0,D7
+                   MOVEQ    #2,D1
+                   ADD.W    0(A6,A0.L),D1
+                   ADD.L    D1,D7
+54D8 L054D8        MOVEQ    #0,D0
+                   RTS
+
+54DC L054DC        MOVE.L   A1,-(A7)
+54DE L054DE        MOVEQ    #3,D1
+                   ADD.W    0(A6,A0.L),D1
+                   BCLR     #0,D1
+                   JSR      L050E2(PC)
+                   MOVEA.L  (A7)+,A1
+                   RTS
+
+54F0 L054F0        MOVEQ    #1,D0
+                   BRA.S    L054FA
+
+54F4 L054F4        MOVEQ    #2,D0
+                   BRA.S    L054FA
+
+54F8 L054F8        MOVEQ    #3,D0
+54FA L054FA        MOVE.B   D0,-(A7)
+54FC L054FC        BSR.S    L05516
+                   BNE.S    L05510
+                   MOVE.B   (A7),D0
+                   BNE.S    L05506
+                   MOVEQ    #1,D0
+5506 L05506        JSR      L0540C(PC)
+                   SUBQ.L   #8,A5
+                   MOVE.L   A5,BV.NTP(A6)
+5510 L05510        ADDQ.W   #2,A7
+                   TST.L    D0
+                   RTS
+
+5516 L05516        BSR.S    L05530
+5518 L05518        BNE.S    L0551E
+                   BSR      L0593E
+551E L0551E        RTS
+
+5520 L05520        DC.W     $0014,$1414            ;556a 557e 557e 557e
+                   DC.W     $0484,$98B8            ;556e 55ee 5602 5622
+                   DC.W     $C214,$14BE            ;562c 557e 557e 5628
+
+                   MOVE.B   (A4),D2
+                   MOVE.B   D0,D2
+5530 L05530        MOVEA.L  BV.NTP(A6),A5
+                   MOVE.L   A5,-(A7)
+                   MOVEM.L  D4-6,-(A7)
+                   ST       -(A7)
+                   MOVEQ    #$40,D1
+                   JSR      L04F5A(PC)
+                   MOVEQ    #2,D0
+                   JSR      L04F2C(PC)
+                   BRA.S    L05552
+
+554A L0554A        MOVEQ    #1,D6
+554C L0554C        BRA.S    L05554
+
+554E L0554E        ST       D6
+5550 L05550        BRA.S    L05554
+
+5552 L05552        SF       D6
+5554 L05554        MOVEQ    #$7F,D4
+5556 L05556        AND.B    0(A6,A0.L),D4
+                   CMPI.B   #$70,D4
+                   BGE      L056CE
+                   MOVE.B   L05520(PC,D4.W),D4
+

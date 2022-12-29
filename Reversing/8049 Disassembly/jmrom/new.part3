@@ -1,0 +1,1684 @@
+                                  THE SCHEDULER
+
+2.4 Multi-tasking.
+
+2.4.1 Frame interrupts.
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=FRAMEINT        HANDLE FRAME INTERRUPTS                                      ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A6.L     QDOS system variables                               ³
+³                                                                              ³
+³EXIT:            none                                                         ³
+³                                                                              ³
+³ERRORS:          none                                                         ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   This interrupt primarily controls the multitasking features of QDOS.
+   It normally occurs about fifty times a second for a British QL, and at
+   a slightly higher rate (sixty times a second) for the continental and the
+   American versions. This routine first of all causes a linked list of some
+   system house keeping routines to be executed and then if the CPU was in
+   user mode when the interrupt occured, the scheduler is entered.
+
+089A FRAMEINT      ADDQ.W   #1,SV.POLLM(A6)        ;increment poll count
+                   BVC.S    POLLM_OK               ;jump forward if less than 127
+                   SUBQ.W   #1,SV.POLLM(A6)        ;otherwise reduce back to 127
+08A4 POLLM_OK      MOVEM.L  D0-6/A0-4,-(A7)        ;save registers
+                   MOVEQ    #-8,D0                 ;offset to assumed start of linkage
+                   MOVEQ    #1,D3                  ;block
+                   MOVEA.L  SV.PLIST(A6),A0        ;A0 points at start of polled tasks list
+                   JSR      EXECLIST(PC)           ;execute the linked list
+                   MOVEM.L  (A7)+,D0-6/A0-4        ;restore registers
+                   MOVE.B   SV.PCINT(A6),D7        ;get copy of interrupt register
+                   ORI.B    #%00001000,D7          ;and acknowledge interrupt
+                   MOVE.B   D7,PC_INTR             ;update interrupt register
+                   BTST     #5,12(A7)              ;supervisor mode when called ?
+                   BNE      EXITTRAP               ;exit if so otherwise enter scheduler
+
+2.4.2 Scheduler.
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=SCHEDULER       RE-ARRANGE JOBS TO IMPLEMENT MULTI-TASKING                   ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A5.L     saved SUPERBASIC registers in order D7,A5,A6        ³
+³                 A6.L     system variables                                    ³
+³                                                                              ³
+³EXIT:            none                                                         ³
+³                                                                              ³
+³ERRORS:          none                                                         ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   All machines which claim to support multitasking in whatever form, must
+   have a software routine or hardware mechanism known as a scheduler. The
+   purpose of the scheduler is to allow the most suitable job (defined in a
+   multitude of different ways) a period of the CPU's processing time. It is
+   also the purpose of the scheduler to make this transition invisible to
+   the user and to allow all jobs that are capable of being run, a chance to
+   run. In general the choice of which job to run next is based on its usage
+   of the machines resources such as it's I/O devices particularly if these
+   are not shareable as is the case with all of the QL's I/O resouces apart
+   from the Screen and console devices.
+
+   The basic scheme then is to switch control from one job to another when
+   it is using an I/O device and hence waiting for it to finish. In order to
+   implement this scheme, a priority is given to a task when it is created
+   and this priority takes on several values depending on the status of the
+   job at that time. The scheduler then steadily increments this priority
+   until such a time as the job has the highest priority of all jobs in the
+   system. At this stage the job will be allowed to run and it's priority
+   will be set to zero. The job is also allocated a priority increment when
+   it is created and the scheduler increments the job priority by this value
+   during every Frame interrupt. In this way, all the jobs will obtain CPU
+   time in relation to there priority increment, job's having a large value
+   as an increment will execute more often than jobs with a low increment.
+
+   When the machine is first switched on, only one job is normally running,
+   which is SUPERBASIC and all jobs are actually subservient to it as it can
+   never be removed from the system. This is often known as the null job or
+   the one process which is always running in a multitasking system to keep
+   the scheduler happy (i.e. the sceduler must never fail to find a job).
+
+08D0 SCHEDULE      JSR      SHUTDOWN(PC)           ;save current job's details in header
+08D4 CHKPOLLM      MOVE.W   SV.POLLM(A6),D3        ;get number of polled interrupts missed
+                   CLR.W    SV.POLLM(A6)           ;and reset it to zero
+                   ADDQ.W   #1,SV.RAND(A6)         ;increment system random number
+                   MOVEQ    #-16,D0                ;offset to start of linkage block
+                   MOVEA.L  SV.SHLST(A6),A0        ;A0 points at scheduler linked list
+                   JSR      EXECLIST(PC)           ;execute the list
+
+2.4.3 Job status.
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=MT_SUSJB        SUSPEND A JOB              (TRAP #1 WITH D0 = $08)           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D1.L     job ID (-1 if current job)                          ³
+³                 D3.W     timeout                                             ³
+³                 A1.L     address of byte to be zeroed on job's release       ³
+³                                                                              ³
+³EXIT:            A0.L     location of job's header                            ³
+³                 D1,D2,D3,A1,A2 and A3 preserved                              ³
+³                                                                              ³
+³ERRORS:          ERR.NJ   invalid job ID                                      ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   Suspends a job for a number of frame interrupt periods as specified by
+   the timeout. If this is -1 then the job is suspended indefinitely.
+   TRAP handler alters registers so that A6 now points at system variables.
+
+08EA MT_SUSJB      JSR      DECIDE(PC)             ;find out which job is to be next one
+                   TST.L    D0                     ;check timeout
+                   BLT.S    CHKPOLLM               ;suspend indefinitely if negative
+                   MOVE.L   D0,SV.JBPNT(A6)        ;signal "current job suspended"
+                   JSR      STARTUP(PC)            ;run next job for one frame
+                   JSR      CHKJBID(PC)            ;check job ID, A0 points at header on exit
+                   MOVE.W   D3,JB.STAT(A0)         ;set priority to timeout
+                   MOVE.L   A1,JB.HOLD(A0)         ;and address to be cleared
+                   MOVEQ    #0,D0                  ;signal "no errors"
+                   BRA      SCHEDULER
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=MT_RELJB        RELEASE A SUSPENDED JOB    (TRAP #1 WITH D0 = $09)           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D1.L     job ID                                              ³
+³                                                                              ³
+³EXIT:            A0.L     location of job's header                            ³
+³                 D1,D2,D3,A1,A2 and A3 preserved                              ³
+³                                                                              ³
+³ERRORS:          ERR.NJ   invalid job ID                                      ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   This routine performs the reverse operation to MT_SUSJB in that it will
+   release from suspension, a job which was suspended for whatever reason.
+   TRAP handler alters registers so that A6 now points at system variables.
+
+090C MT_RELJB      JSR      CHKJBID(PC)            ;check job ID,A0 points at header on exit
+                   TST.W    JB.STAT(A0)            ;is job already possibly active ?
+                   BEQ.S    EXIT_REL               ;enter scheduler if so
+                   CLR.W    JB.STAT(A0)            ;signal "possibly active"
+                   MOVE.L   JB.HOLD(A0),D0         ;D0 points at location to be cleared on release
+                   BEQ.S    EXIT_REL               ;exit if number location specified
+                   MOVEA.L  D0,A0                  ;otherwise copy address to A0
+                   SF       (A0)                   ;and clear the location
+0924 EXIT_REL      MOVEQ    #0,D0                  ;then signal "no errors"
+                   BRA      SCHEDULER              ;and enter the scheduler
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=MT_PRIOR        CHANGE JOB PRIORITY        (TRAP #1 WITH D0 = $0B)           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D1.L     job ID (-1 if current)                              ³
+³                 D2.B     new priority (0 for inactive)                       ³
+³                                                                              ³
+³EXIT:            A0.L     address of job's header                             ³
+³                 D1,D2,D3,A1,A2 and A3 preserved                              ³
+³                                                                              ³
+³ERRORS:          ERR.NJ   invalid job ID                                      ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   TRAP handler alters registers so that A6 now points at system variables.
+
+092A MT_PRIOR      JSR      CHKJBID(PC)            ;check job ID, A0 points at header on exit
+                   MOVE.B   D2,JB.PRINC(A0)        ;set to new priority
+                   BNE.S    EXIT_ACT               ;enter scheduler if this was not zero
+                   SF       JB.PRIOR(A0)           ;otherwise signal "job is inactive"
+                   BRA.S    EXIT_ACT               ;and enter the scheduler anyway
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=MT_ACTIV        ACTIVATE A JOB             (TRAP #1 WITH D0 = $0A)           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D1.L     job ID                                              ³
+³                 D2.B     priority (0 - 127)                                  ³
+³                 D3.W     timeout                                             ³
+³                                                                              ³
+³EXIT:            A0.L     address of job's header                             ³
+³                 D1,A1 and A2 preserved                                       ³
+³                 D2,D3 and A3 corrupted                                       ³
+³                                                                              ³
+³ERRORS:          ERR.NC   not complete (job is already active)                ³
+³                 ERR.NJ   invalid job ID                                      ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   The selected job's priority is set to the new value given and the job is
+   activated. If the timeout specified is zero then the current job will be
+   allowed to continue executing, otherwise the current job will wait until
+   this job is finished before continueing.
+
+093A MT_ACTIV      JSR      CHKJBID(PC)            ;check job ID, A0 points at header on exit
+                   TST.B    JB.PRINC(A0)           ;is job already active ?
+                   BNE.S    STILLACT               ;exit if so
+                   MOVE.B   D2,JB.PRINC(A0)        ;otherwise set to new priority
+                   MOVE.L   JB.START(A0),JB.PC(A0)
+                   TST.W    D3                     ;timeout zero ?
+                   BEQ.S    EXIT_ACT               ;continue with current job if so
+
+   New job is to override the current one so signal status in job headers of
+   the current job and the new job.
+
+                   ST       JB.WFLAG(A0)           ;signal "job waiting for completion"
+                   JSR      GETJBID(PC)            ;A3 points at waiting jobs header
+                   MOVE.L   D0,JB.WJOB(A0)         ;set waiting job's ID to current ID
+                   MOVE.W   #-2,JB.STAT(A3)        ;signal "waiting for completion"
+0964 EXIT_ACT      MOVEQ    #0,D0                  ;and "no errors"
+0966 L00966        BRA      SCHEDULER              ;activate new or continue current job
+
+096A STILLACT      MOVEQ    #ERR.NC,D0             ;signal "not complete"
+                   BRA.S    L00966
+
+2.4.4 Scheduling mechanism.
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=SHUTDOWN        COPY A JOB'S DETAILS TO JOB HEADER'S STORAGE AREA            ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A5.L     copy of user stack pointer                          ³
+³                                                                              ³
+³EXIT:            A5.L     stack above saved registers                         ³
+³                                                                              ³
+³ERRORS:          none                                                         ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   Closing down a job essentially consists of saving the volatile status of
+   the job which means all the registers, the program counter and the CPU
+   status register.
+
+   All the general registers have been saved in the interrupt handler and
+   A5 points at the top of the supervisor stack.
+
+096E SHUTDOWN      MOVE.L   A6,-(A7)               ;save A6
+                   MOVEA.L  SV.JBPNT(A6),A6        ;A6 points at current job table entry
+                   MOVEA.L  (A6),A6                ;and then at job header
+                   TST.B    JB.PRIOR(A6)           ;is job inactive ?
+                   BEQ.S    L00982                 ;jump forward if so
+                   MOVE.B   #1,JB.PRIOR(A6)        ;otherwise set it to 1
+0982 L00982        MOVEM.L  D0-7/A0-4,JB.D0(A6)    ;copy registers to storage
+                   MOVE.L   (A5)+,JB.D7(A6)        ;copy registers saved in system
+                   MOVE.L   (A5)+,JB.A5(A6)        ;interrupt handler [SYSINT] to
+                   MOVE.L   (A5)+,JB.A6(A6)        ;job header storage area
+                   MOVE.L   USP,A0
+                   MOVE.L   A0,JB.A7(A6)           ;copy of user stack pointer
+                   MOVE.W   (A5)+,JB.SR(A6)        ;copy of status register
+                   MOVE.L   (A5)+,JB.PC(A6)        ;and program counter when interrupted
+                   MOVEA.L  (A7)+,A6               ;restore A6
+                   RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=DECIDE          FIND OUT WHICH JOB IS TO BE THE NEXT ONE                     ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D1.L     current job's  ID                                   ³
+³                 D3.W     timeout                                             ³
+³                                                                              ³
+³EXIT:            D1.L     next job's ID                                       ³
+³                                                                              ³
+³ERRORS:          ERR.NJ   invalid job                                         ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   Implement the basic scheduling algorithm by scanning the job table and
+   checking each job's priority in turn until the job with the highest
+   priority is found.
+
+09A6 DECIDE        MOVEQ    #ERR.NJ,D0             ;signal "invalid job"
+                   MOVEQ    #0,D1                  ;clear D1
+                   MOVEA.L  SV.JBPNT(A6),A2        ;A2 points at current job table entry
+                   MOVEA.L  A2,A4                  ;copy pointer to A4
+                   MOVE.W   SV.JBMAX(A6),D2        ;set D2 to largest job number to date
+                   LSL.W    #2,D2                  ;form offset into table
+                   MOVEA.L  SV.JBBAS(A6),A3        ;A3 points at base of table
+                   ADDA.W   D2,A3                  ;and add offset to base
+09BC L009BC        ADDQ.W   #4,A2                  ;A2 points at entry (jobmax + 1)
+                   CMPA.L   A3,A2                  ;current job ?
+                   BLE.S    L009C6                 ;jump forward if < max
+                   MOVEA.L  SV.JBBAS(A6),A2        ;A2 points at job table base
+09C6 L009C6        TST.B    (A2)                   ;entry free ?
+                   BLT.S    L00A0C                 ;jump forward if it is
+                   MOVEA.L  (A2),A0                ;A0 points at job header if not
+                   TST.B    JB.PRINC(A0)           ;job inactive ?
+                   BEQ.S    L00A0C                 ;jump forward if it is
+                   TST.W    JB.STAT(A0)            ;check job status
+                   BEQ.S    L009EE                 ;jump if "possibly active"
+                   BLT.S    L00A0C                 ;and if suspended
+                   SUB.W    D3,JB.STAT(A0)         ;subtract timeout
+                   BGT.S    L00A0C                 ;jump forward if still active
+                   CLR.W    JB.STAT(A0)            ;otherwise signal "possibly active"
+                   MOVE.L   JB.HOLD(A0),D2         ;get address to be cleared
+                   BEQ.S    L009EE                 ;and jump forward if none specified
+                   MOVEA.L  D2,A1                  ;copy address
+                   SF       (A1)                   ;and clear the location
+09EE L009EE        MOVE.B   JB.PRIOR(A0),D2        ;get job priority
+                   BEQ.S    L009FE                 ;jump forward if inactive
+                   ADD.B    JB.PRINC(A0),D2        ;update priority
+                   BCC.S    L00A00                 ;and jump forward unless it was waiting
+                   ST       D2                     ;signal "suspended"
+                   BRA.S    L00A00
+
+09FE L009FE        MOVEQ    #1,D2                  ;signal "run for one frame"
+0A00 L00A00        MOVE.B   D2,JB.PRIOR(A0)        ;set to new priority
+                   CMP.B    D1,D2                  ;priority ok ?
+                   BLS.S    L00A0C                 ;jump if so
+                   MOVE.L   A2,D0                  ;copy pointer to job table entry
+                   MOVE.B   D2,D1                  ;and priority to D1 for next job
+0A0C L00A0C        CMPA.L   A4,A2                  ;current job ?
+                   BNE.S    L009BC                 ;next job entry if not
+                   RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=STARTUP         COPY A JOB'S DETAILS FROM JOB HEADER'S STORAGE AREA          ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A6.L     system variables                                    ³
+³                                                                              ³
+³EXIT:            ALL REGISTERS SET TO VALUES WHEN LAST SHUT DOWN              ³
+³                                                                              ³
+³ERRORS:          none                                                         ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   Starting up a job is more or less the reverse of shutting it down with a
+   slight difference. When the job starts it should be running in the same
+   CPU mode as it was when it was shutdown and this can only have been user
+   mode as multitasking only operates in user mode. To achieve this the RTE
+   instruction is used to restart the job.
+
+0A12 STARTUP       MOVEA.L  SV.JBPNT(A6),A0        ;A0 points at current job table entry
+                   MOVEA.L  (A0),A0                ;and then at job's header
+                   ADDA.W   #$16,A7                ;point at top of saved registers
+                   MOVE.L   JB.PC(A0),-(A7)        ;simulate exception by copying job's
+                   MOVE.W   JB.SR(A0),-(A7)        ;data to supervisor stack
+
+   Use the job's RAM exception vector table as the system one.
+
+                   MOVE.L   JB.TRAPV(A0),SV.TRAPV(A6)
+
+                   MOVEA.L  JB.A7(A0),A1           ;A1 points at job's stack
+                   MOVE.L   A1,USP                 ;and set up user stack pointer
+
+   Finally set up all the address and data registers and start the job by
+   using the "return from exception" instruction.
+
+                   MOVEM.L  JB.D0(A0),D0-7/A0-6
+                   RTE
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=EXECLIST        EXECUTE LINKED LIST OF TASKS                                 ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D0.W     offset to start of linkage block                    ³
+³                 D3.W     number of polled interrupts missed                  ³
+³                 A0.L     start of linked list                                ³
+³                                                                              ³
+³EXIT:            A0.L     0 (end of list reached)                             ³
+³                 D3,A3    corrupted                                           ³
+³                                                                              ³
+³ERRORS:          none                                                         ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   QDOS uses interrupts to control multitasking and I/O. Each different type
+   of interrupt has associated with it a linked list of tasks to be executed
+   every time that interrupt occurs. The frame interrupt has a polled tasks
+   linked list, the external interrupt has on switch on an empty list and
+   finally there is the scheduler linked list. This routine is used to run
+   the tasks in these lists, each of them until completion. It is called by
+   each of the interrupt handlers in turn.
+
+   Each list entry consists of two long words. The first long word gives the
+   address of the next routine in the linked list. The second long word is
+   the actual address of the routine.
+
+0A38 EXECLIST      MOVE.W   D0,-(A7)               ;save offset
+0A3A NEXTTASK      MOVEA.L  A0,A3                  ;A3 points at link to next block in list
+                   ADDA.W   (A7),A3                ;and then at start of linkage block
+                   MOVE.L   A0,-(A7)               ;save pointer to link
+                   BEQ.S    LIST_END               ;exit if end of list (null pointer)
+                   MOVE.W   D3,-(A7)               ;save poll count
+                   ANDI.W   #%01111111,D3          ;form timeout in range 0 - 127
+                   MOVEA.L  4(A0),A0               ;get address of task
+                   JSR      (A0)                   ;call it
+                   MOVE.W   (A7)+,D3               ;restore poll count
+                   MOVEA.L  (A7)+,A0               ;and pointer to list
+                   MOVEA.L  (A0),A0                ;then A0 points at next block
+                   BRA.S    NEXTTASK               ;execute next task
+0A56 LIST_END      ADDQ.L   #6,A7                  ;ignore saved registers
+                   RTS
+
+                           THE SIMPLE DEVICE DRIVERS
+
+2.5 Simple device drivers.
+
+   The simple device drivers and the directory device drivers are linked
+   together as a list pointed to by the system variables SV.DRLST and
+   SV.DDLST respectively. This means that by adding new device drivers to
+   the start of the lists using TRAP's MT.LIOD and MT.LDD, we can override
+   if necessary, the internal drivers in preference to the new user written
+   ones. Completely new devices can be be added to the system such as disc
+   drive controllers,mouse drivers and printer drivers.
+
+   All the simple device drivers have a four long word linkage block header
+   The first entry gives the address of the next linkage block in the list.
+   The next three entries give the addresses of the I/O, channel open and
+   channel close routines.
+
+   This is all that is required for the I/O sub system (IOSS) to use the
+   device driver. QDOS I/O is designed to be "device independant" which in
+   practise really means that all the user specifies is the channel ID of
+   the required device and the operation to be performed. Obviously though,
+   different functions are performed by some devices than others and so to
+   cater for this, the functions are split into sections.
+
+   The first section deals with bytes or strings of bytes and is common to
+   all the device drivers. The second section is used for the screen and
+   console devices and handles the graphics faclities. The third and final
+   section covers the file system.
+
+   All I/O is based on the use of channel definition blocks in the common
+   heap and these contain all the information relating to that channel.
+   No other information can be used by the IOSS as it will not find it. A
+   complete list of the different channel definition blocks is given in the
+   appendix.
+
+2.5.1 Serial device driver
+
+   This is the first of the simple device drivers and handles the serial
+   ports of which there are two. The actual control of the ports is done by
+   the IPC and this handles the baud rates and handshake details.
+   Conversion of chr$ 10 to and from chr$ 13 is performed if specified by
+   the parameters after the device name when the channel is opened.
+   The general name is SERnphz where:-
+
+    n = port number (1 or 2)
+    p = parity type (even, odd, mark or space)
+    h = handshaking (Ignore or use handshake)
+    z = protocol as follows:
+
+    R = raw data with number EOF (chr$ 26) terminator
+    Z = raw data with an EOF terminator
+    C = as for Z with conversion from chr$ 10 to chr$ 13
+
+   and the default is SER1R. Note that only one channel can be open to a
+   serial port at any time.
+
+0A5A SER_LB        DC.L     PIPE_LB                ;absolute link to next block in list
+                   DC.L     SER_IO                 ;I/O routine address
+                   DC.L     SEROPEN                ;open channel routine address
+                   DC.L     SERCLOSE               ;close channel routine address
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=SEROPEN         OPEN A SERIAL CHANNEL      (TRAP #3 WITH D0 = $01)           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D1.L     job ID (-1 if current)                              ³
+³                 A0.L     address of channel name                             ³
+³                                                                              ³
+³EXIT:            D1.L     job ID                                              ³
+³                 A0.L     new channel ID                                      ³
+³                 D2,D3,A1,A2 and A3 preserved                                 ³
+³                                                                              ³
+³ERRORS:          ERR.NJ   invalid job ID                                      ³
+³                 ERR.OM   out of memory                                       ³
+³                 ERR.NO   too many channels                                   ³
+³                 ERR.NF   device not found                                    ³
+³                 ERR.IU   device in use                                       ³
+³                 ERR.BN   bad device name                                     ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+0A6A SEROPEN       SUBQ.W   #8,A7                  ;create space for parameter block
+                   MOVEA.L  A7,A3                  ;copy stack pointer to A3
+                   JSR      IO_NAME(PC)            ;decode the device name
+
+   Return points for the three decode device name errors.
+
+                   BRA.S    SER_EXIT               ;branch if name not found
+                   BRA.S    SER_EXIT               ;branch if bad device name
+                   BRA.S    SERNMOK                ;branch if name ok
+
+   Data for serial device name.
+
+0A78 SERDATA       DC.W     3,"SER"                ;name length and device name
+                   DC.W     4                      ;number of parameters following name
+                   DC.W     -1,1                   ;port number (default = 1)
+                   DC.W     4,"OEMS"               ;parity (odd, even, mark or space)
+                   DC.W     2,"IH"                 ;handshake or ignore
+                   DC.W     3,"RZC"                ;protocol (raw, ctrl z or convert)
+
+   Command table for IPC.
+
+0A94 IPC_OPEN      DC.B     2,0,0,0,0,0,1,0        ;"open RS232 channel on port 1"
+                   DC.B     3,0,0,0,0,0,1,0        ;"open RS232 channel on port 2"
+0AA4 IPC_CLOS      DC.B     4,0,0,0,0,0,1,0        ;"close RS232 channel on port 1"
+                   DC.B     5,0,0,0,0,0,1,0        ;"close RS232 channel on port 2"
+
+0AB4 SE_ERRNF      MOVEQ    #ERR.NF,D0             ;signal "not found"
+                   BRA.S    SER_EXIT
+
+0AB8 SE_ERRIU      MOVEQ    #ERR.IU,D0             ;signal "in use"
+0ABA SER_EXIT      ADDQ.W   #8,A7                  ;ignore parameter block
+                   ANDI.W   #$F8FF,SR              ;enable interrupts
+                   RTS
+
+0AC2 SERNMOK       ORI.W    #$0700,SR              ;disable interrupts
+                   MOVE.W   (A7),D4                ;get port number
+                   BLE.S    SE_ERRNF               ;exit if < 0
+                   SUBQ.W   #2,D4
+                   BGT.S    SE_ERRNF               ;or > 2
+                   LEA      SV.SER1C(A6),A5        ;A5 points at port 1 system variable
+                   LEA      IPC_OPEN(PC),A4        ;and A4 at IPC open command table
+                   BLT.S    L00ADC                 ;jump forward if port 1 required
+                   ADDQ.W   #4,A5                  ;otherwise A5 points at SV_SER2C
+                   ADDQ.W   #8,A4                  ;and A4 at other command in table
+0ADC L00ADC        MOVE.L   (A5),D0                ;then D0 points at queue header
+                   BEQ.S    SER_OUTQ               ;and jump forward if number queue
+                   MOVEA.L  D0,A0                  ;copy header address to A0 then
+                   SUBA.W   #$20,A0                ;A0 points at start of channel definition block
+                   BCLR     #7,SER.TXQ(A0)         ;has it been emptied ?
+                   BNE.S    SER_INQ                ;jump forward if it has
+                   BRA.S    SE_ERRIU               ;and exit with error if it has not
+
+   Create the 228 byte buffer for serial channel.
+
+0AF0 SER_OUTQ      MOVE.W   #$E4,D1                ;create space in heap for header
+                   JSR      MM_ALCHP(PC)           ;find the space
+                   BNE.S    SER_EXIT               ;and exit immediately if out of memory
+                   MOVEQ    #81,D1                 ;O/P buffer length
+                   LEA      SER.TXQ(A0),A2         ;A2 points at start of O/P queue
+                   JSR      IO_QSET(PC)            ;set up an "empty" queue header
+
+   An O/P queue either already exists and is empty or has been created.
+
+0B04 SER_INQ       MOVEQ    #81,D1                 ;I/P buffer length
+                   LEA      SER.RXQ(A0),A2         ;A2 points at start of I/P queue
+                   JSR      IO_QSET(PC)            ;set up an "empty" queue header
+                   MOVE.L   A2,(A5)                ;and initialise queue address pointer
+
+   Copy queue parameters and flags from stack to newly created header.
+
+                   MOVE.L   (A7),SER.CHNO(A0)      ;get port number again (1 or 2)
+                   MOVE.L   4(A7),SER.TXHS(A0)     ;transmit handshake flag
+                   SUBQ.W   #1,SER.TXHS(A0)        ;set to "ignore handshake" initially
+                   SUBQ.W   #2,SER.PROT(A0)        ;and set protocol to "raw data"
+                   BSR.S    SER_IPC                ;open RS232 channel on serial port
+                   MOVEQ    #0,D0                  ;signal "no errors" then exit
+                   BRA.S    SER_EXIT
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=SERCLOSE         CLOSE A SERIAL CHANNEL    (TRAP #3 WITH D0 = $02)           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A0.L     channel ID (-1 if current)                          ³
+³                                                                              ³
+³EXIT:            A0       corrupted                                           ³
+³                 D1,D2,D3,A1,A2 and A3 preserved                              ³
+³                                                                              ³
+³ERRORS:          ERR.NC   channel not open                                    ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+0B28 SERCLOSE      LEA      IPC_CLOSE(PC),A4       ;A4 points at IPC close command table
+                   BTST     #1,SER.CHNO(A0)        ;is port 2 required ?
+                   BEQ.S    SERPORT1               ;jump forward if not
+                   ADDQ.L   #8,A4                  ;A4 points at command for port 2 if so
+0B36 SERPORT1      BSR.S    SER_IPC                ;tell IPC to close the serial port
+                   LEA      SER.TXQ(A0),A2         ;A2 points at O/P queue
+                   JSR      IO_QEOF(PC)            ;insert an EOF marker
+                   MOVEQ    #0,D0                  ;signal "no errors" and exit
+                   RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=SER_IPC         SEND IPC COMMAND TO OPEN OR CLOSE SERIAL PORT                ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:                                                                        ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+0B44 SER_IPC       MOVE.L   A0,-(A7)               ;save header address
+                   MOVEA.L  A4,A3                  ;copy pointer to command string to A3
+                   JSR      IPC_CMND(PC)           ;and send the command then
+                   MOVEA.L  (A7)+,A0               ;restore header address
+                   RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=SER_IO          GENERAL SERIAL I/O                                           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:                                                                        ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+0B50 SER_IO        JSR      IO_SERIO(PC)           ;general I/O handling
+                   DC.L     SE_PEND                ;test for pending I/P
+                   DC.L     SE_FBYTE               ;fetch a byte
+                   DC.L     SE_SBYTE               ;send a byte
+                   RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=SE_PEND         TEST FOR PENDING I/P       (TRAP #3 WITH D0 = $00)           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D3.W     timeout                                             ³
+³                 A0.L     channel ID                                          ³
+³                                                                              ³
+³EXIT:            D1 and A1  corrupted                                         ³
+³                 D2,D3,A0,A2 and A3 preserved                                 ³
+³                                                                              ³
+³ERRORS:          ERR.NC   number pending I/P                                  ³
+³                 ERR.NO   invalid channel ID                                  ³
+³                 ERR.EF   end of file                                         ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+0B62 SE_PEND       LEA      SER.RXQ(A0),A2         ;A2 points at receive queue
+                   JMP      IO_QTEST(PC)           ;test queue status for pending byte
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=SE_SBYTE        SEND A BYTE                (TRAP #3 WITH D0 = $05)           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D1.B     byte to be sent                                     ³
+³                 D3.W     timeout                                             ³
+³                                                                              ³
+³EXIT:            D1 and A1  corrupted                                         ³
+³                 D2,D3,A0,A2 and A3 preserved                                 ³
+³                                                                              ³
+³ERRORS:          ERR.NC   not complete                                        ³
+³                 ERR.NO   invalid channel ID                                  ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+0B6A SE_SBYTE      CMPI.B   #10,D1                 ;is it a line feed ?
+                   BNE.S    CHAR_OK1               ;jump forward if not
+                   TST.B    SER.PROT+1(A0)         ;convert to carraige return ?
+                   BLE.S    CHAR_OK1               ;jump if "raw data" chosen
+                   MOVEQ    #13,D1                 ;otherwise convert
+0B78 CHAR_OK1      MOVE.W   $SER.PAR(A0),D0        ;get parity and then offset from table
+                   MOVE.B   PTABLE1(PC,D0.W),D0
+                   JMP      PTABLE1(PC,D0.W)       ;jump to appropriate routine
+
+   Send byte routine offset table for the five different parity's.
+
+0B84 PTABLE1       DC.B     SPA_NONE -PTABLE1      ;number parity
+                   DC.B     SPA_ODD  -PTABLE1      ;odd
+                   DC.B     SPA_EVEN -PTABLE1      ;even
+                   DC.B     SPA_MARK -PTABLE1      ;mark
+                   DC.B     SPA_SPAC -PTABLE1      ;space
+                   DC.B     0
+
+   For odd parity calculate number of set bits and set bit 7 if odd.
+   For even parity do above calculation and set if even.
+   For mark parity just set bit seven and for space reset it.
+
+   This is because each transmission consists of a stream of bits :
+   one bit as a "start" bit then the eight bits of the character starting
+   with bit 0 and finally one or two "stop" bits to terminate so that
+   "space" parity means a space or reset bit prior to the stop bits and
+   "mark" parity means a set bit prior to the stop bits.
+
+0B8A SPA_MARK      BSET     #7,D1                  ;ensure "mark" before stop bits
+0B8E SPA_NONE      LEA      SER.TXQ(A0),A2         ;A2 points at transmit queue
+                   JSR      IO_QIN(PC)             ;insert the character
+                   BRA.S    CHAR_OK2               ;then exit
+
+0B98 SPA_SPAC      BCLR     #7,D1                  ;ensure "space" before stop bits
+                   BRA.S    SPA_NONE               ;and insert character in queue
+
+0B9E SPA_ODD       BSR.S    CHKPARIT               ;calculate even parity for character
+                   BCHG     #7,D1                  ;and alter to odd
+                   BRA.S    SPA_NONE               ;then insert
+
+0BA6 SPA_EVEN      BSR.S    CHKPARIT               ;calculate even parity
+                   BRA.S    SPA_NONE               ;and insert it into queue
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=SE_FBYTE        FETCH A BYTE               (TRAP #3 WITH D0 = $01)           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D3.W     timeout                                             ³
+³                 A0.L     channel ID                                          ³
+³                                                                              ³
+³EXIT:            D1.B     byte read                                           ³
+³                 A1       corrupted                                           ³
+³                 D2,D3,A0,A2 and A3 preserved                                 ³
+³                                                                              ³
+³ERRORS:          ERR.NC   not complete as number pending input                ³
+³                 ERR.NO   invalid channel ID                                  ³
+³                 ERR.EF   end of file                                         ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+0BAA SE_FBYTE      LEA      SER.RXQ(A0),A2         ;A0 points at I/P queue
+                   JSR      IO_QOUT(PC)            ;get a character from the queue
+                   BNE.S    CHAR_OK2               ;and exit if EOF or empty
+                   MOVE.W   SER.PAR(A0),D3         ;get chosen parity and then offset
+                   MOVE.B   PTABLE2(PC,D3.W),D3
+                   JMP      PTABLE2(PC,D3.W)       ;jump to appropriate parity handler
+
+   Fetch byte routine offset table for the five different parity's.
+
+0BC0 PTABLE2       DC.B     LPA_NONE -PTABLE2      ;number parity
+                   DC.B     LPA_ODD  -PTABLE2      ;odd
+                   DC.B     LPA_EVEN -PTABLE2      ;even
+                   DC.B     LPA_MARK -PTABLE2      ;mark
+                   DC.B     LPA_SPAC -PTABLE2      ;space
+                   DC.B     0
+
+0BC6 LPA_MARK      BCHG     #7,D1                  ;normally high for "mark" parity
+                   BRA.S    LPA_SPAC               ;check character
+
+0BCC LPA_ODD       BCHG     #7,D1                  ;normally high for "even" parity
+0BD0 LPA_EVEN      BSR.S    CHKPARIT               ;calculate even parity for character
+0BD2 LPA_SPAC      BTST     #7,D1                  ;ok ?
+                   BEQ.S    LPA_NONE               ;branch if so otherwise
+                   MOVEQ    #ERR.TE,D0             ;signal "transmit error"
+0BDA LPA_NONE      CMPI.B   #13,D1                 ;is it a carraige return ?
+                   BNE.S    CHAR_OK2               ;exit if not
+                   TST.B    SER.PROT+1(A0)         ;convert to line feed ?
+                   BLE.S    CHAR_OK2               ;exit if not
+                   MOVEQ    #10,D1                 ;otherwise convert it
+0BE8 CHAR_OK2      RTS
+
+   Check parity of byte.
+
+0BEA CHKPARIT      MOVEQ    #6,D3                  ;7 bits to check
+                   MOVE.B   D1,D4                  ;duplicate byte
+0BEE NEXTPBIT      ROR.B    #1,D1                  ;do the calculation
+                   EOR.B    D1,D4                  ;by a standard method
+                   DBF      D3,NEXTPBIT            ;process next bit
+                   ROXL.B   #1,D4                  ;move parity bit into carry flag
+                   ROXR.B   #1,D1                  ;and then into top bit of D1 with the
+                   RTS                             ;bottom 7 bits of D1 as before
+
+2.5.2 Pipe device driver.
+
+   A pipe is a short section of memory used as a queue. A pipe can either be
+   an input one or an output one. When an input pipe is opened the channel
+   ID of the corresponding output pipe must be specified. Information is put
+   into the queue at one end and read from the other.
+
+0BFC PIPE_LB       DC.L     CON_LB                 ;link to next block
+                   DC.L     IO_SERQ                ;I/O routine
+                   DC.L     PIPEOPEN               ;open routine
+                   DC.L     PIPECLOS               ;close routine
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=PIPEOPEN        OPEN A PIPE CHANNEL        (TRAP #2 WITH D0 = $01)           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D1.L     job ID (-1 if current)                              ³
+³                 D3.L     O/P pipe ID if I/P pipe requested                   ³
+³                 A0.L     address of channel name                             ³
+³                                                                              ³
+³EXIT:            D1.L     job ID                                              ³
+³                 A0.L     new channel ID                                      ³
+³                 D2,D3,A1,A2 and A3 preserved                                 ³
+³                                                                              ³
+³ERRORS:          ERR.NJ   invalid job ID                                      ³
+³                 ERR.OM   out of memory                                       ³
+³                 ERR.NO   too many channels                                   ³
+³                 ERR.NF   device not found                                    ³
+³                 ERR.IU   pipe in use                                         ³
+³                 ERR.BN   pipe parameters wrong                               ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   TRAP handler alters registers so that A6 now points at system variables and
+   A7 points at parameter block.
+
+0C0C PIPEOPEN      SUBQ.W   #2,A7                  ;create space for parameter block
+                   MOVEA.L  A7,A3                  ;copy stack pointer to A3
+                   JSR      IO_NAME(PC)            ;decode device name
+
+   Return points for the three decode device name errors.
+
+                   BRA.S    PP_EXIT                ;branch if name not found
+                   BRA.S    PP_EXIT                ;branch if bad device name
+                   BRA.S    PIPENMOK               ;branch if name ok
+
+   Data for pipe device name.
+
+0C1A PIPEDATA      DC.W     4,"PIPE"               ;name length and device name
+                   DC.W     1                      ;number of parameters following name
+                   DC.W     " _",0                 ;buffer length (0 if I/P pipe)
+
+   All the parameters for a pipe device have been checked and the buffer
+   length word placed in the parameter block.
+
+0C26 PIPENMOK      MOVE.W   (A7),D1                ;is an I/P pipe required ?
+                   BEQ.S    PP_INPUT               ;jump forward if so
+
+   Total channel definition block length = $18 bytes for the IOSS + 8 bytes
+   for the pipe information + $11 bytes for the O/P queue header + the O/P
+   buffer length giving ($31 + buffer) bytes.
+
+                   ADDI.W   #$31,D1                ;total length = block + buffer
+                   JSR      MM_ALCHP(PC)           ;find the space, A0 points at area on exit
+                   BNE.S    PP_EXIT                ;exit if out of memory
+                   MOVE.W   (A7),D1                ;get buffer length again
+                   ADDQ.W   #1,D1                  ;add one for EOF
+                   LEA      CH.QEND(A0),A2         ;A2 points at O/P queue header
+                   JSR      IO_QSET(PC)            ;set up an "empty" queue header
+                   MOVE.L   A2,CH.QOUT(A0)         ;and pointer to O/P queue
+                   BRA.S    PIPE_OK
+
+   An I/P pipe is required so we must first find the corresponding O/P
+   pipe's location.
+
+0C46 PP_INPUT      MOVEA.W  D3,A2                  ;get corresponding O/P queue ID
+                   ADDA.L   A2,A2                  ;form offset into channel table
+                   ADDA.L   A2,A2
+                   ADDA.L   SV.CHBAS(A6),A2        ;and add to base of table
+                   MOVEA.L  (A2),A2                ;A2 points at O/P channel definition block
+                   CMPI.L   #PIPE_LB,CH.DRIVR(A2)
+                   BNE.S    PP_ERRBP               ;exit if not a pipe device
+                   MOVE.L   A2,-(A7)               ;save pointer
+                   MOVEQ    #$20,D1                ;length of new definition block
+                   JSR      MM_ALCHP(PC)           ;find the space, A0 points at area on exit
+                   MOVEA.L  (A7)+,A2               ;restore pointer
+                   BNE.S    PP_EXIT                ;and exit if out of memory
+                   LEA      CH.QEND(A2),A2         ;A2 points at start of O/P queue header
+                   MOVE.L   A0,(A2)                ;point O/P channel at I/P queue and
+                   MOVE.L   A2,CH.QIN(A0)          ;I/P channel at O/P queue
+
+   On exit A0 points at channel definition block and A2 at O/P queue header.
+
+0C72 PIPE_OK       MOVEQ    #0,D0                  ;signal "no errors"
+0C74 PP_EXIT       ADDQ.W   #2,A7                  ;ignore parameter block
+                   RTS
+
+0C78 PP_ERRBP      MOVEQ    #ERR.BP,D0             ;signal "bad parameter"
+                   ADDQ.W   #2,A7                  ;ignore parameter block
+                   RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=PIPECLOSE       CLOSE A PIPE CHANNEL       (TRAP #2 WITH D0 = $02)           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A0.L     channel ID                                          ³
+³                                                                              ³
+³EXIT:            A0       corrupted                                           ³
+³                 D1,D2,D3,A1,A2 and A3 preserved                              ³
+³                                                                              ³
+³ERRORS:          ERR.NC   channel not open                                    ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   TRAP handler alters registers so that A0 now points at channel definition blo
+   and A6 at system variables.
+
+0C7E PIPECLOS      TST.L    CH.QIN(A0)             ;I/P or O/P pipe ?
+                   BNE.S    INPIPE                 ;jump forward if I/P pipe
+                   LEA      CH.QEND(A0),A2         ;A2 points at queue header
+                   TST.L    (A2)                   ;queue empty ?
+                   BEQ.S    PIPERECL               ;reclaim space if so
+                   JMP      IO_QEOF(PC)            ;signal "finished" if not
+
+0C90 INPIPE        MOVE.L   CH.QIN(A0),-(A7)       ;save address of I/P queue
+                   BSR.S    PIPERECL               ;reclaim heap space for O/P
+                   MOVEA.L  (A7)+,A2               ;restore address
+                   LEA      -$20(A2),A0            ;A0 points at channel definition block
+                   TST.B    (A2)                   ;job finished with pipe ?
+                   BLT.S    PIPERECL               ;reclaim heap space for I/P if so
+                   CLR.L    (A2)                   ;otherwise signal "finished"
+                   MOVEQ    #0,D0                  ;then "no errors"
+                   RTS
+
+0CA6 PIPERECL      JMP      MM_RECHP(PC)           ;reclaim common heap space at A0
+
+2.5.3 Console and screen device driver.
+
+   This is the main screen device driver and is used for printing on the
+   screen and for drawing graphics. It also handles reading chcracters from
+   the keyboard unlike the SCR driver which does not. Every console channel
+   has associated with it a window on the screen and the size and position
+   of this window must be specified when the channel is opened by parameters
+   after the name. For a console channel, the input buffer size must also be
+   specified. When the channel is opened the input buffer is linked into a
+   list of similar input buffers and the buffer which the keyboard driver is
+   to use is specified by pressing the CTRL C key. The corresponding window
+   cursor also associated with the channel will start to flash when it is in
+   use by the keyboard driver.
+
+0CAA CON_LB        DC.L     NET_LB                 ;link to next block
+                   DC.L     CON_IO                 ;I/O routine
+                   DC.L     CONOPEN                ;open routine
+                   DC.L     CONCLOSE               ;close routine
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=CONOPEN         OPEN A CONSOLE CHANNEL     (TRAP #2 WITH D0 = $01)           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D1.L     job ID (-1 if current)                              ³
+³                 A0.L     address of channel name                             ³
+³                                                                              ³
+³EXIT:            D1.L     job ID                                              ³
+³                 A0.L     new channel ID                                      ³
+³                 D2,D3,A1,A2 and A3 preserved                                 ³
+³                                                                              ³
+³ERRORS:          ERR.NJ   invalid job ID                                      ³
+³                 ERR.OM   out of memory                                       ³
+³                 ERR.NO   too many channels                                   ³
+³                 ERR.NF   device not found                                    ³
+³                 ERR.IU   device in use                                       ³
+³                 ERR.BN   device parameters wrong                             ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   TRAP handler alters registers so that A6 now points at system variables
+   and A7 points at parameter block.
+
+0CBA CONOPEN       SUBA.W   #$A,A7                 ;create space for parameter block
+                   MOVEA.L  A7,A3                  ;copy stack pointer to A3
+                   JSR      IO_NAME(PC)            ;decode device name
+
+   Return points for the three decode device name errors.
+
+                   BRA.S    TRY_SCR                ;branch if name not found
+                   BRA.S    SCR_EXIT               ;branch if bad device name
+                   BRA.S    CONNMOK                ;branch if name ok
+
+   Data for console device name.
+
+0CCA CONDATA       DC.W     3,"CON"                ;name length and device name
+                   DC.W     5                      ;number of parameters following name
+                   DC.W     " _",448               ;window width
+                   DC.W     " X",180               ;window height
+                   DC.W     " A",32                ;window x co-ord of LHS
+                   DC.W     " X",16                ;window y co-ord of top
+                   DC.W     " _",128               ;I/P buffer length
+
+   All the parameters for a console device have been checked and placed in
+   the parameter block.
+
+0CE6 CONNMOK       MOVEQ    #$76,D1                ;channel definition block length
+                   ADD.W    $8(A7),D1              ;add length of I/P buffer required
+                   BSR.S    SCROPEN                ;set up the channel if possible
+                   BNE.S    SCR_EXIT               ;and exit if out of memory
+
+   The channel has been created and A0 points at channel definition block.
+
+                   LEA      SD.KBD(A0),A2          ;A2 points at SD_KBD
+                   SUBI.W   #$74,D1                ;D1 = length of queue
+                   JSR      IO_QSET(PC)            ;set up an "empty" queue header
+                   MOVEA.L  SV.KEYQ(A6),A3         ;A3 points at current keyboard queue
+                   MOVE.L   A3,D3                  ;copy address to D3
+                   BNE.S    SCR_NEWQ               ;and jump forward if there is a queue
+                   MOVE.L   A2,(A2)                ;otherwise link into queue list
+                   MOVE.L   A2,SV.KEYQ(A6)         ;and set pointer to new queue
+                   BRA.S    SCR_OK
+
+0D0C SCR_NEWQ      MOVE.L   (A3),(A2)              ;insert pointer to current queue into
+                   MOVE.L   A2,(A3)                ;pointer to next queue for this block
+                   BRA.S    SCR_OK
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=TRY_SCR         CHECK IF A SCREEN CHANNEL WAS SPECIFIED INSTEAD              ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:                                                                        ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+0D12 TRY_SCR       JSR      IO_NAME(PC)            ;decode device name
+
+   Return points for the three decode device name errors.
+
+                   BRA.S    SCR_EXIT               ;branch if name not found
+                   BRA.S    SCR_EXIT               ;branch if bad device name
+                   BRA.S    SCRNMOK                ;branch if name ok
+
+   Data for screen device name.
+
+0D1C SCRDATA       DC.W     3,"SCR"                ;name length and device name
+                   DC.W     4                      ;number of parameters following name
+                   DC.W     " _",448               ;window width
+                   DC.W     " X",180               ;window height
+                   DC.W     " A",32                ;window x co-ord of LHS
+                   DC.W     " X",16                ;window y co-ord of top
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=SCRNMOK         OPEN A SCREEN CHANNEL                                        ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY            A6.L     system variables                                    ³
+³                 A7.L     parameter block                                     ³
+³                                                                              ³
+³EXIT:            A0.L     channel definition block                            ³
+³                 A2.L     O/P queue header                                    ³
+³                                                                              ³
+³ERRORS:          ERR.BP   bad parameter                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+0D34 SCRNMOK       MOVEQ    #$68,D1                ;channel definition block length
+                   BSR.S    SCROPEN                ;open the channel
+                   BRA.S    SCR_EXIT               ;and exit
+
+0D3A SCR_OK        MOVEQ    #0,D0                  ;signal "no errors"
+0D3C SCR_EXIT      ADDA.W   #$0A,A7                ;ignore parameter block
+                   RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=SCROPEN         OPEN A SCREEN OR CONSOLE CHANNEL                             ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY            D1.L     block length                                        ³
+³                 A6.L     system variables                                    ³
+³                 A7.L     parameter block                                     ³
+³                                                                              ³
+³EXIT:            A0.L     channel definition block                            ³
+³                 A2.L     O/P queue header                                    ³
+³                                                                              ³
+³ERRORS:          ERR.OM   out of memory                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+0D42 SCROPEN       JSR      MM_ALCHP(PC)           ;find the space, A0 points at the start of the area on exit
+                   BNE.S    SCR_END                ;and exit if out of memory
+                   MOVE.W   D1,-(A7)               ;save the channel length
+                   LEA      SD.XINC(A0),A2         ;A2 points at SD_XINC
+                   MOVE.L   #$6000A,(A2)+          ;set up the cursor size
+                   MOVE.L   #FONT_1,(A2)+          ;the addresses of the two fonts
+                   MOVE.L   #FONT_2,(A2)+
+                   MOVE.L   #SCREEN,(A2)+          ;and the address of the start of screen memory
+                   LEA      SD.IMASK(A0),A1        ;A1 points at SD_IMASK
+                   MOVEQ    #4,D1                  ;set to green ink and black paper
+                   JSR      COLRMASK(PC)           ;form the colour masks
+
+                   MOVE.L   #$08076400,SD.SCAL(A0)
+
+                   BTST     #3,SV.MCSTA(A6)        ;4 or 8 colour mode ?
+                   BEQ.S    SCR_M4                 ;jump forward if mode 4
+                   ADDQ.W   #6,SD.XINC(A0)         ;double cursor width if mode 8
+                   BSET     #6,SD.CATTR(A0)        ;signal "double width" and "no border"
+0D8A SCR_M4        MOVEQ    #0,D2
+                   LEA      6(A7),A1               ;A1 points at window parameters
+                   JSR      SD_WDEF(PC)            ;redefine window
+                   MOVE.W   (A7)+,D1               ;restore definition block length
+                   TST.L    D0                     ;any errors ?
+                   BEQ.S    SCR_END                ;exit if none
+                   MOVE.L   D0,-(A7)               ;save error value
+                   JSR      MM_RECHP(PC)           ;release space if window to big
+                   MOVE.L   (A7)+,D0               ;restore error value
+0DA2 SCR_END       RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=CONCLOSE        CLOSE A CON OR SCR CHANNEL (TRAP #2 WITH D0 = $02)           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A0.L     channel ID                                          ³
+³                                                                              ³
+³EXIT:            A0       corrupted                                           ³
+³                 D1,D2,D3,A1,A2 and A3 preserved                              ³
+³                                                                              ³
+³ERRORS:          ERR.NC   channel not open                                    ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   TRAP handler alters registers so that A0 now points at channel definition block
+   and A6 at system variables.
+
+0DA4 CONCLOSE      LEA      SD.KBD(A0),A3          ;A3 points at keyboard queue header
+                   TST.L    (A3)                   ;screen channel ?
+                   BEQ.S    CONRECLM               ;reclaim space if so
+                   CMPA.L   SV.KEYQ(A6),A3         ;is this the current queue ?
+                   BNE.S    NEXT_Q1                ;next queue if not
+                   MOVE.L   (A3),SV.KEYQ(A6)       ;set pointer to next queue
+0DB6 NEXT_Q1       CMPA.L   (A3),A3                ;end of queue list ?
+                   BNE.S    FIND_Q1                ;next queue if not
+                   CLR.L    SV.KEYQ(A6)            ;otherwise signal "no queue"
+                   BRA.S    CONRECLM               ;and reclaim channel
+
+   Search through the keyboard queue linked list for the queue before this
+   one and use this to unlink O/P queue from the list.
+
+0DC0 FIND_Q1       MOVEA.L  A3,A2                  ;A2 points at O/P queue header
+0DC2 NEXT_Q2       MOVEA.L  (A2),A2                ;get address of next queue header
+                   CMPA.L   (A2),A3                ;correct queue ?
+                   BNE.S    NEXT_Q2                ;find next queue if not
+                   MOVE.L   (A3),(A2)              ;otherwise delete from queue list
+0DCA CONRECLM      JSR      MM_RECHP(PC)           ;and reclaim channel definition block
+                   RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=CON_IO          GENERAL CONSOLE OR SCREEN CHANNEL I/O                        ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY            D0.B     action required                                     ³
+³                 D1.L     0 if string of bytes required                       ³
+³                 D3.L     timeout                                             ³
+³                 A0.L     channel definition block                            ³
+³                 A1.L     buffer location                                     ³
+³                 A6.L     system variables                                    ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:          ERR.NC   not complete                                        ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+0DD0 CON_IO        TST.B    SV.SCRST(A6)           ;screen active ?
+                   BEQ.S    SCRACTIV               ;jump forward if it is
+                   MOVEQ    #ERR.NC,D0             ;signal "not complete"
+                   RTS
+
+0DDA SCRACTIV      CMPI.B   #IO.SSTRG,D0           ;is it a simple I/O action ?
+                   BHI.S    W_CMND                 ;may be window command if not
+                   MOVEQ    #-1,D7                 ;signal ""
+                   MOVEQ    #0,D6
+                   MOVE.W   D2,D5                  ;copy buffer size,cursor position and
+                   MOVE.L   D1,D4                  ;buffer location to working registers
+                   MOVEA.L  A1,A4
+                   LEA      SD.KBD(A0),A5          ;A5 points at sd_kbd
+                   TST.L    D3                     ;timeout zero ?
+                   BLT.S    SC_OPOK                ;call routine if not
+                   CMPI.B   #SC.EDLIN,D0           ;send operation ?
+                   BHI.S    SC_OPOK                ;jump forward if so
+                   TST.L    (A5)                   ;screen channel ?
+                   BEQ.S    SC_ERRBP               ;exit if so
+                   MOVEA.L  SV.KEYQ(A6),A2         ;A2 points at current keyboard queue
+                   TST.B    -$21(A2)               ;empty ?
+                   BNE.S    SC_OPOK                ;jump forward if not
+                   MOVE.L   A5,SV.KEYQ(A6)         ;make this queue current one
+0E0A SC_OPOK       MOVE.B   SC_TBL(PC,D0.W),D0
+                   JMP      SC_TBL(PC,D0.W)        ;do action
+
+   Table of offsets for general console I/O.
+
+0E12 SC_TBL        DC.B     SC_PEND  - SC_TBL      ;test pending I/P
+                   DC.B     SC_FBYTE - SC_TBL      ;fetch a byte
+                   DC.B     SC_FLINE - SC_TBL      ;fetch a line
+                   DC.B     SC_FSTRG - SC_TBL      ;fetch a string of bytes
+                   DC.B     SC_EDLIN - SC_TBL      ;edit a line
+                   DC.B     SC_SBYTE - SC_TBL      ;send a byte
+                   DC.B     SC_ERRBP - SC_TBL      ;not implemented
+                   DC.B     SC_SSTRG - SC_TBL      ;send a string of bytes
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=SC_PEND         TEST PENDING I/P           (TRAP #3 WITH D0 = $00)           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D3.W     timeout                                             ³
+³                 A0.L     channel ID                                          ³
+³                                                                              ³
+³EXIT:            D1 and A1  corrupted                                         ³
+³                 D2,D3,A0,A2 and A3 preserved                                 ³
+³                                                                              ³
+³ERRORS:          ERR.NC   number pending I/P                                  ³
+³                 ERR.NO   invalid channel ID                                  ³
+³                 ERR.EF   end of file                                         ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+0E1A SC_PEND       JMP      IO_QTEST(PC)           ;jump to general routine
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=SC_FBYTE        FETCH A BYTE               (TRAP #3 WITH D0 = $01)           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D3.W     timeout                                             ³
+³                 A0.L     channel ID                                          ³
+³                                                                              ³
+³EXIT:            D1.B     byte read                                           ³
+³                 A1       corrupted                                           ³
+³                 D2,D3,A0,A2 and A3 preserved                                 ³
+³                                                                              ³
+³ERRORS:          ERR.NC   not complete as number pending I/P                  ³
+³                 ERR.NO   invalid channel ID                                  ³
+³                 ERR.EF   end of file                                         ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+0E1E SC_FBYTE      MOVEA.L  A5,A2                  ;copy pointer to queue
+                   JMP      IO_QOUT(PC)            ;and get the byte
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=SC_FSTRG        FETCH A STRING OF BYTES    (TRAP #3 WITH D0 = $03)           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D2.W     buffer size in bytes                                ³
+³                 D3.W     timeout                                             ³
+³                 A0.L     channel ID                                          ³
+³                 A1.L     location of start of buffer                         ³
+³                                                                              ³
+³EXIT:            D1.W     number of bytes read                                ³
+³                 A1       corrupted                                           ³
+³                 D2,D3,A0,A2 and A3 preserved                                 ³
+³                                                                              ³
+³ERRORS:          ERR.NC   not complete                                        ³
+³                 ERR.NO   invalid channel ID                                  ³
+³                 ERR.EF   end of file                                         ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   A5 points at keyboard queue,D4 = byte count,D5 = buffer size,A4 = start.
+
+0E24 SC_FSTRG      MOVEQ    #0,D0                  ;signal "no errors"
+0E26 SC_GET        CMP.W    D4,D5                  ;end of buffer ?
+                   BLS.S    BUF_END                ;exit if so
+                   MOVEA.L  A5,A2                  ;copy pointer to queue
+                   JSR      IO_QOUT(PC)            ;get a byte from the queue in D1
+                   BLT.S    BUF_END                ;and exit if empty or end of queue
+                   MOVE.B   D1,(A4)+               ;insert in channel buffer
+                   ADDQ.W   #1,D4                  ;increment buffer position
+                   BRA.S    SC_GET                 ;and try again
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=SC_SSTRG        SEND A STRING OF BYTES     (TRAP #3 WITH D0 = $07)           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D2.W     number of bytes to send                             ³
+³                 D3.W     timeout                                             ³
+³                 A0.L     channel ID                                          ³
+³                 A1.L     location of first byte to be sent                   ³
+³                                                                              ³
+³EXIT:            D1.W     number of bytes sent within timout                  ³
+³                 A1       1 past last byte sent                               ³
+³                 D2,D3,A0,A2 and A3 preserved                                 ³
+³                                                                              ³
+³ERRORS:          ERR.NC   not complete                                        ³
+³                 ERR.NO   invalid channel ID                                  ³
+³                 ERR.DF   drive or device full                                ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   A5 points at keyboard queue,D4 = byte count,D5 = buffer size,A4 = start.
+
+0E38 SC_SSTRG      MOVEQ    #0,D0                  ;signal "no errors"
+                   CMP.W    D4,D5                  ;end of buffer?
+                   BLS.S    BUF_END                ;exit if so
+                   MOVE.B   (A4)+,D1               ;get character from buffer
+                   BSR.S    SC_SBYTE               ;and insert in queue
+                   ADDQ.W   #1,D4                  ;increment buffer position
+                   BRA.S    SC_SSTRG               ;and try again
+
+0E46 SC_ERRBP      MOVEQ    #ERR.BP,D0             ;signal "bad parameter"
+0E48 BUF_END       MOVE.W   D4,D1                  ;buffer position and buffer pointer
+                   MOVEA.L  A4,A1
+                   BCLR     #7,SD.CATTR(A0)        ;signal "not graphics positioned"
+                   RTS
+
+0E54 L00E54        MOVEQ    #SC.SBYTE,D0           ;call special routine
+0E56 W_CMND        JMP      WIN_CMND(PC)           ;to print character
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=SC_SBYTE        SEND A BYTE                (TRAP #3 WITH D0 = $05)           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D1.B     byte to be sent                                     ³
+³                 D3.W     timeout                                             ³
+³                                                                              ³
+³EXIT:            D1 and A1  corrupted                                         ³
+³                 D2,D3,A0,A2 and A3 preserved                                 ³
+³                                                                              ³
+³ERRORS:          ERR.NC   not complete                                        ³
+³                 ERR.NO   invalid channel ID                                  ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+0E5A SC_SBYTE      MOVEQ    #0,D0                  ;signal "no errors"
+                   CMPI.B   #$0A,D1                ;line feed ?
+                   BEQ.S    CHK_LF                 ;update newline status if so
+                   TST.B    SD.NLSTA(A0)           ;pending newline ?
+                   BEQ.S    NO_NEWL                ;jump forward if none pending
+                   MOVE.B   D1,-(A7)               ;save character
+                   BSR.S    SC_ECHO                ;do the newline
+                   MOVE.B   (A7)+,D1               ;restore character
+0E6E NO_NEWL       BSR.S    L00E54                 ;send the character
+                   BEQ.S    L00E9E                 ;and exit if any errors
+                   MOVE.W   SD.XINC(A0),D0         ;update cursor position
+                   ADD.W    D0,SD.XPOS(A0)
+                   BTST     #7,SD.CATTR(A0)        ;graphics positioned ?
+                   BNE.S    L00E9C                 ;exit if not
+                   MOVE.B   D0,SD.NLSTA(A0)        ;signal "no pending newline"
+                   TST.B    SD.CURF(A0)            ;cursor on or off ?
+                   BEQ.S    L00E9C                 ;exit if off
+                   BSR.S    SC_ECHO                ;otherwise echo it
+                   BRA.S    L00E9C
+
+0E90 CHK_LF        TST.B    SD.NLSTA(A0)
+                   BGE.S    L00E98
+                   BSR.S    SC_ECHO
+0E98 L00E98        ST       SD.NLSTA(A0)           ;signal "pending" and "no errors"
+0E9C L00E9C        MOVEQ    #0,D0
+0E9E L00E9E        RTS
+
+0EA0 SC_ECHO       TST.B    SD.CURF(A0)            ;cursor on or off ?
+                   BLE.S    L00EAA
+                   JSR      PRNT_CUR(PC)
+0EAA L00EAA        JMP      SD_NEWL(PC)            ;do forced newline
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=SC_FLINE        FETCH A LINE               (TRAP #3 WITH D0 = $02)           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D0.W     cursor position (zero if via CHKTRP3)               ³
+³                 D2.W     buffer size in bytes                                ³
+³                 D3.W     timeout                                             ³
+³                 A0.L     channel ID                                          ³
+³                 A1.L     location of buffer                                  ³
+³                                                                              ³
+³EXIT:            D1.W     number of bytes returned                            ³
+³                 A1       1 past last character                               ³
+³                 D2,D3,A0,A2 and A3 preserved                                 ³
+³                                                                              ³
+³ERRORS:          ERR.NC   not complete                                        ³
+³                 ERR.BO   too many characters read                            ³
+³                 ERR.NO   invalid channel ID                                  ³
+³                 ERR.EF   end of file                                         ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   To terminate the line press "ENTER" only.
+
+0EAE SC_FLINE      TST.L    D3                     ;check timeout
+                   BEQ.S    L00EC6
+                   BRA.S    L00EB8
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=SC_EDLIN        EDIT A LINE                (TRAP #3 WITH D0 = $04)           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D1       high word = cursor position                         ³
+³                          low word = current line length                      ³
+³                 D2.W     size of buffer in bytes                             ³
+³                 D3.W     timeout                                             ³
+³                 A0.L     channel ID                                          ³
+³                 A1.L     location of character at cursor position            ³
+³                                                                              ³
+³EXIT:            D1.W     line length including terminator                    ³
+³                 A1       1 past last character in line                       ³
+³                 D2,D3,A0,A2 and A3 preserved                                 ³
+³                                                                              ³
+³ERRORS:          ERR.NC   not complete                                        ³
+³                 ERR.BO   too many characters read                            ³
+³                 ERR.NO   invalid channel ID                                  ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   A0 altered in TRAP handler to point to character itself. "ENTER", cursor
+   up and cursor down all terminate the line.
+
+0EB4 SC_EDLIN      MOVEQ    #-1,D4                 ;D4 = - current line length
+                   MOVE.W   D1,D4
+0EB8 L00EB8        SWAP     D1                     ;move cursor position into view
+                   MOVE.W   D1,D6
+                   SUBA.W   D4,A4                  ;A4 points at start of line then current
+                   ADDA.W   D6,A4                  ;character in line
+                   BNE.S    L00EDE                 ;and exit if cursor at start
+                   TST.L    D3                     ;check timeout
+                   BLT.S    L00EDE                 ;and jump forward if infinite
+0EC6 L00EC6        TST.B    SD.CURF(A0)            ;cursor on or off ?
+                   BLE.S    L00ED0                 ;jump forward if on
+                   JSR      PRNT_CUR(PC)           ;switch it on otherwise
+0ED0 L00ED0        JSR      SD_DONL(PC)            ;do any pending newline
+                   BSR      L01036
+                   MOVE.W   D4,D6
+                   SUB.W    D3,D6
+                   SUBA.W   D3,A4
+0EDE L00EDE        MOVE.B   SD.CURF(A0),-(A7)
+0EE2 L00EE2        MOVEA.L  A5,A2
+                   JSR      IO_QOUT(PC)            ;get a character
+                   BLT      L00F72
+                   TST.B    SD.CURF(A0)            ;cursor off ?
+                   BLE.S    L00EFA                 ;jump forward if not
+                   MOVE.B   D1,-(A7)               ;save character
+                   JSR      PRNT_CUR(PC)
+                   MOVE.B   (A7)+,D1               ;restore character
+0EFA L00EFA        CMPI.B   #$0A,D1                ;enter ?
+                   BEQ.S    L00F5C
+                   CMPI.B   #$1F,D1                ;control code ?
+                   BLS.S    L00EE2                 ;next character if so
+                   CMPI.B   #$BF,D1                ;printable ?
+                   BHI.S    FILTER
+                   MOVE.W   D4,D0                  ;copy pointer to last character
+                   SUB.W    D6,D0                  ;make it relative
+                   BRA.S    INSERT                 ;move buffer up one space
+
+0F12 BUF_UP        MOVE.B   0(A4,D0.W),1(A4,D0.W)  ;move byte up one space
+0F18 INSERT        DBF      D0,BUF_UP              ;rest of buffer
+                   ADDQ.W   #1,D6                  ;increment pointers
+                   ADDQ.W   #1,D4
+                   MOVE.B   D1,(A4)+               ;insert new character
+                   MOVEQ    #-1,D7
+                   BSR      L01006
+                   BSR      L01028
+                   CMP.W    D4,D5                  ;end of buffer reached ?
+                   BHI.S    L00EE2                 ;next character if not
+                   MOVEQ    #ERR.BO,D0             ;otherwise signal "buffer overflow"
+                   BRA.S    L00F7C
+
+0F34 FILTER        TST.L    D4                     ;buffer empty ?
+                   BGE.S    L00F44                 ;jump forward if so
+                   CMPI.B   #$D0,D1                ;cursor up ?
+                   BEQ.S    L00F5C
+                   CMPI.B   #$D8,D1                ;cursor down ?
+                   BEQ.S    L00F5C
+0F44 L00F44        SUBI.B   #$C0,D1
+                   BEQ.S    L00F8A                 ;if cursor left
+                   SUBQ.B   #2,D1
+                   BEQ      L00FD6                 ;if ctrl left
+                   SUBQ.B   #6,D1
+                   BEQ.S    L00F92                 ;if cursor right
+                   SUBQ.B   #2,D1
+                   BEQ      L00FDA                 ;if ctrl right
+0F5A L00F5A        BRA.S    L00EE2
+
+0F5C L00F5C        MOVE.B   D1,-(A7)
+                   MOVEQ    #-1,D7
+                   BSR      L0103A
+                   MOVE.B   (A7)+,(A4)+
+                   ADDQ.W   #1,D4
+                   JSR      SD_CURS(PC)            ;disable cursor
+                   BSR      CHK_LF
+                   BRA.S    L00F84
+
+0F72 L00F72        TST.B    (A7)
+                   BLT.S    L00F7C
+                   JSR      SD_CURE(PC)            ;enable cursor
+                   MOVEQ    #ERR.NC,D0             ;signal "not complete"
+0F7C L00F7C        SUBA.W   D6,A4
+                   ADDA.W   D4,A4
+                   MOVE.W   D6,D1
+                   SWAP     D1
+0F84 L00F84        ADDQ.W   #2,A7
+                   BRA      BUF_END
+
+0F8A L00F8A        BSR.S    L00FAE
+                   BEQ.S    L00F5A
+0F8E L00F8E        ADDQ.W   #1,D6
+                   BRA.S    L00F5A
+
+0F92 L00F92        ADDQ.W   #1,D6
+                   CMP.W    D4,D6
+                   BHI.S    L00FAA
+                   ADDQ.W   #1,A4
+                   JSR      SD_NCOL(PC)            ;set to next column
+                   BEQ.S    L00F5A
+                   JSR      SD_NEWL(PC)            ;do forced newline
+                   BSR      L01028
+                   BRA.S    L00F5A
+
+0FAA L00FAA        SUBQ.W   #1,D6
+0FAC L00FAC        BRA.S    L00F5A
+
+0FAE L00FAE        SUBQ.W   #1,D6
+                   BLT.S    L00FD4
+                   JSR      SD_PCOL(PC)            ;set to previous column
+                   BEQ.S    L00FD2
+                   JSR      SD_PROW(PC)            ;set to previous row
+                   BNE.S    L01034
+
+   Update cursor position.
+
+                   MOVE.W   SD.XSIZE(A0),D0        ;D0 = window width in pixels
+                   DIVU     SD.XINC(A0),D0         ;D0 = window width in characters
+                   SUBQ.W   #1,D0                  ;D0 = width - 1
+                   MULU     SD.XINC(A0),D0         ;D0 = window width - cursor size
+                   MOVE.W   D0,SD.XPOS(A0)         ;update cursor position
+                   MOVEQ    #0,D0                  ;signal "no errors"
+0FD2 L00FD2        SUBQ.W   #1,A4
+0FD4 L00FD4        BRA.S    L01034
+
+0FD6 L00FD6        BSR.S    L00FAE
+                   BNE.S    L00F8E
+0FDA L00FDA        CMP.W    D6,D4
+                   BEQ.S    L00FAC
+                   SUBQ.W   #1,D4
+                   MOVE.W   D4,D0
+                   SUB.W    D6,D0
+                   MOVE.W   D0,D1
+                   BRA.S    DELETE
+
+0FE8 BUF_DOWN      MOVE.B   1(A4),(A4)+            ;move chaacter one space down
+0FEC DELETE        DBF      D0,BUF_DOWN            ;then rest of buffer
+                   SUBA.W   D1,A4
+                   MOVE.L   SD.XPOS(A0),-(A7)
+                   MOVEQ    #0,D7
+                   BSR.S    L0103A
+                   BNE.S    L01000
+                   MOVEQ    #$20,D1
+                   BSR.S    L01006
+1000 L01000        MOVE.L   (A7)+,D7
+                   BSR.S    L0102A
+                   BRA.S    L00FAC
+
+1006 L01006        BSR      L00E54
+                   BEQ.S    L01034
+                   JSR      SD_NL(PC)              ;do newline
+                   BEQ.S    L01034
+                   TST.W    D7
+                   BLT.S    L01022
+                   SUB.W    SD.YINC(A0),D7
+                   BGE.S    L01022
+                   ADD.W    SD.YINC(A0),D7
+                   BRA.S    L0105A
+
+1022 L01022        JSR      SD_NEWL(PC)            ;do forced newline
+                   BRA.S    L01032
+
+1028 L01028        BSR.S    L01036
+102A L0102A        SUBA.W   D4,A4
+                   ADDA.W   D6,A4
+                   MOVE.L   D7,SD.XPOS(A0)
+1032 L01032        MOVEQ    #0,D0                  ;signal "no errors"
+1034 L01034        RTS
+
+1036 L01036        MOVE.L   SD.XPOS(A0),D7         ;copy cursor position
+103A L0103A        MOVEQ    #0,D0                  ;signal "no errors"
+                   MOVE.W   D4,D3
+                   SUB.W    D6,D3
+                   BRA.S    L0104E
+
+1042 L01042        MOVE.B   (A4)+,D1               ;get character from buffer
+                   MOVE.W   D3,-(A7)
+                   BSR.S    L01006
+                   MOVE.W   (A7)+,D3
+                   TST.L    D0
+                   BNE.S    L01056
+104E L0104E        DBF      D3,L01042
+                   MOVEQ    #0,D3
+                   RTS
+
+1056 L01056        ADDA.W   D3,A4
+                   ADDQ.W   #1,D3
+105A L0105A        TST.L    D0
+                   RTS
+
+2.5.4 Network device driver.
+
+   This the end of the simple device drivers linked list and handles the network
+   device driver.
+
+   Up to 64 QL's and spectrums can be connected together on the network. The
+   protocol used is a non standard one designed by Sincliar Research and as a
+   result only these machines will support it. Each device is given a station
+   number to distinguish it from the others. Communication in one direction only
+   at any given time is allowed and the routines NT_SPCKT and NT_RPCKT at the
+   end of the ROM are used for this purpose.
+
+105E NET_LB        DC.L     0                      ;link to next block (null)
+                   DC.L     NET_IO                 ;I/O routine
+                   DC.L     NETOPEN                ;open routine
+                   DC.L     NETOPEN                ;close routine
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=NETOPEN         OPEN A NETWORK CHANNEL     (TRAP #2 WITH D0 = $01)           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D1.L     job ID (-1 if current)                              ³
+³                 A0.L     address of channel name                             ³
+³                                                                              ³
+³EXIT:            D1.L     job ID                                              ³
+³                 A0.L     new channel ID                                      ³
+³                 D2,D3,A1,A2 and A3 preserved                                 ³
+³                                                                              ³
+³ERRORS:          ERR.NJ   invalid job ID                                      ³
+³                 ERR.OM   out of memory                                       ³
+³                 ERR.NO   too many channels                                   ³
+³                 ERR.NF   device not found                                    ³
+³                 ERR.IU   device in use                                       ³
+³                 ERR.BN   network parameters wrong                            ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   TRAP handler alters registers so that A6 now points at system variables
+   and A7 points at parameter block.
+
+106E NETOPEN       SUBQ.W   #4,A7                  ;create space for parameter block
+                   MOVEA.L  A7,A3                  ;copy stack pointer to A3
+                   JSR      IO_NAME(PC)            ;decode device name
+
+   Return points for the three decode device name errors.
+
+                   BRA.S    NET_EXIT               ;branch if name not found
+                   BRA.S    NET_EXIT               ;branch if bad device name
+                   BRA.S    NETNMOK                ;branch if name ok
+
+   Data for network device name.
+
+107C NETDATA       DC.W     3,"NET"                ;name length and device name
+                   DC.W     2                      ;number of parameters following name
+                   DC.W     2,"IO"                 ;direction (I/P or O/P)
+                   DC.W     " _",0                 ;station number (0 = broadcast)
+
+108C NETNMOK       MOVE.W   #$120,D1               ;length of channel definition block
+                   JSR      MM_ALCHP(PC)           ;find the space,A0 points at area on exi
+                   BNE.S    NET_EXIT               ;exit if out of memory
+
+   Set up the network parameters from the system variables and parameters.
+
+                   MOVE.B   3(A7),NET.HEDR(A0)
+                   MOVE.B   SV.NETNR(A6),NET.SELF(A0)
+                   MOVE.B   1(A7),NET.TYPE(A0)
+                   SUBQ.B   #2,NET.TYPE(A0)
+                   MOVEQ    #0,D0                  ;signal "no errors"
+10AE NET_EXIT      ADDQ.W   #4,A7                  ;ignore parameter block
+                   RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=NETCLOSE        CLOSE A NETWORK CHANNEL    (TRAP #2 WITH D0 = $02)           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A0.L     channel ID                                          ³
+³                                                                              ³
+³EXIT:            A0       corrupted                                           ³
+³                 D1,D2,D3,A1,A2 and A3 preserved                              ³
+³                                                                              ³
+³ERRORS:          ERR.NC   channel not open                                    ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   TRAP handler alters registers so that A0 now points at channel definition block
+   and A6 at the QDOS system variables.
+
+10B2 NETCLOSE      TST.B    NET.TYPE(A0)           ;I/P or O/P channel ?
+                   BGE.S    NT_RECLM               ;reclaim channel if I/P channel
+                   MOVE.B   #1,NET.TYPE(A0)        ;otherwise signal "eof packet"
+                   MOVE.B   NET.RPNT(A0),NET.NBYT(A0)
+10C4 L010C4        TST.B    SV.MDRUN(A6)           ;microdrive turning ?
+                   BNE.S    L010C4                 ;wait until it stops if so
+                   MOVE.W   #1400,D4               ;number of try's for sending EOF packet
+10CE L010CE        JSR      NT_SPCKT               ;send the packet
+                   DBEQ     D4,L010CE              ;try again if unsuccessful
+10D8 NT_RECLM      JMP      MM_RECHP(PC)           ;reclaim the channel
+
+10DC NT_ERRBP      MOVEQ    #ERR.BP,D0             ;signal "bad parameter"
+                   RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=NET_IO          GENERAL NETWORK I/O                                          ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+
+10E0 NET_IO        JSR      IO_SERIO               ;general I/O handling
+                   DC.L     NT_PEND                ;test for pending I/P
+                   DC.L     NT_FBYTE               ;fetch a byte
+                   DC.L     NT_SBYTE               ;send a byte
+                   RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=NT_PEND         TEST FOR PENDING I/P       (TRAP #3 WITH D0 = $00)           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D3.W     timeout                                             ³
+³                 A0.L     channel ID                                          ³
+³                                                                              ³
+³EXIT:            D1 and A1  corrupted                                         ³
+³                 D2,D3,A0,A2 and A3 preserved                                 ³
+³                                                                              ³
+³ERRORS:          ERR.NC   number pending I/P                                  ³
+³                 ERR.NO   invalid channel ID                                  ³
+³                 ERR.EF   end of file                                         ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+10F2 NT_PEND       MOVE.B   NET.TYPE(A0),D0        ;I/P or O/P channel ?
+                   BLT.S    NT_ERRBP               ;exit if I/P channel
+                   MOVEQ    #0,D2                  ;prepare D2
+                   MOVE.B   NET.RPNT(A0),D2        ;get current buffer position
+                   MOVE.B   NET.DATA(A0,D2.W),D1
+                   SUB.B    NET.NBYT(A0),D2        ;form length of buffer
+                   BCS.S    L01126                 ;get another character if room left
+
+   The buffer is empty so get a packet if an I/P channel.
+
+                   TST.B    D0                     ;I/P or O/P channel
+                   BEQ.S    L01110                 ;get a packet if an I/P channel
+                   MOVEQ    #ERR.EF,D0             ;otherwise signal "end of file"
+                   RTS
+
+1110 L01110        SF       NET.RPNT(A0)           ;signal "buffer empty"
+                   JSR      NT_RPCKT               ;get a network packet and report success
+                   BEQ.S    NT_PEND
+                   RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=NT_FBYTE        FETCH A BYTE               (TRAP #3 WITH D0 = $01)           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D3.W     timeout                                             ³
+³                 A0.L     channel ID                                          ³
+³                                                                              ³
+³EXIT:            D1.B     byte read                                           ³
+³                 A1       corrupted                                           ³
+³                 D2,D3,A0,A2 and A3 preserved                                 ³
+³                                                                              ³
+³ERRORS:          ERR.NC   not complete                                        ³
+³                 ERR.NO   invalid channel ID                                  ³
+³                 ERR.EF   end of file                                         ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+111E NT_FBYTE      BSR.S    NT_PEND                ;test for pending I/P
+                   BNE.S    L01128                 ;exit if any errors
+                   ADDQ.B   #1,NET.RPNT(A0)        ;update buffer position
+1126 L01126        MOVEQ    #0,D0                  ;signal "no errors"
+1128 L01128        RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=NT_SBYTE        SEND A BYTE                (TRAP #3 WITH D0 = $05)           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D1.B     byte to be sent                                     ³
+³                 D3.W     timeout                                             ³
+³                 A0.L     channel ID                                          ³
+³                                                                              ³
+³EXIT:            D1 and A1  corrupted                                         ³
+³                 D2,D3,A0,A2 and A3 preserved                                 ³
+³                                                                              ³
+³ERRORS:          ERR.NC   not complete                                        ³
+³                 ERR.NO   invalid channel ID                                  ³
+³                 ERR.EF   end of file                                         ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+112A NT_SBYTE      TST.B    NET.TYPE(A0)           ;I/P or O/P channel ?
+                   BGE.S    NT_ERRBP               ;exit if I/P channel
+                   MOVEQ    #1,D2
+                   ADD.B    NET.RPNT(A0),D2        ;update buffer position and jump forward
+                   BCC.S    L01152                 ;if greater than 256 characters
+                   MOVE.B   D1,-(A7)               ;save the character if buffer full
+                   MOVE.W   #$FF,NET.TYPE(A0)      ;signal "data packet"
+                   JSR      NT_SPCKT               ;transmit the packet
+                   MOVE.B   (A7)+,D1               ;get character back
+                   ST       NET.TYPE(A0)           ;signal "data packet"
+                   TST.L    D0                     ;any errors ?
+                   BNE.S    L01128                 ;exit if so
+                   MOVEQ    #1,D2                  ;otherwise update buffer position
+
+   Insert the character in the now empty buffer or if room left.
+
+1152 L01152        MOVE.B   D1,NET.HCHK(A0,D2.W)
+                   MOVE.B   D2,NET.RPNT(A0)        ;form checksum
+                   BRA.S    L01126
+

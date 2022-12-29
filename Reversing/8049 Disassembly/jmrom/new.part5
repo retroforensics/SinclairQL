@@ -1,0 +1,1103 @@
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=FLASHCUR        FLASH THE CURSOR (START OF SCHEDULER LINKED LIST)            ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D3.L                                                         ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:          NONE                                                         ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+115C SCHDTASK      DC.L     SECTASK                ;link to next entry
+                   DC.L     FLASHCUR               ;pointer to routine
+
+1164 FLASHCUR      MOVE.L   SV.KEYQ(A6),D4         ;D4 points at current keyboard queue
+                   BEQ.S    EXIT_FLA               ;exit if number queue
+                   MOVEA.L  D4,A0
+                   LEA      -$64(A0),A0            ;A0 points at start of channel definition block
+                   MOVE.W   SV.FSTAT(A6),D4        ;get cursor flash counter
+                   TST.B    SD.CURF(A0)            ;cursor suppressed ?
+                   BEQ.S    L01182                 ;exit if so
+                   SUB.W    D3,D4                  ;update counter
+                   BGT.S    L01184                 ;and jump forward unless timed out
+                   JSR      PRINT_CUR(PC)          ;flash the cursor
+1182 L01182        MOVEQ    #12,D4                 ;reset count again
+1184 L01184        MOVE.W   D4,SV.FSTAT(A6)        ;update count
+1188 EXIT_FLA      RTS
+
+2.6 Directory device drivers.
+
+2.6.1 Microdrive device driver.
+
+   This is the start of the directory device drivers linked list and handles
+   the only directory device driver in an un-expanded QL, the microdrive. The
+   microdrive is the only directory based device in the QL and so only one
+   driver exists in the directory device drivers linked list.
+
+   The microdrive device driver is the most complex of all the drivers in QDOS
+   and occupies quite a large part of the ROM spread about in between the other
+   parts of the IOSS (I/O Sub System).
+
+   Sections of memory known as slave blocks are used to store copies of sectors
+   of tape and in particular, the directory sectors are stored in RAM to allow
+   for fast searches for files on a cartridge to be carried out.
+
+   Up to eight drives can be used at a time and data for each drive is kept in
+   a special area known as a physical definition block which is stored in the
+   common heap for each drive.
+
+118A MDV_LB        DC.L     0                      ;absolute link to next block (null)
+                   DC.L     MDV_IO                 ;I/O routine address
+                   DC.L     MD_OPEN                ;open routine address
+                   DC.L     MD_CLOSE               ;close routine address
+                   DC.L     MD_SLAVE               ;forced slaving routine address
+                   DC.L     0                      ;rename routine address (none)
+                   DC.L     0                      ;truncate routine address (none)
+                   DC.L     MD_FORMT               ;format routine address
+                   DC.L     $428                   ;length of physical definition block
+                   DC.W     3,"MDV"                ;drive name
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=REPEATIO        DO MICRODRIVE I/O OPERATION UNTIL COMPLETE                   ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D0.L     action required                                     ³
+³                 D2.L     ?                                                   ³
+³                 D3.L     timeout                                             ³
+³                                                                              ³
+³EXIT:            none                                                         ³
+³                                                                              ³
+³ERRORS:          none                                                         ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+11B4 REPEATIO      MOVEM.L  D0/D2/D4-7/A4-5,-(A7)  ;save registers used by device driver
+11B8 NEXT_IO       MOVEM.L  (A7),D0/D2             ;and restore action registers
+                   MOVEQ    #0,D3                  ;do the I/O operation for one frame
+                   BSR.S    MDV_IO
+                   ADDQ.L   #1,D0                  ;was error "not complete" ?
+                   BEQ.S    NEXT_IO                ;try I/O again if so otherwise
+                   SUBQ.L   #1,D0                  ;restore error code if not
+                   ADDQ.W   #4,A7                  ;and ignore saved error long word
+                   MOVEM.L  (A7)+,D2/D4-7/A4-5     ;restore registers used by device driver
+                   RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=MDV_IO          GENERAL MICRODRIVE FILE I/O                                  ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D0.L     action required                                     ³
+³                 D2.L     ?                                                   ³
+³                 D3.L     timeout                                             ³
+³                                                                              ³
+³EXIT:            none                                                         ³
+³                                                                              ³
+³ERRORS:          ERR.BP   invalid function                                    ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   TRAP handler alters registers so that A6 now points at system variables, A0
+   points at channel definition block and A3 points at assumed start of linkage
+   block.
+
+11CE MDV_IO        MOVEQ    #0,D6                  ;prepare D6
+                   MOVE.B   FS.DRIVE(A0),D6        ;get drive number
+                   LSL.B    #2,D6                  ;form drive ID from drive number
+
+   Drive numbers are stored in QDOS as an integer from 1 to the maximum number
+   of microdrives allowed which is 8. A drive number therefore takes the form
+   shown below assuming that the "d"'s stand for the drive number:-
+
+                bit
+          7 6 5 4 3 2 1 0
+         ÚÄÂÄÂÄÂÄÂÄÂÄÂÄÂÄ¿
+         ³0³0³0³0³d³d³d³d³
+         ÀÄÁÄÁÄÁÄÁÄÁÄÁÄÁÄÙ
+
+   Throughout the rest of the system however, there are various tables of long
+   word pointers which are indexed by the drive number. Because the mechanism
+   of indexing the table requires that the drive number is multiplied by four,
+   the drive number is also stored in a table in the system variables, in the
+   multiplied form known as a drive ID. The drive ID therefore takes the form
+   shown below, again assuming that the "d"'s represent the drive number:-
+
+                bit
+          7 6 5 4 3 2 1 0
+         ÚÄÂÄÂÄÂÄÂÄÂÄÂÄÂÄ¿
+         ³0³0³d³d³d³d³0³0³
+         ÀÄÁÄÁÄÁÄÁÄÁÄÁÄÁÄÙ
+
+   This table, SV.MDDID, can then be indexed by the drive number to extract the
+   corresponding drive ID. The drive ID can then be used wherever indexing a
+   table on drive number is required.
+
+                   LEA      SV.FSDEF(A6),A2
+
+   A2 points at the table of pointers to the physical definition block for each
+   drive. This is an example of one of the tables mentioned above.
+
+                   MOVEA.L  0(A2,D6.W),A2          ;point at this drive's physical definition block
+                   LSL.B    #2,D6                  ;and move the drive number into the high nibble
+
+   The register, D6, now contains the drive number in the following form:-
+
+                bit
+          7 6 5 4 3 2 1 0
+         ÚÄÂÄÂÄÂÄÂÄÂÄÂÄÂÄ¿
+         ³d³d³d³d³0³0³0³0³
+         ÀÄÁÄÁÄÁÄÁÄÁÄÁÄÁÄÙ
+
+   This is the form which the drive number takes in the status byte of a slave
+   block table entry.
+
+                   CMPI.B   #FS.CHECK,D0           ;filing system function required ?
+                   BCS      FS_HEADR               ;jump forward to check for simple I/O if not
+                   CMPI.B   #FS.SAVE,D0            ;is it a valid function at all ?
+                   BHI.S    MD_ERRBP               ;exit with error if not
+
+   At this point, the major registers are set up as follows:-
+
+    D2.?    Some unknown value which gets tested lots of times
+    D3.L    Timeout
+    D6.B    Slave block table entry status byte template.
+    A0.L    pointer to channel definition block for new channel.
+    A2.L    pointer to physical definition block for drive number in FS.DRIVE
+    A3.L    pointer to assumed start of linkage block.
+    A6.L    pointer to QDOS system variables.
+
+   Get the address offset for the chosen I/O routine and jump to it.
+
+                   MOVE.B   MD_TBL-FS.CHECK(PC,D0.W),D0
+                   JMP      MD_TBL(PC,D0.W)
+
+   Table of offsets for general microdrive I/O.
+
+11F6 MD_TBL        DC.B     FS_CHECK - MD_TBL      ;check pending operations
+                   DC.B     FS_FLUSH - MD_TBL      ;flush all buffers
+                   DC.B     FS_POSAB - MD_TBL      ;position absolute file pointer
+                   DC.B     FS_POSRE - MD_TBL      ;position relative file pointer
+                   DC.B     MD_ERRBP - MD_TBL      ;rename file (not implemented)
+                   DC.B     FS_MDINF - MD_TBL      ;get information about medium
+                   DC.B     FS_HEADS - MD_TBL      ;set file header
+                   DC.B     FS_HEADR - MD_TBL      ;read file header
+                   DC.B     FS_LOAD  - MD_TBL      ;load a file
+                   DC.B     FS_SAVE  - MD_TBL      ;save a file
+
+1200 MD_ERRBP      MOVEQ    #ERR.BP,D0             ;signal "bad parameter"
+                   RTS
+
+2.6.2 File system TRAP handlers.
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=FS_CHECK        CHECK PENDING OPERATIONS   (TRAP #3 WITH D0 = $40)           ³
+³=FS_FLUSH        FLUSH ALL BUFFERS          (TRAP #3 WITH D0 = $41)           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D3.W     timeout                                             ³
+³                 A0.L     channel ID                                          ³
+³                                                                              ³
+³EXIT:            D1 and A1  corrupted                                         ³
+³                 D2,D3,A0,A2 and A3 preserved                                 ³
+³                                                                              ³
+³ERRORS:          ERR.NC   not complete                                        ³
+³                 ERR.NO   invalid channel ID                                  ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   TRAP handler alters registers so thst A6 now points at system variables and
+   A0 points at channel definition block.
+
+1204 FS_CHECK      MOVEQ    #%00000011,D4          ;mask for "availability"
+                   MOVEQ    #-1,D5                 ;and for inverting chosen bits
+                   BRA.S    FS_CHK                 ;process the slave block table
+
+120A FS_FLUSH      MOVEQ    #%00001100,D4          ;mask for "awaiting" field in status
+                   MOVEQ    #0,D5                  ;and invert number bits
+120E FS_CHK        MOVE.B   FS.DRIVE(A0),D3        ;get drive number and move into high nibble
+                   LSL.B    #4,D3                  ;of bottom byte
+                   BSET     #0,D3                  ;set "available" bit
+                   MOVE.W   FS.FILNR(A0),D2        ;get file number
+
+   Scan through the slave block table for this drive and process any blocks
+   belonging to this file.
+
+                   MOVEA.L  SV.BTBAS(A6),A4        ;A4 points at slave block table
+1220 L01220        MOVEQ    #-15,D0                ;D0.B = %11110001
+
+   Mask off all but the drive number and "available" bits in the status byte.
+
+                   AND.B    (A4),D0                ;mask off bits
+                   CMP.B    D3,D0                  ;correct drive or unavailable ?
+                   BNE.S    L01238                 ;next entry if not
+                   CMP.W    BT.FILNR(A4),D2        ;correct file number ?
+                   BNE.S    L01238                 ;next entry if not
+                   MOVE.B   (A4),D0                ;get the full status byte
+                   EOR.B    D5,D0                  ;invert chosen bits
+                   AND.W    D4,D0                  ;and mask off "awaiting" field
+                   BNE      L01476                 ;do forced slaving if "waiting"
+1238 L01238        ADDQ.W   #8,A4                  ;next table entry
+                   CMPA.L   SV.BTTOP(A6),A4        ;end of slave block table ?
+                   BLT.S    L01220                 ;check next entry if not
+
+   All the entries in the table for this file have been found so exit.
+
+                   MOVEQ    #0,D0                  ;signal "no errors"
+                   RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=FS_POSAB        POSITION ABSOLUTE POINTER  (TRAP #3 WITH D0 = $42)           ³
+³=FS_POSRE        POSITION RELATIVE POINTER  (TRAO #3 WITH D0 = $43)           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D1.L     file offset or absolute position                    ³
+³                 D3.W     timeout                                             ³
+³                 A0.L     channel ID                                          ³
+³                                                                              ³
+³EXIT:            D1.L     new file position                                   ³
+³                 A1       corrupted                                           ³
+³                 D2,D3,A0,A2 and A3 preserved                                 ³
+³                                                                              ³
+³ERRORS:          ERR.NC   not complete                                        ³
+³                 ERR.NO   invalid channel ID                                  ³
+³                 ERR.EF   end of file                                         ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   TRAP handler alters registers so thst A6 now points at system variables and
+   A0 points at channel definition block.
+
+1244 FS_POSAB      JSR      FILE_ABS(PC)           ;position absolute file pointer
+                   BRA.S    L01252
+
+124A FS_POSRE      TST.L    D3                     ;timeout zero ?
+                   BNE.S    L01252                 ;exit if so
+                   JSR      FILE_REL(PC)           ;position relative file pointer
+1252 L01252        MOVEQ    #0,D0                  ;signal "no errors"
+                   BRA.S    GET_HEAD               ;and set file header
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=FS_MDINF        GET MEDIUM INFORMATION     (TRAP #3 WITH D0 = $45)           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D3.W     timeout                                             ³
+³                 A0.L     channel ID                                          ³
+³                 A1.L     location of buffer for medium name                  ³
+³                                                                              ³
+³EXIT:            D1.L     high word : number of unused sectors                ³
+³                          low word  : number of good sectors                  ³
+³                 A1.L     one character past end of medium name               ³
+³                 A2 and A3  corrupted                                         ³
+³                 D2,D3 and A0 preserved                                       ³
+³                                                                              ³
+³ERRORS:          ERR.NC   not complete                                        ³
+³                 ERR.NO   invalid channel ID                                  ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   A2 points at physical definition block for drive.
+
+1256 FS_MDINF      LEA      FS.MNAME(A2),A3        ;A3 points at medium name
+                   MOVE.L   (A3)+,(A1)+            ;copy file name to buffer
+                   MOVE.L   (A3)+,(A1)+
+                   MOVE.W   (A3)+,(A1)+
+
+   Now check the sector map backwards starting with the last sector.
+
+                   MOVE.W   #508,D0                ;D0 points at second last pair of bytes
+                   MOVEQ    #0,D1                  ;clear sector count
+                   MOVEQ    #1,D2                  ;at least one good sector available
+1268 L01268        CMPI.B   #$FD,MD.MAP(A2,D0.W)
+                   BHI.S    MD_BAD                 ;jump forward if bad
+                   BNE.S    MD_INUSE               ;and if in use
+                   ADDQ.W   #1,D1                  ;increment unused sector count
+1274 MD_INUSE      ADDQ.W   #1,D2                  ;increment good sector count
+1276 MD_BAD        SUBQ.W   #2,D0                  ;next pair of bytes
+                   BNE.S    L01268                 ;check unless end of sector map
+                   SWAP     D1                     ;move unused sector count
+                   MOVE.W   D2,D1                  ;insert good sector count
+                   RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=FS_LOAD         LOAD A FILE                (TRAP #3 WITH D0 = $48)           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D2.L     number of bytes required                            ³
+³                 D3.W     timeout (must be -1)                                ³
+³                 A0.L     channel ID                                          ³
+³                 A1.L     location for bytes                                  ³
+³                                                                              ³
+³EXIT:            A1       one past last byte loaded                           ³
+³                 D1       corrupted                                           ³
+³                 D2,D3,A0,A2 and A3 preserved                                 ³
+³                                                                              ³
+³ERRORS:          ERR.NC   not complete                                        ³
+³                 ERR.NO   invalid channel ID                                  ³
+³                 ERR.EF   end of file                                         ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+1280 FS_LOAD       MOVEQ    #IO.FSTRG,D0           ;signal "fetch string of bytes"
+                   CMPI.L   #$1000,D2              ;4k or more ?
+                   BLT.S    GET_HEAD               ;jump forward if less
+                   BSR      FS_FLUSH               ;make room for random loading
+                   BEQ      L01534
+                   RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=FS_SAVE         SAVE A FILE                (TRAP #3 WITH D0 = $49)           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D2.L     number of bytes to save                             ³
+³                 D3.W     timeout (must be -1)                                ³
+³                 A0.L     channel ID                                          ³
+³                 A1.L     location of bytes                                   ³
+³                                                                              ³
+³EXIT:            A1       one past last byte saved                            ³
+³                 D1       corrupted                                           ³
+³                 D2,D3,A0,A2 and A3 preserved                                 ³
+³                                                                              ³
+³ERRORS:          ERR.NC   not complete                                        ³
+³                 ERR.NO   invalid channel ID                                  ³
+³                 ERR.DF   drive full                                          ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+1294 FS_SAVE       MOVEQ    #IO.SSTRG,D0           ;signal "send a string of bytes"
+                   BRA.S    GET_HEAD               ;do the operation
+
+1298 L01298        MOVEQ    #IO.FSTRG,D0           ;signal "fetch a string of bytes"
+                   MOVE.L   A1,-(A7)               ;save file pointer
+                   BSR.S    MD_GETBL               ;get the header string
+                   MOVEQ    #64,D4                 ;length of file header
+                   MOVEA.L  (A7)+,A2               ;restore pointer
+                   SUB.L    D4,(A2)                ;form byte number
+                   RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=FS_HEADS        SET FILE HEADER            (TRAP #3 WITH D0 = $46)           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D3.W     timeout                                             ³
+³                 A0.L     channel ID                                          ³
+³                 A1.L     start of header                                     ³
+³                                                                              ³
+³EXIT:            D1.W     length of set header                                ³
+³                 A1       corrupted                                           ³
+³                 D2,D3,A0,A2 and A3 preserved                                 ³
+³                                                                              ³
+³ERRORS:          ERR.NC   not complete                                        ³
+³                 ERR.NO   invalid channel ID                                  ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   TRAP handler alters registers so that A0 points at channel definition block
+
+12A6 FS_HEADS      MOVEQ    #IO.SSTRG,D0           ;signal "send a string of bytes"
+                   MOVEQ    #14,D2                 ;length of non-directory header
+12AA MD_GETBL      CLR.L    FS.NBLOK(A0)           ;set to block zero
+                   BSR.S    FS_HEADR               ;load the header
+                   MOVE.W   #64,FS.NBYTE(A0)       ;next byte to be read is actual file
+                   RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=FS_HEADR        READ FILE HEADER           (TRAP #3 WITH D0 = $47)           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D2.W     buffer length                                       ³
+³                 D3.W     timeout                                             ³
+³                 A0.L     channel ID                                          ³
+³                 A1.L     location of buffer for header                       ³
+³                                                                              ³
+³EXIT:            D1.W     size of header read                                 ³
+³                 A1       one past end of buffer                              ³
+³                 D2,D3,A0,A2 and A3 preserved                                 ³
+³                                                                              ³
+³ERRORS:          ERR.NC   not complete                                        ³
+³                 ERR.BO   buffer overflow                                     ³
+³                 ERR.NO   invalid channel ID                                  ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   TRAP handler alters registers so that A0 points at channel definition block a
+   A2 points at physical definition block for current drive.
+   D1 contains zero if a string of bytes is required. D3 contains zero if
+   routine entered from TRAP #3 handler.
+
+12B8 FS_HEADR      EXT.L    D1                     ;propagate signs
+                   EXT.L    D2
+12BC GET_HEAD      CMPI.B   #IO.SSTRG,D0           ;valid command ?
+                   BHI      MD_ERRBP               ;exit if not
+                   MOVEQ    #0,D7                  ;clear frame count
+                   TST.L    D3                     ;timeout zero ?
+                   BEQ.S    L012CC                 ;jump forward if so
+                   SUB.L    D1,D7                  ;decrement frame count
+12CC L012CC        SUBQ.B   #4,D0                  ;check for "fetch" function
+                   BEQ      MD_ERRBP               ;exit if TRAP to edit a line
+                   BLT.S    L012E8                 ;and jump forward if "fetch" TRAP
+
+   Must be functions 5,7 or 8 (now 1 or 3).
+
+                   CMPI.B   #1,FS.ACCESS(A0)       ;old shared device ?
+                   BEQ.S    MD_ERRRO               ;exit if so
+                   MOVEQ    #-1,D3                 ;use an infinite timeout
+                   SUBQ.W   #2,D0                  ;check for function number 6
+                   BEQ      MD_ERRBP               ;and exit if so
+                   BLT.S    MD_SBYTE               ;jump forward if function number 5
+                   BGT.S    MD_SSTRG               ;and if function number 7 or 8
+
+   Must be functions 0 to 3 (now -4 to -1)
+
+12E8 L012E8        MOVEQ    #0,D3
+                   ADDQ.B   #4,D0                  ;reset function number
+                   BEQ.S    MD_SBYTE               ;jump forward if function 0
+                   MOVE.W   #256,D3
+                   SUBQ.B   #2,D0                  ;check for function number
+                   BLT.S    MD_SBYTE               ;jump forward if functions 0 and 1
+                   BGT.S    MD_SSTRG               ;jump forward if functions 2 and 3
+
+                   MOVEQ    #10,D3
+12FA MD_SSTRG      ADD.L    A1,D7
+                   MOVE.L   D7,-(A7)
+                   ADD.L    D2,D7
+                   BSR.S    L0131C
+                   MOVE.L   A1,D1
+                   SUB.L    (A7)+,D1
+                   RTS
+
+1308 MD_SBYTE      MOVE.L   D1,-(A7)
+                   LEA      3(A7),A1
+                   MOVE.L   A1,D7
+                   ADDQ.L   #1,D7
+                   BSR.S    L0131C
+                   MOVE.L   (A7)+,D1
+                   RTS
+
+1318 MD_ERRRO      MOVEQ    #ERR.RO,D0             ;signal "read only"
+                   RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=                                                                             ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:                                                                        ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+131C L0131C        TST.B    $23(A2)
+                   BGE.S    L01326
+1322 MD_ERRFE      MOVEQ    #ERR.FE,D0             ;signal "bad medium"
+                   RTS
+
+1326 L01326        MOVE.L   FS.FILNR(A0),D5        ;get file number and block number
+                   MOVE.L   FS.NBLOK(A0),D4
+                   CMP.L    FS.EBLOK(A0),D4        ;last block in file ?
+                   BLT.S    L01342                 ;jump forward if not
+                   BGT.S    MD_ERREF
+                   TST.B    D3
+                   BLT.S    L0133E
+133A MD_ERREF      MOVEQ    #ERR.EF,D0             ;signal "end of file"
+133C L0133C        RTS
+
+133E L0133E        TST.W    D4                     ;first block in file ?
+                   BEQ.S    L01366                 ;jump forward if so
+1342 L01342        BSR      L01430
+                   BNE.S    L0133C
+                   TST.W    D4
+                   BNE.S    L0137C
+                   MOVE.L   A4,-(A7)
+                   ADDQ.W   #1,D5
+                   MOVEQ    #0,D2
+                   MOVE.W   D5,D2
+                   SWAP     D2
+                   CMP.L    FS.EBLOK(A0),D2
+                   BGE.S    L01360
+                   BSR      L0143C
+1360 L01360        MOVEA.L  (A7)+,A4
+                   SUBQ.W   #1,D5
+                   BRA.S    L0137C
+
+1366 L01366        CMP.L    A1,D7
+                   BLS      L013F0
+                   BSR      L014F8
+                   BSR      L0147E
+                   MOVE.W   D0,2(A4)
+                   ORI.B    #3,(A4)
+137C L0137C        MOVE.L   A4,FS.CBLOK(A0)
+                   BTST     #1,(A4)
+                   BEQ      L01476                 ;do pending operations
+                   TST.W    D3
+                   BEQ.S    L013F0
+                   MOVE.L   A4,D0
+                   SUB.L    SV.BTBAS(A6),D0
+                   LSL.L    #6,D0
+                   MOVEA.L  D0,A5
+                   ADDA.L   A6,A5
+                   ADDA.W   D4,A5
+                   TST.W    D3
+                   BGT.S    L013BE
+139E L0139E        CMP.L    A1,D7
+                   BLS.S    L013AC
+                   MOVE.B   (A1)+,(A5)+
+                   BSR.S    L013FC
+                   BNE.S    L0139E
+                   JSR      MD_SLAVE(PC)           ;do forced slaving
+13AC L013AC        ST       $2C(A0)
+                   BSR.S    L01410
+                   CMP.L    FS.EBLOK(A0),D4
+                   BLT.S    L013D8
+                   MOVE.L   D4,FS.EBLOK(A0)
+                   BRA.S    L013D8
+
+13BE L013BE        MOVEQ    #0,D0
+13C0 L013C0        CMP.L    A1,D7
+                   BLS.S    L013D8
+                   CMP.L    FS.EBLOK(A0),D4
+                   BGE.S    L013F4
+                   MOVE.B   (A5)+,D0
+                   MOVE.B   D0,(A1)+
+                   CMP.W    D0,D3
+                   BNE.S    L013D4
+                   MOVE.L   A1,D7
+13D4 L013D4        BSR.S    L013FC
+                   BNE.S    L013C0
+13D8 L013D8        MOVE.L   D4,FS.NBLOK(A0)
+                   CMP.L    A1,D7
+                   BHI      L0131C
+                   CMPI.W   #10,D3
+                   BNE.S    L013F0
+                   CMP.B    D0,D3
+                   BEQ.S    L013F0
+                   MOVEQ    #ERR.BO,D0             ;signal "buffer full"
+                   RTS
+
+13F0 L013F0        MOVEQ    #0,D0                  ;signal "no errors"
+                   RTS
+
+13F4 L013F4        MOVE.L   D4,FS.NBLOK(A0)
+                   BRA      MD_ERREF
+
+13FC L013FC        ADDQ.W   #1,D4
+                   BTST     #9,D4
+                   BEQ.S    L0140C
+                   ADDQ.W   #1,D5
+                   ADDI.L   #$FE00,D4
+140C L0140C        TST.W    D4
+                   RTS
+
+   D6 contains drive number in bits 4 to 7 of the bottom byte.
+
+1410 L01410        MOVEQ    #%00000111,D0
+                   OR.B     D6,D0
+                   MOVE.B   D0,(A4)
+1416 L01416        MOVE.L   A4,D1
+                   SUB.L    SV.BTBAS(A6),D1
+                   LSR.L    #3,D1
+                   ADDA.W   2(A4),A2
+                   MOVE.W   D1,MD.PENDG(A2)
+                   SUBA.W   2(A4),A2
+                   SF       $24(A2)
+                   RTS
+
+   D6 contains drive number in bits 4 to 7 of the bottom byte.
+
+1430 L01430        MOVEA.L  FS.CBLOK(A0),A4
+                   MOVE.L   A4,D0
+                   BNE.S    L0143C
+                   MOVEA.L  SV.BTBAS(A6),A4
+143C L0143C        MOVEA.L  A4,A5
+143E L0143E        MOVEQ    #14,D0
+                   AND.B    (A4),D0
+                   BEQ.S    L01454
+                   MOVEQ    #-16,D0
+                   AND.B    (A4),D0
+                   CMP.B    D0,D6
+                   BNE.S    L01454
+                   MOVEQ    #0,D0
+                   CMP.L    4(A4),D5
+                   BEQ.S    L0147C
+1454 L01454        ADDQ.L   #8,A4
+                   CMPA.L   SV.BTTOP(A6),A4
+                   BLT.S    L01460
+                   MOVEA.L  SV.BTBAS(A6),A4
+1460 L01460        CMPA.L   A4,A5
+                   BNE.S    L0143E
+                   BSR      L014F2
+                   BSR      L014F8
+                   MOVE.W   D0,2(A4)
+                   ORI.B    #9,(A4)
+                   BSR.S    L01416
+1476 L01476        JSR      MD_SLAVE(PC)           ;forced slaving routine
+147A MD_ERRNC      MOVEQ    #ERR.NC,D0             ;signal "not complete"
+147C L0147C        RTS
+
+147E L0147E        BSR.S    L014D4
+                   SUBQ.B   #1,D2
+                   BCC.S    L0148C
+                   MOVEQ    #-$28,D0
+                   ADD.W    MD.LSECT(A2),D0
+                   BRA.S    L0148E
+
+148C L0148C        BSR.S    L014E0
+148E L0148E        SUBI.W   #$18,D0
+                   BGE.S    L014A4
+                   MOVE.W   #$1FE,D1
+1498 L01498        SUBQ.W   #2,D1
+                   CMPI.B   #$FF,$28(A2,D1.W)
+                   BEQ.S    L01498
+                   ADD.W    D1,D0
+14A4 L014A4        MOVE.W   D0,-(A7)
+14A6 L014A6        SUBQ.W   #2,D0
+                   BPL.S    L014AE
+                   MOVE.W   #$1FC,D0
+14AE L014AE        CMPI.B   #$FD,$28(A2,D0.W)
+                   BEQ.S    L014C0
+                   CMP.W    (A7),D0
+                   BNE.S    L014A6
+                   ADDQ.W   #6,A7
+                   MOVEQ    #ERR.DF,D0             ;signal "drive full"
+                   RTS
+
+14C0 L014C0        ADDQ.B   #1,D2
+                   MOVE.W   D2,$28(A2,D0.W)
+                   MOVE.W   D0,MD.LSECT(A2)
+                   MOVE.W   #$FFFF,MD.PENDG(A2)
+                   ADDQ.W   #2,A7
+                   RTS
+
+14D4 L014D4        MOVE.W   #$1FE,D0
+                   MOVE.L   D5,D2
+                   LSL.W    #8,D2
+                   LSR.L    #8,D2
+                   RTS
+
+14E0 L014E0        SUBQ.W   #2,D0
+                   BLT.S    L014EC
+                   CMP.W    $28(A2,D0.W),D2
+                   BNE.S    L014E0
+                   RTS
+
+14EC L014EC        ADDQ.W   #8,A7
+                   BRA      MD_ERRFE
+
+14F2 L014F2        BSR.S    L014D4
+                   BSR.S    L014E0
+                   RTS
+
+14F8 L014F8        MOVEA.L  SV.BTPNT(A6),A4
+                   MOVEA.L  A4,A5
+14FE L014FE        ADDQ.W   #8,A4
+                   CMPA.L   SV.BTTOP(A6),A4
+                   BLT.S    L0150A
+                   MOVEA.L  SV.BTBAS(A6),A4
+150A L0150A        MOVEQ    #15,D1
+                   AND.B    (A4),D1
+                   SUBQ.B   #1,D1
+                   BEQ.S    L01520
+                   SUBQ.B   #2,D1
+                   BEQ.S    L01520
+                   CMPA.L   A5,A4
+                   BNE.S    L014FE
+                   ADDQ.W   #4,A7
+                   BRA      MD_ERRNC
+
+   D6 contains drive number in bits 4 to 7 of the bottom byte.
+
+1520 L01520        MOVE.L   A4,SV.BTPNT(A6)
+                   MOVE.L   A4,FS.CBLOK(A0)
+                   MOVE.B   D6,(A4)
+                   ORI.B    #1,(A4)
+                   MOVE.L   D5,4(A4)
+                   RTS
+
+1534 L01534        JSR      L014F8(PC)
+                   SUBQ.L   #8,SV.BTPNT(A6)
+                   MOVE.L   A4,D0
+                   SUB.L    SV.BTBAS(A6),D0
+                   LSL.L    #6,D0
+                   MOVEA.L  D0,A4
+                   ADDA.L   A6,A4
+                   JSR      MD_SLAVE(PC)           ;do forced slaving
+                   LEA      PC_MCTRL,A3
+                   ANDI.B   #$DF,SV.PCINT(A6)
+                   MOVE.B   SV.PCINT(A6),1(A3)
+                   LSL.L    #8,D0
+                   CMP.B    SV.MDRUN(A6),D1
+                   BEQ.S    L0156C
+                   MOVEQ    #ERR.NC,D0             ;signal "not complete"
+                   BRA      L0167E
+
+156C L0156C        MOVEQ    #7,D0
+                   LEA      $58(A0),A5
+1572 L01572        CLR.L    (A5)+
+                   DBF      D0,L01572
+                   MOVE.L   FS.EBLOK(A0),D2
+                   TST.W    D2
+                   BNE.S    L01586
+                   SUBI.L   #$FE00,D2
+1586 L01586        MOVE.L   D2,FS.NBLOK(A0)
+                   SWAP     D2
+                   MOVE.W   D2,D0
+                   LSR.W    #3,D0
+                   LEA      $58(A0),A5
+                   BRA.S    L01598
+
+1596 L01596        ST       (A5)+
+1598 L01598        DBF      D0,L01596
+                   MOVE.W   #$FF01,D1
+                   MOVEQ    #7,D0
+                   AND.W    D2,D0
+                   ROL.W    D0,D1
+                   MOVE.B   D1,(A5)
+                   SUBA.W   #$40,A1
+                   MOVEM.L  A0-2/A4,-(A7)
+15B0 L015B0        ANDI.W   #$F8FF,SR
+                   ORI.W    #$0700,SR
+15B8 L015B8        MOVEA.L  (A7),A0
+                   LEA      $78(A0),A1
+                   JSR      MD_SECTR               ;read sector header
+
+   Return points for the three read sector header errors.
+
+                   BRA.S    L01630                 ;branch if bad header
+                   BRA.S    L015B0                 ;branch if bad medium
+
+                   MOVEM.L  (A7),A0-2/A4           ;branch if ok
+                   ADD.W    D7,D7
+                   BEQ      L01656
+                   MOVE.B   $28(A2,D7.W),D0
+                   CMP.B    $1F(A0),D0
+                   BNE.S    L015B0
+                   MOVEQ    #0,D4
+                   MOVE.B   $29(A2,D7.W),D4
+                   MOVE.L   D4,D7
+                   MOVEQ    #7,D5
+                   AND.W    D4,D5
+                   LSR.W    #3,D4
+                   BTST     D5,$58(A0,D4.W)
+                   BEQ.S    L015B0
+                   MOVEA.W  D4,A5
+                   MOVEA.L  A4,A1
+                   JSR      MD_READ                ;read a microdrive sector
+                   BRA.S    L015B8
+
+15FC L015FC        MOVEM.L  (A7),A0-2/A4
+                   BCLR     D5,$58(A0,A5.W)
+                   MOVE.L   #$80,D0
+                   MOVEA.L  A1,A5
+                   MOVE.L   D7,D1
+                   LSL.W    #8,D1
+                   ADD.L    D1,D1
+                   ADDA.L   D1,A5
+                   CMP.W    FS.NBLOK(A0),D7
+                   BNE.S    L01620
+                   MOVE.W   $22(A0),D0
+                   ROR.L    #2,D0
+1620 L01620        TST.W    D7
+                   BNE.S    L01634
+                   MOVEQ    #$40,D1
+                   ADDA.W   D1,A4
+                   ADDA.W   D1,A5
+                   SUBI.W   #$10,D0
+                   BRA.S    L01634
+
+1630 L01630        BRA.S    L01664
+
+1632 L01632        MOVE.L   (A4)+,(A5)+
+1634 L01634        DBF      D0,L01632
+                   CLR.W    D0
+                   ROL.L    #2,D0
+                   BRA.S    L01640
+
+163E L0163E        MOVE.B   (A4)+,(A5)+
+1640 L01640        DBF      D0,L0163E
+                   MOVEQ    #8,D0
+                   LEA      $58(A0),A5
+164A L0164A        TST.L    (A5)+
+                   BNE      L015B8
+                   SUBQ.W   #1,D0
+                   BGT.S    L0164A
+                   BRA.S    L01666
+
+1656 L01656        ADDQ.B   #1,$24(A2)
+                   CMPI.B   #8,$24(A2)
+                   BLT      L015B0
+1664 L01664        MOVEQ    #-$10,D0
+1666 L01666        MOVEM.L  (A7)+,A0-2/A4
+                   SF       $24(A2)
+                   MOVEQ    #0,D7
+                   MOVE.W   FS.EBLOK(A0),D7
+                   LSL.L    #8,D7
+                   ADD.L    D7,D7
+                   ADDA.L   D7,A1
+                   ADDA.W   $26(A0),A1
+167E L0167E        ORI.B    #$20,SV.PCINT(A6)
+                   ANDI.W   #$F8FF,SR
+                   RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=MD_OPEN         OPEN A MICRODRIVE CHANNEL  (TRAP #2 WITH D0 = $01)           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D1.L     job ID (-1 if current job)                          ³
+³                 D3.L     open type:-                                         ³
+³                                                                              ³
+³                          0 = old exclusive device                            ³
+³                          1 = old shared device                               ³
+³                          3 = new overwrite file                              ³
+³                          4 = open directory                                  ³
+³                          -ve delete                                          ³
+³                                                                              ³
+³                 A0.L     address of channel name                             ³
+³                                                                              ³
+³EXIT:            D1.L     job ID                                              ³
+³                 A0.L     new channel ID                                      ³
+³                 D2,D3,A1,A2 and A3 preserved                                 ³
+³                                                                              ³
+³ERRORS:          ERR.NJ   invalid job ID                                      ³
+³                 ERR.OM   out of memory                                       ³
+³                 ERR.NO   too many channels                                   ³
+³                 ERR.NF   device not found                                    ³
+³                 ERR.FE   file already exists                                 ³
+³                 ERR.IU   file or device in use                               ³
+³                 ERR.BN   bad device name                                     ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   TRAP handler alters registers so that A0 points at channel definition block,
+   A1 points at physical definition block for specified drive,A3 is assumed start
+   of linkage block and A6 points at system variables.
+
+168A MD_OPEN       MOVEA.L  A1,A2                  ;A2 points at physical definition block
+                   MOVEQ    #0,D1                  ;prepare D1
+                   MOVE.B   FS.DRIVN(A2),D1        ;get drive number
+                   MOVEQ    #0,D0                  ;prepare D0
+                   MOVE.B   FS.DRIVE(A0),D0        ;get drive ID
+                   LSL.B    #2,D0                  ;move into high nibble of low byte
+                   LEA      SV.MDDID - 2(A6),A4
+                   MOVE.B   D0,1(A4,D1.W)          ;set up drive ID
+                   CMP.B    (A4),D1                ;currently turning microdrive ?
+                   BEQ.S    L016C0                 ;jump forward if so
+                   TST.B    7(A4,D1.W)             ;any pending operations ?
+                   BNE.S    L016C0                 ;jump forward if so
+                   MOVE.B   #1,$23(A2)
+                   JSR      L0291A(PC)
+16B6 L016B6        TST.B    $23(A2)
+                   BGT.S    L016B6
+                   BMI      MD_ERRNF
+16C0 L016C0        LEA      FS.SPARE(A0),A4
+                   MOVEQ    #64,D2                 ;length of file header
+                   MOVE.L   D2,FS.EBLOK(A0)        ;set block number to zero and EOF to 64
+                   MOVEQ    #-1,D3
+                   BSR      L017A6
+                   MOVE.L   (A4),D4
+                   MOVE.L   D4,D0
+                   LSL.L    #7,D0
+                   LSR.W    #7,D0
+                   MOVE.L   D0,FS.EBLOK(A0)
+                   CMPI.B   #4,FS.ACCESS(A0)       ;open directory ?
+                   BEQ      MD_END                 ;exit if so
+                   LSR.L    #6,D4
+                   MOVEQ    #0,D5
+                   MOVEQ    #0,D6
+                   BRA.S    L01718
+
+16EE L016EE        BSR      L017A6
+                   TST.L    (A4)
+                   BEQ.S    L01712
+                   MOVE.L   A0,-(A7)
+                   MOVE.L   A6,-(A7)
+                   SUBA.L   A6,A6
+                   LEA      14(A4),A1
+                   LEA      FS.FNAME(A0),A0
+                   MOVEQ    #1,D0
+                   JSR      UT_CSTR(PC)            ;compare filenames
+                   MOVEA.L  (A7)+,A6
+                   MOVEA.L  (A7)+,A0
+                   BEQ.S    L0177C
+                   BRA.S    L01718
+
+1712 L01712        TST.W    D6
+                   BNE.S    L01718
+                   MOVE.W   D5,D6
+1718 L01718        ADDQ.W   #1,D5
+                   CMP.W    D4,D5
+                   BLT.S    L016EE
+                   MOVE.B   FS.ACCESS(A0),D0
+                   BLT.S    MD_END
+                   CMPI.B   #2,D0                  ;new exclusive device ?
+                   BLT.S    MD_ERRNF
+                   TST.W    D6
+                   BEQ.S    L0173C
+                   MOVE.L   D6,D0
+                   LSL.L    #6,D0
+                   LSL.L    #7,D0
+                   LSR.W    #7,D0
+                   MOVE.L   D0,FS.NBLOK(A0)
+                   MOVE.L   D6,D5
+
+   Now set up the medium name.
+
+173C L0173C        MOVE.L   D2,(A4)+               ;first set the random number prefix
+                   CLR.W    (A4)+                  ;and clear the remaining ten bytes
+                   CLR.L    (A4)+
+                   CLR.L    (A4)+
+                   MOVEQ    #9,D0                  ;length of medium name - 1
+                   LEA      FS.FNAME(A0),A5
+174A L0174A        MOVE.L   (A5)+,(A4)+            ;copy name to header
+                   DBF      D0,L0174A
+                   LEA      FS.SPARE(A0),A4
+                   BSR.S    L017AA
+                   TST.W    D6
+                   BNE.S    L0176A
+                   ADDQ.W   #1,D4
+                   LSL.L    #6,D4
+                   MOVE.L   D4,(A4)
+                   CLR.L    FS.NBLOK(A0)
+                   MOVEQ    #4,D2
+                   BSR.S    L017AA
+                   MOVEQ    #$40,D2
+176A L0176A        MOVE.L   D2,(A4)
+                   CLR.L    FS.NBLOK(A0)
+                   CLR.L    FS.EBLOK(A0)
+                   MOVE.W   D5,FS.FILNR(A0)
+                   BSR.S    L017AA
+                   BRA.S    MD_END
+
+177C L0177C        MOVE.B   FS.ACCESS(A0),D0
+                   BLT.S    L017B8
+                   CMPI.B   #2,D0
+                   BGE.S    MD_ERREX
+                   MOVE.L   (A4),D0
+                   LSL.L    #7,D0
+                   LSR.W    #7,D0
+                   MOVE.L   D0,FS.EBLOK(A0)
+                   MOVE.W   D5,FS.FILNR(A0)
+                   MOVE.L   D2,FS.NBLOK(A0)
+179A MD_END        MOVEQ    #0,D0
+                   BRA.S    L017A4
+
+179E MD_ERRNF      MOVEQ    #ERR.NF,D0             ;signal "not found"
+                   BRA.S    L017A4
+
+17A2 MD_ERREX      MOVEQ    #ERR.EX,D0             ;signal "already exists"
+17A4 L017A4        RTS
+
+17A6 L017A6        MOVEQ    #IO.FSTRG,D0           ;signal "fetch a string of bytes"
+                   BRA.S    L017AC
+
+17AA L017AA        MOVEQ    #IO.SSTRG,D0           ;signal "send a string of bytes"
+17AC L017AC        MOVEA.L  A4,A1
+                   JSR      REPEATIO(PC)           ;repeat I/O operation until finished
+                   BEQ.S    L017A4                 ;exit if number errors otherwise ignore
+                   ADDQ.W   #4,A7                  ;saved error long word
+                   RTS
+
+17B8 L017B8        MOVEQ    #-64,D1                ;length of file header
+                   JSR      FILE_REL(PC)           ;position relative file pointer
+                   CLR.L    (A4)
+                   CLR.W    14(A4)
+                   BSR.S    L017AA
+                   MOVE.W   #$1FE,D0
+                   LEA      $28(A2,D0.W),A4
+17CE L017CE        CMP.B    (A4),D5
+                   BNE.S    L017DA
+                   MOVE.W   #$FD00,(A4)
+                   CLR.W    512(A4)
+17DA L017DA        SUBQ.W   #2,A4
+                   SUBQ.W   #2,D0
+                   BNE.S    L017CE
+                   MOVE.B   FS.DRIVE(A0),D1
+                   LSL.B    #4,D1
+                   ADDQ.W   #1,D1
+                   MOVEA.L  SV.BTBAS(A6),A4
+17EC L017EC        MOVEQ    #-15,D0
+                   AND.B    (A4),D0
+                   CMP.B    D0,D1
+                   BNE.S    L017FE
+                   CMP.W    4(A4),D5
+                   BNE.S    L017FE
+                   MOVE.B   #1,(A4)
+17FE L017FE        ADDQ.W   #8,A4
+                   CMPA.L   SV.BTTOP(A6),A4
+                   BLT.S    L017EC
+                   MOVE.W   #-1,MD.PENDG(A2)
+                   JSR      MD_SLAVE(PC)           ;do forced slaving
+                   BRA.S    MD_END
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=MD_CLOSE        CLOSE A MICRODRIVE CHANNEL (TRAP #2 WITH D0 = $02)           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A0.L     channel ID                                          ³
+³                                                                              ³
+³EXIT:            A0       corrupted                                           ³
+³                 D1,D2,D3,A1,A2 and A3 preserved                              ³
+³                                                                              ³
+³ERRORS:          ERR.NC   channel not open                                    ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   TRAP handler alters registers so that A6 now points at system variables and
+   A0 points at channel definition block.
+
+1812 MD_CLOSE      TST.B    FS.UPDT(A0)            ;file updated ?
+                   BEQ.S    L0184A                 ;jump forward if not
+                   MOVE.L   FS.EBLOK(A0),D0        ;get block number containing EOF
+                   LSL.W    #7,D0                  ;form overall file pointer
+                   LSR.L    #7,D0
+                   LEA      FS.SPARE(A0),A1
+                   MOVE.L   D0,(A1)
+                   CLR.L    FS.NBLOK(A0)           ;signal "block 0 contains next byte"
+                   BSR.S    L01874
+                   MOVEQ    #0,D0                  ;prepare D0
+                   MOVE.W   FS.FILNR(A0),D0        ;get file number
+                   LSL.L    #6,D0
+                   LSL.L    #7,D0
+                   LSR.W    #7,D0
+                   MOVE.L   D0,FS.NBLOK(A0)
+                   CLR.W    FS.FILNR(A0)
+                   ST       FS.EBLOK + 1(A0)
+                   BSR.S    L01874
+                   JSR      MD_SLAVE(PC)           ;do forced slaving
+184A L0184A        MOVEQ    #0,D0
+                   MOVE.B   FS.DRIVE(A0),D0
+                   LSL.B    #2,D0
+                   LEA      SV.FSDEF(A6),A2
+                   MOVEA.L  0(A2,D0.W),A2
+                   SUBQ.B   #1,FS.FILES(A2)
+                   LEA      SV.STACB(A6),A1
+                   LEA      FS.NEXT(A0),A0         ;A0 points at next channel for file syst
+                   JSR      UT_UNLNK(PC)           ;unlink this channel from list
+                   LEA      -$18(A0),A0
+                   JSR      MM_RECHP(PC)           ;reclaim the channel definition block
+                   RTS
+
+1874 L01874        MOVEQ    #IO.SSTRG,D0           ;signal "send a string of bytes"
+                   MOVEQ    #4,D2
+                   JSR      REPEATIO(PC)           ;repeat I/O operation until finished
+                   SUBA.W   D1,A1
+                   RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=FILE_ABS        POSITION FILE POINTER USING ABSOLUTE OFFSET                  ³
+³=FILE_REL        POSITION FILE POINTER USING RELATIVE OFFSET                  ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D1.L     required offset                                     ³
+³                 A0.L     channel definition block                            ³
+³                 A6.L     system variables                                    ³
+³                                                                              ³
+³EXIT:            A1.L     updated file pointer                                ³
+³                                                                              ³
+³ERRORS:          none                                                         ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+1880 FILE_ABS      MOVEQ    #64,D2                 ;length of file header
+                   ADD.L    D2,D1                  ;add to file pointer
+                   BRA.S    L01892                 ;position the pointer
+
+1886 FILE_REL      MOVEQ    #64,D2                 ;length of file header
+
+   get block number containing next byte,in high word and byte no in low word.
+
+1888 L01888        MOVE.L   FS.NBLOK(A0),D0        ;get block and byte number
+188C L0188C        LSL.W    #7,D0                  ;move byte number to bits 7 to 15 of D0
+                   LSR.L    #7,D0                  ;form byte number within whole file
+                   ADD.L    D0,D1                  ;add requested signed position
+1892 L01892        MOVE.L   D1,D0
+                   LSL.L    #7,D0                  ;move block number and byte no back into
+                   LSR.W    #7,D0                  ;there respective positions
+                   CMP.L    FS.EBLOK(A0),D0        ;past end of file ?
+                   BLE.S    L018A6                 ;jump forward if not
+                   MOVE.L   FS.EBLOK(A0),D0        ;otherwise recalculate byte number of end
+                   MOVEQ    #0,D1                  ;of file
+                   BRA.S    L0188C
+
+18A6 L018A6        SUB.L    D2,D1                  ;subtract header length
+                   BGE.S    L018AE                 ;jump forward if past start of file
+                   MOVE.L   D2,D1                  ;otherwise set to start of file
+                   BRA.S    L01892
+
+18AE L018AE        MOVE.L   D0,FS.NBLOK(A0)        ;update block number of next byte
+                   RTS
+

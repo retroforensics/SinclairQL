@@ -1,0 +1,14 @@
+        m              m+1              m+2             m+3             m+4             m+5
+ÚÄÂÄÂÄÂÄÂÄÂÄÂÄÂÄÅÄÂÄÂÄÂÄÂÄÂÄÂÄÂÄ¿ÚÄÂÄÂÄÂÄÂÄÂÄÂÄÂÄÅÄÂÄÂÄÂÄÂÄÂÄÂÄÂÄÅÄÂÄÂÄÂÄÂÄÂÄÂÄÂÄÅÄÂÄÂÄÂÄÂÄÂÄÂÄÂÄ¿
+³0³0³0³0³s³ ³ ³ ³ ³ ³ ³ ³ ³ ³ ³ ³³s³ ³ ³ ³ ³ ³ ³ ³ ³ ³ ³ ³ ³ ³ ³ ³ ³ ³ ³ ³ ³ ³ ³ ³ ³ ³ ³ ³ ³ ³ ³ ³
+ÀÄÁÄÁÄÁÄÁÄÁÄÁÄÁÄÅÄÁÄÁÄÁÄÁÄÁÄÁÄÁÄÙÀÄÁÄÁÄÁÄÁÄÁÄÁÄÁÄÅÄÁÄÁÄÁÄÁÄÁÄÁÄÁÄÅÄÁÄÁÄÁÄÁÄÁÄÁÄÁÄÅÄÁÄÁÄÁÄÁÄÁÄÁÄÁÄÙ
+
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÂÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÂÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+         Exponent + $81F                                     Mantissa
+
+The exponent is the 12 bit two's complement power of 2 of the number ,the mantissa is the two's
+complement fractional part of the number which is then normalised by being shifting left until
+the sign bit and the next most significant bit are different. The origonal mantissa part of the
+number can always be recreated using this representation by shifting the normalised mantissa
+right preserving the sign bit. This explains why the floating point representation of +1 is
+$0800400000 and the floating point representation of -1 is $0800800000 which looks bigger.

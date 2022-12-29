@@ -1,0 +1,2411 @@
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=                                                                             ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³SYNTAX:                                                                       ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:                                                                        ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+6DA2 L06DA2        MOVE.B   1(A6,A3.L),D5
+                   LSR.B    #4,D5
+                   ANDI.B   #%00001111,1(A6,A3.L)
+                   ADDQ.W   #8,A3
+                   RTS
+
+2.22 SuperBASIC procedures continued.
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=BP_DLINE        REMOVE SUPERBASIC PROGRAM LINES                              ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³SYNTAX:          line_number := numeric_expression {10 .. 32768}              ³
+³                 range := | line_number TO line_number                        ³
+³                          | line_number TO                                    ³
+³                          | TO line_number                                    ³
+³                          | line_number                                       ³
+³                                                                              ³
+³                 DLINE range *[, range]*                                      ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     top of arithmetic stack                             ³
+³                 A3.L     first parameter in name table (relative)            ³
+³                 A5.L     last parameter in name table (relative)             ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+6DB2 BP_DLINE      CMPA.L   A5,A3
+                   BGE      L06E5E
+                   ST       D7
+                   JSR      L076FE(PC)
+                   BEQ.S    L06DC6
+                   ST       BV.UNDO(A6)
+6DC4 L06DC4        RTS
+
+6DC6 L06DC6        BSR.S    L06DCA
+6DC8 L06DC8        BRA.S    L06DE2
+
+6DCA L06DCA        MOVEQ    #2,D1
+6DCC L06DCC        JMP      L06042(PC)
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=BP_LIST         LIST PART OF PROGRAM ON CHANNEL                              ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³SYNTAX:          line :=  | line_number TO line_number                        ³
+³                          | line_number TO                                    ³
+³                          | TO line_number                                    ³
+³                          | line_number                                       ³
+³                                                                              ³
+³                 LIST [channel,] line *[, line]*                              ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     top of arithmetic stack                             ³
+³                 A3.L     first parameter in name table (relative)            ³
+³                 A5.L     last parameter in name table (relative)             ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+6DD0 BP_LIST       BSR.S    L06DCA
+                   BLT.S    L06DC4
+                   ST       BV.PRINT(A6)
+                   CLR.W    BV.LSFIL(A6)
+                   CMPA.L   A5,A3
+                   BGE      L06E62
+6DE2 L06DE2        MOVE.L   A5,-(A7)
+6DE4 L06DE4        CMPA.L   (A7),A3
+                   BGE.S    L06E2E
+                   BSR.S    L06DA2
+                   BNE.S    L06DF0
+                   MOVEQ    #0,D4
+                   BRA.S    L06DF6
+
+6DF0 L06DF0        BSR.S    L06E40
+6DF2 L06DF2        BNE.S    L06E2A
+                   MOVE.W   D1,D4
+6DF6 L06DF6        SUBQ.B   #5,D5
+                   BEQ.S    L06E06
+                   ADDQ.B   #5,D5
+                   MOVE.W   D4,D6
+                   BNE.S    L06E1E
+                   TST.B    D7
+                   BNE.S    L06DE4
+                   BRA.S    L06E0E
+
+6E06 L06E06        CMPA.L   (A7),A3
+6E08 L06E08        BGE.S    L06E0E
+                   BSR.S    L06DA2
+                   BNE.S    L06E14
+6E0E L06E0E        MOVE.W   #$7FFF,D6
+                   BRA.S    L06E1E
+
+6E14 L06E14        BSR.S    L06E40
+6E16 L06E16        BNE.S    L06E2A
+                   MOVE.W   D1,D6
+                   CMP.W    D4,D6
+                   BLT.S    L06E2A
+6E1E L06E1E        BSR.S    SB_CCBTA               ;convert pre-compiled basic to ascii
+                   CMPI.B   #1,D5
+                   BEQ.S    L06DE4
+                   TST.B    D5
+                   BEQ.S    L06E2E
+6E2A L06E2A        MOVEQ    #ERR.BP,D0             ;signal "bad parameter"
+                   BRA.S    L06E3C
+
+6E2E L06E2E        TST.B    D7
+6E30 L06E30        BEQ.S    L06E3A
+                   MOVEQ    #0,D2
+                   MOVEQ    #0,D5
+                   JSR      L087D2(PC)
+6E3A L06E3A        MOVEQ    #0,D0
+6E3C L06E3C        MOVEA.L  (A7)+,A5
+                   RTS
+
+6E40 L06E40        MOVEA.L  A3,A5
+6E42 L06E42        JSR      L0593E(PC)
+                   BNE.S    L06E60
+                   MOVEQ    #3,D0
+                   JSR      L0540C(PC)
+                   BNE.S    L06E60
+                   ADDQ.L   #2,BV.RIP(A6)
+                   MOVE.W   TOS(A6,A1.L),D1
+                   BGT.S    L06E5E
+                   MOVEQ    #ERR.BP,D0             ;signal "bad parameter"
+                   RTS
+
+6E5E L06E5E        MOVEQ    #0,D0                  ;signal "no errors"
+6E60 L06E60        RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=                                                                             ³
+³=                                                                             ³
+³=SB_CCBTA        CONVERT PRE-COMPILED BASIC TO ASCII                          ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³JOB:                                                                          ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:                                                                        ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+6E62 L06E62        MOVEQ    #0,D4
+6E64 L06E64        MOVE.W   #$7FFF,D6
+6E68 SB_CCBTA      MOVEA.L  BV.PFBAS(A6),A4        ;point at start of basic program
+                   CLR.L    BV.LINUM(A6)           ;convert current line number and length to zero
+                   TST.W    D4                     ;how was the routine invoked ?
+                   BEQ.S    L06E80
+                   MOVE.L   A0,-(A7)
+                   JSR      L096B0(PC)
+                   MOVEA.L  (A7)+,A0
+                   MOVE.W   D2,BV.LINUM(A6)
+6E80 L06E80        TST.B    D7
+                   BNE.S    L06E8C
+                   LEA      L0833C(PC),A2          ;point at first syntax table for commands
+                   JMP      L088A2(PC)
+
+6E8C L06E8C        CMP.W    4(A6,A4.L),D6
+6E90 L06E90        BLT.S    L06E5E
+                   MOVE.L   A4,-(A7)
+                   MOVE.W   BV.LENGTH(A6),-(A7)
+6E98 L06E98        CMPA.L   BV.PFP(A6),A4
+                   BGE.S    L06ED8
+                   MOVE.W   0(A6,A4.L),D1
+                   ADDQ.W   #2,A4
+                   ADD.W    D1,BV.LENGTH(A6)
+                   ADDA.W   BV.LENGTH(A6),A4
+                   CMP.W    4(A6,A4.L),D6
+                   BGE.S    L06E98
+                   MOVE.W   0(A6,A4.L),D1
+                   ADD.W    BV.LENGTH(A6),D1
+                   SUB.W    (A7)+,D1
+                   MOVE.W   D1,0(A6,A4.L)
+                   MOVEA.L  (A7)+,A2
+6EC2 L06EC2        MOVE.W   0(A6,A4.L),0(A6,A2.L)
+                   ADDQ.W   #2,A4
+                   ADDQ.W   #2,A2
+                   CMPA.L   BV.PFP(A6),A4
+                   BLT.S    L06EC2
+                   MOVE.L   A2,BV.PFP(A6)
+6ED6 L06ED6        BRA.S    L06E5E
+
+6ED8 L06ED8        ADDQ.W   #2,A7
+6EDA L06EDA        MOVE.L   (A7)+,BV.PFP(A6)
+                   BRA.S    L06ED6
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=BP_MODE         SET RESOLUTION OF SCREEN                                     ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³SYNTAX:          mode := numeric_expression {4 .. 512}                        ³
+³                                                                              ³
+³                 MODE mode                                                    ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     top of arithmetic stack                             ³
+³                 A3.L     first parameter in name table (relative)            ³
+³                 A5.L     last parameter in name table (relative)             ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+6EE0 BP_MODE       JSR      L05C28(PC)
+                   BNE.S    L06EFA
+                   ADDQ.L   #2,BV.RIP(A6)
+                   MOVE.W   #$108,D1               ;signal "set mode 8"
+                   AND.W    D1,TOS(A6,A1.L)
+                   BNE.S    L06EF6
+                   MOVEQ    #0,D1                  ;signal "set mode 4"
+6EF6 L06EF6        MOVEQ    #MT.DMODE,D0           ;TRAP to set or read display mode
+                   TRAP     #1
+6EFA L06EFA        RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=BP_NET          SET NETWORK STATION NUMBER                                   ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³SYNTAX:          station := numeric_expression {0 .. 127}                     ³
+³                                                                              ³
+³                 NET station                                                  ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     top of arithmetic stack                             ³
+³                 A3.L     first parameter in name table (relative)            ³
+³                 A5.L     last parameter in name table (relative)             ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+6EFC BP_NET        JSR      L05C28(PC)
+                   BNE.S    L06F12
+                   ADDQ.L   #2,BV.RIP(A6)
+                   MOVE.B   1(A6,A1.L),D1
+                   BLE.S    L06F14
+                   MOVE.B   D1,SV_NETNR
+6F12 L06F12        RTS
+
+6F14 L06F14        MOVEQ    #ERR.BP,D0             ;signal "bad parameter"
+6F16 L06F16        RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=BP_INK          SET CURRENT INK COLOUR                                       ³
+³=BP_STRIP        SET CURRENT STRIP COLOUR                                     ³
+³=BP_PAPER        SET CURRENT PAPER COLOUR                                     ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³SYNTAX:          colour := numeric_expression {0 .. 7}                        ³
+³                                                                              ³
+³                 INK [channel,] colour                                        ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     top of arithmetic stack                             ³
+³                 A3.L     first parameter in name table (relative)            ³
+³                 A5.L     last parameter in name table (relative)             ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+6F18 BP_INK        MOVEQ    #$29,D4
+                   BRA.S    L06F22
+
+6F1C BP_STRIP      MOVEQ    #$28,D4
+                   BRA.S    L06F22
+
+6F20 BP_PAPER      MOVEQ    #$27,D4
+6F22 L06F22        JSR      L078CA(PC)
+                   BNE.S    L06F3C
+                   BSR      L07866
+                   BNE.S    L06F3C
+                   CMPI.B   #$27,D4
+                   BNE.S    L06F38
+                   BSR.S    L06F38
+                   MOVEQ    #$28,D4
+6F38 L06F38        JMP      L07856(PC)
+
+6F3C L06F3C        RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=BP_CLS          CLEAR PART OR ALL OF WINDOW                                  ³
+³=BP_PAN          PAN PART OR ALL OF SCREEN                                    ³
+³=BP_SCROL        SCROLL PART OR ALL OF SCREEN                                 ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³SYNTAX:          distance := numeric_expression                               ³
+³                 part := numeric_expression                                   ³
+³                                                                              ³
+³                 CLS [channel,] [part]                                        ³
+³                 PAN [channel,] distance [, part]                             ³
+³                 SCROLL [channel,] distance [, part]                          ³
+³                                                                              ³
+³                 part:                                                        ³
+³                                                                              ³
+³                 0 = whole screen (default if number parameters)              ³
+³                 1 = top excluding the cursor line                            ³
+³                 2 = bottom excluding the cursor line                         ³
+³                 3 = whole of the cursor line                                 ³
+³                 4 = right hand end of cursor line including the cursor       ³
+³                     position                                                 ³
+³                                                                              ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     top of arithmetic stack                             ³
+³                 A3.L     first parameter in name table (relative)            ³
+³                 A5.L     last parameter in name table (relative)             ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+6F3E BP_CLS        MOVEQ    #32,D4
+                   BRA.S    L06F48
+
+6F42 BP_PAN        MOVEQ    #$1B,D4
+                   BRA.S    L06F48
+
+6F46 BP_SCROL      MOVEQ    #$18,D4
+6F48 L06F48        JSR      L078CA(PC)
+                   BNE.S    L06F90
+                   MOVE.W   TOS(A6,A1.L),D1
+                   CMPI.B   #$20,D4
+                   BEQ.S    L06F5C
+                   SUBQ.L   #2,A1
+                   SUBQ.L   #1,D3
+6F5C L06F5C        SUBQ.W   #1,D3
+                   BHI.S    L06F8E
+                   BLT.S    L06F7A
+                   MOVE.W   D4,D3
+                   SUBI.W   #$17,D3
+                   LSR.W    #2,D3
+                   LEA      L06F92(PC),A2
+                   BTST     D1,0(A2,D3.W)
+                   BEQ.S    L06F8E
+                   ADD.L    D1,D4
+                   MOVE.W   TOS(A6,A1.L),D1
+6F7A L06F7A        JSR      L0888E(PC)
+                   BNE.S    L06F8A
+                   MOVE.L   BV.LNBAS(A6),BV.LNP(A6)
+                   CLR.W    BV.LSBAS(A6)
+6F8A L06F8A        JMP      L07856(PC)
+
+6F8E L06F8E        MOVEQ    #ERR.BP,D0             ;signal "bad parameter"
+6F90 L06F90        RTS
+
+6F92 L06F92        BTST D3,(A1)+
+                   MOVE.B D0,-(A7)
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=BP_PAUSE        DELAY EXECUTING A SUPERBASIC PROGRAM                         ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³SYNTAX:          delay := numeric_expression                                  ³
+³                                                                              ³
+³                 PAUSE [delay]                                                ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     top of arithmetic stack                             ³
+³                 A3.L     first parameter in name table (relative)            ³
+³                 A5.L     last parameter in name table (relative)             ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:          ERR.BP   BAD PARAMETER                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+6F96 BP_PAUSE      JSR      CA_GTINT(PC)           ;get integers,D3 = number found
+                   SUBQ.W   #1,D3                  ;only one parameter allowed so
+                   BLT.S    L06FA8                 ;jump forward if correct number and
+                   BGT.S    L06FB6                 ;exit if too many
+                   ADDQ.L   #2,BV.RIP(A6)
+                   MOVE.W   TOS(A6,A1.L),D3
+6FA8 L06FA8        MOVEQ    #0,D1
+                   JSR      L06078(PC)
+                   MOVEQ    #IO.FBYTE,D0           ;TRAP to fetch a byte
+                   TRAP     #3
+                   MOVEQ    #0,D0                  ;signal "no errors"
+                   RTS
+
+6FB6 L06FB6        MOVEQ    #ERR.BP,D0             ;signal "bad parameter"
+6FB8 L06FB8        RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=BP_POKE         PLACE BYTE IN MEMORY                                         ³
+³=BP_POKEW        PLACE WORD IN MEMORY                                         ³
+³=BP_POKEL        PLACE LONG WORD IN MEMORY                                    ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³SYNTAX:          address := numeric_expression                                ³
+³                 data := numeric_expression                                   ³
+³                                                                              ³
+³                 POKE   address, data                                         ³
+³                 POKE_W address, data                                         ³
+³                 POKE_L address, data                                         ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     top of arithmetic stack                             ³
+³                 A3.L     first parameter in name table (relative)            ³
+³                 A5.L     last parameter in name table (relative)             ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:          ERR.BP   INVALID NUMBER OF PARAMETERS                        ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+6FBA BP_POKE       MOVEQ    #0,D4
+                   BSR.S    L06FD0
+                   MOVE.B   D1,(A4)
+                   RTS
+
+6FC2 BP_POKEW      BSR.S    L06FCE
+                   MOVE.W   D1,(A4)
+                   RTS
+
+6FC8 BP_POKEL      BSR.S    L06FCE
+                   MOVE.L   D1,(A4)
+                   RTS
+
+6FCE L06FCE        MOVEQ    #1,D4
+6FD0 L06FD0        JSR      CA_GTLIN(PC)           ;get long integers,D3 = number found
+6FD4 L06FD4        BNE.S    L06FF2
+                   SUBQ.W   #2,D3
+                   BNE.S    L06FEE                 ;exit if more then two parameters
+                   ADDQ.L   #8,BV.RIP(A6)
+                   MOVEA.L  TOS(A6,A1.L),A4
+                   MOVE.L   4(A6,A1.L),D1
+                   MOVE.L   A4,D0
+                   AND.L    D4,D0
+                   BNE.S    L06FEE
+                   RTS
+
+6FEE L06FEE        ADDQ.W   #4,A7
+6FF0 L06FF0        MOVEQ    #ERR.BP,D0             ;signal "bad parameter"
+6FF2 L06FF2        RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=BP_INPUT        READ CHARACTER(S) FROM A CHANNEL                             ³
+³=BP_PRINT        PRINT CHARACTER(S) TO A CHANNEL                              ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³SYNTAX:          separator:=       |!                                         ³
+³                                   |,                                         ³
+³                                   |\                                         ³
+³                                   |;                                         ³
+³                                   | TO numeric_expression                    ³
+³                                                                              ³
+³                 item :=  |expression                                         ³
+³                          |channel                                            ³
+³                          |separator                                          ³
+³                                                                              ³
+³                 prompt := [channel,] expression seperator                    ³
+³                                                                              ³
+³                 INPUT [prompt] [channel] variable *[, variable]*             ³
+³                 PRINT *[item]*                                               ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     top of arithmetic stack                             ³
+³                 A3.L     first parameter in name table (relative)            ³
+³                 A5.L     last parameter in name table (relative)             ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+6FF4 BP_INPUT      ST       D7
+6FF6 BP_PRINT      JSR      CA_RERIS(PC)           ;reserve space on  arithmetic stack
+                   MOVEQ    #0,D4
+                   JSR      L06040(PC)
+                   BNE      L07198
+                   MOVE.L   A5,-(A7)
+                   MOVEA.L  A2,A5
+                   MOVEQ    #0,D5
+                   TST.B    D7
+                   BEQ.S    L0701E
+                   MOVEQ    #11,D0
+                   MOVEA.L  (A6),A1
+                   BSR      L072B6
+                   CMPI.W   #$FFF1,D0
+                   BNE.S    L0701E
+                   MOVEQ    #1,D7
+701E L0701E        CMPA.L   (A7),A3
+                   BGE      L07188
+                   MOVE.B   1(A6,A3.L),D0
+                   MOVE.B   D0,D5
+                   LSR.B    #4,D5
+                   ANDI.B   #%00001111,D0
+                   BNE.S    L07040
+                   TST.B    0(A6,A3.L)
+                   BNE.S    L07040
+                   BSR      L072A2
+                   BRA      L0717C
+
+7040 L07040        TST.W    2(A6,A3.L)
+7044 L07044        SGE      D1
+                   AND.B    D7,D1
+                   BEQ.S    L0705E
+                   MOVE.W   D0,-(A7)
+                   BSR      L072A2
+                   MOVE.W   (A7)+,D0
+                   JSR      L0730C(PC)
+                   BNE      L0719A
+                   BRA      L0717C
+
+705E L0705E        TST.B    D7
+7060 L07060        BGT      L07182
+                   MOVEA.L  BV.VVBAS(A6),A0
+                   MOVE.L   4(A6,A3.L),D1
+                   BLT      L07172
+                   ADDA.L   D1,A0
+                   CMPI.B   #3,0(A6,A3.L)
+                   BNE      L0716E
+                   TST.B    D5
+                   BEQ.S    L0708A
+                   CMPI.B   #5,D5
+                   BNE.S    L0708C
+                   SWAP     D5
+                   BRA.S    L0708C
+
+708A L0708A        MOVEQ    #3,D5
+708C L0708C        MOVE.B   D0,-(A7)
+708E L0708E        MOVEA.L  A0,A2
+                   BSR      L07164
+                   SUBA.L   BV.VVBAS(A6),A2
+                   SUBA.L   BV.CHBAS(A6),A5
+                   MOVEM.L  A2-3/A5,-(A7)
+                   JSR      $00004EF0(PC)
+                   MOVEM.L  (A7)+,A2-3/A5
+                   ADDA.L   BV.CHBAS(A6),A5
+                   ADDA.L   BV.VVBAS(A6),A2
+                   MOVEA.L  A0,A4
+70B2 L070B2        SUBQ.W   #1,D1
+                   LEA      0(A4,D1.W),A1
+                   SF       TOS(A6,A1.L)
+                   BNE.S    L070B2
+                   MOVE.W   4(A6,A2.L),D1
+                   MOVE.B   (A7),D0
+                   SUBQ.B   #2,D0
+                   BLT.S    L070D2
+                   BEQ.S    L070CE
+                   MOVEQ    #2,D0
+                   BRA.S    L070D6
+
+70CE L070CE        MOVEQ    #6,D0
+70D0 L070D0        BRA.S    L070D6
+
+70D2 L070D2        SUBQ.W   #1,D1
+70D4 L070D4        MOVEQ    #1,D0
+70D6 L070D6        MOVE.W   D0,0(A6,A4.L)
+                   LSL.W    #1,D1
+                   MOVE.W   D1,2(A6,A4.L)
+70E0 L070E0        MOVEA.L  BV.VVBAS(A6),A0
+                   ADDA.L   0(A6,A2.L),A0
+                   MOVE.W   4(A6,A2.L),D0
+                   LSL.W    #2,D0
+                   LEA      2(A2,D0.W),A1
+                   MOVE.W   TOS(A6,A1.L),D3
+                   LSR.W    #1,D0
+70F8 L070F8        LEA      2(A4,D0.W),A1
+                   MOVE.W   TOS(A6,A1.L),D1
+                   LSL.W    #1,D0
+                   LEA      4(A2,D0.W),A1
+                   LSR.W    #1,D0
+                   MULU     TOS(A6,A1.L),D1
+                   MULU     0(A6,A4.L),D1
+                   ADDA.L   D1,A0
+                   SUBQ.W   #2,D0
+                   BNE.S    L070F8
+                   MOVE.B   (A7),D0
+                   BSR      L071A6
+                   BNE.S    L07148
+                   MOVE.W   2(A6,A4.L),D0
+                   BEQ.S    L07148
+7124 L07124        LSL.W    #1,D0
+                   LEA      2(A2,D0.W),A1
+                   MOVE.W   TOS(A6,A1.L),D1
+                   LSR.W    #1,D0
+                   LEA      2(A4,D0.W),A1
+                   CMP.W    TOS(A6,A1.L),D1
+                   BEQ.S    L07140
+                   ADDQ.W   #1,TOS(A6,A1.L)
+                   BRA.S    L070E0
+
+7140 L07140        CLR.W    TOS(A6,A1.L)
+7144 L07144        SUBQ.W   #2,D0
+                   BNE.S    L07124
+7148 L07148        BSR.S    L07164
+                   MOVEA.L  A4,A0
+                   MOVE.L   D0,-(A7)
+                   MOVE.L   A3,-(A7)
+                   JSR      L050E2(PC)
+                   MOVEA.L  (A7)+,A3
+                   MOVE.L   (A7)+,D0
+                   ADDQ.W   #2,A7
+                   BNE.S    L07196
+                   TST.B    D5
+                   BNE.S    L07182
+                   SWAP     D5
+                   BRA.S    L0717C
+
+7164 L07164        MOVEQ    #2,D1
+7166 L07166        ADD.W    4(A6,A2.L),D1
+                   LSL.W    #1,D1
+                   RTS
+
+716E L0716E        BSR.S    L071A6
+7170 L07170        BRA.S    L07180
+
+7172 L07172        BSR      L072A2
+7176 L07176        MOVEQ    #$2A,D1
+                   BSR      L072A8
+717C L0717C        BSR      L07228
+7180 L07180        BNE.S    L07196
+7182 L07182        ADDQ.W   #8,A3
+                   BRA      L0701E
+
+7188 L07188        TST.B    D5
+718A L0718A        BNE.S    L07194
+                   TST.B    D7
+                   BGT.S    L07194
+                   BSR      L0727C
+7194 L07194        MOVEQ    #0,D0
+7196 L07196        MOVEA.L  (A7)+,A5
+7198 L07198        RTS
+
+719A L0719A        MOVE.L   D0,-(A7)
+719C L0719C        MOVEQ    #15,D0
+                   BSR      L072B8
+                   MOVE.L   (A7)+,D0
+                   BRA.S    L07196
+
+71A6 L071A6        MOVEA.L  BV.RIP(A6),A1
+71AA L071AA        SUBQ.W   #6,A1
+                   TST.B    D0
+                   BEQ.S    L071C0
+                   SUBQ.B   #2,D0
+                   BGT.S    L071C6
+                   BEQ.S    L071D6
+                   MOVE.W   0(A6,A0.L),D2
+                   MOVEA.L  A0,A1
+                   ADDQ.W   #2,A1
+                   BRA.S    L071F2
+
+71C0 L071C0        MOVEA.L  A0,A1
+71C2 L071C2        MOVE.W   D3,D2
+                   BRA.S    L071F2
+
+71C6 L071C6        MOVE.W   0(A6,A0.L),TOS(A6,A1.L)
+71CC L071CC        MOVEA.L  (A6),A0
+                   ADDQ.W   #1,A0
+                   JSR      CN_ITOD(PC)            ;convert integer to decimal ascii
+                   BRA.S    L071EA
+
+71D6 L071D6        MOVE.L   2(A6,A0.L),2(A6,A1.L)
+71DC L071DC        MOVE.W   0(A6,A0.L),TOS(A6,A1.L)
+                   MOVEA.L  (A6),A0
+                   ADDQ.W   #1,A0
+                   JSR      CN_FTOD(PC)            ;convert floating point to ascii
+71EA L071EA        MOVEA.L  (A6),A1
+                   ADDQ.W   #1,A1
+                   MOVE.L   A0,D2
+                   SUB.L    A1,D2
+71F2 L071F2        TST.B    D4
+                   BEQ.S    L0721A
+                   SWAP     D4
+                   ADDQ.W   #1,D2
+                   SUBQ.W   #1,A1
+                   MOVE.B   TOS(A6,A1.L),-(A7)
+                   SUB.W    D2,D4
+                   BLT.S    L0720C
+                   MOVE.B   #$20,TOS(A6,A1.L)
+                   BRA.S    L07218
+
+720C L0720C        MOVE.B   #10,TOS(A6,A1.L)
+7212 L07212        MOVE.W   #$FFFF,32(A6,A5.L)
+7218 L07218        SWAP     D4
+721A L0721A        BSR      L072B0
+                   TST.B    D4
+                   BEQ.S    L07228
+                   SUBA.W   D2,A1
+                   MOVE.B   (A7)+,TOS(A6,A1.L)
+7228 L07228        TAS      BV.BRK(A6)
+                   BNE.S    L07230
+                   MOVEQ    #ERR.NC,D0             ;signal "not complete"
+7230 L07230        TST.L    D0
+                   BNE.S    L072A0
+                   TST.B    D7
+                   BGT.S    L0729E
+                   SF       D4
+                   CMPI.B   #1,D5
+                   BEQ.S    L07286
+                   CMPI.B   #3,D5
+                   BEQ.S    L0727C
+                   CMPI.B   #4,D5
+                   BEQ.S    L0726E
+                   CMPI.B   #5,D5
+                   BNE.S    L0729E
+                   MOVE.L   A5,-(A7)
+                   ADDQ.W   #8,A3
+                   LEA      8(A3),A5
+                   JSR      L05C28(PC)
+                   MOVEA.L  (A7)+,A5
+                   BNE.S    L072A0
+                   MOVE.W   TOS(A6,A1.L),D2
+                   ADDQ.L   #2,BV.RIP(A6)
+                   BSR.S    L072C2
+                   BRA.S    L07292
+
+726E L0726E        BSR.S    L072C2
+7270 L07270        SUB.W    D0,D1
+                   MOVE.W   D1,D4
+                   SWAP     D4
+                   TST.W    D0
+                   SNE      D4
+                   BRA.S    L0729E
+
+727C L0727C        MOVEQ    #10,D1
+727E L0727E        BSR.S    L072A8
+                   CLR.W    32(A6,A5.L)
+                   BRA.S    L0729E
+
+7286 L07286        BSR.S    L072C2
+7288 L07288        MOVE.W   D0,D2
+                   ADDQ.W   #8,D2
+                   ANDI.W   #$F8,D2
+                   SUBQ.W   #8,D1
+7292 L07292        SUB.W    D2,D1
+                   BLT.S    L0727C
+                   SUB.W    D0,D2
+7298 L07298        BSR.S    L072A6
+                   SUBQ.W   #1,D2
+                   BGT.S    L07298
+729E L0729E        MOVEQ    #,D0
+72A0 L072A0        RTS
+
+72A2 L072A2        TST.B    D4
+72A4 L072A4        BEQ.S    L072A0
+72A6 L072A6        MOVEQ    #$20,D1
+72A8 L072A8        MOVEQ    #IO.SBYTE,D0           ;TRAP to send a byte
+                   ADDQ.W   #1,32(A6,A5.L)
+                   BRA.S    L072B8
+
+72B0 L072B0        MOVEQ    #IO.SSTRG,D0           ;TRAP to send a string of bytes
+72B2 L072B2        ADD.W    D2,32(A6,A5.L)
+72B6 L072B6        TRAP     #4                     ;convert to absolute addresses
+72B8 L072B8        MOVEQ    #-1,D3                 ;use an infinite timeout
+                   MOVEA.L  0(A6,A5.L),A0
+                   TRAP     #3
+                   RTS
+
+72C2 L072C2        MOVEQ    #SD.CHENQ,D0           ;TRAP to read window size/cursor
+72C4 L072C4        MOVEA.L  (A6),A1
+                   BSR.S    L072B6
+                   TST.L    D0
+                   BNE.S    L072D6
+                   MOVE.W   4(A6,A1.L),D0
+                   MOVE.W   TOS(A6,A1.L),D1
+                   RTS
+
+72D6 L072D6        MOVE.W   $22(A6,A5.L),D1
+72DA L072DA        MOVE.W   $20(A6,A5.L),D0
+                   RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=BP_RNDMZ        RESEED RANDOM NUMBER GENERATOR                               ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³SYNTAX:          seed := numeric_expression                                   ³
+³                                                                              ³
+³                 RANDOMIZE seed                                               ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     top of arithmetic stack                             ³
+³                 A3.L     first parameter in name table (relative)            ³
+³                 A5.L     last parameter in name table (relative)             ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+72E0 BP_RNDMZ      JSR      CA_GTLIN(PC)           ;get long integers,D3 = number found
+                   BNE.S    L07306                 ;and exit if none found
+                   SUBQ.W   #1,D3
+                   BGT.S    L07308
+                   BEQ.S    L072F2
+                   MOVEQ    #MT.RCLCK,D0           ;TRAP to read clock
+                   TRAP     #1
+                   BRA.S    L072FC
+
+72F2 L072F2        MOVE.L   TOS(A6,A1.L),D1
+72F6 L072F6        ADDQ.L   #4,BV.RIP(A6)
+                   MOVEQ    #0,D0
+72FC L072FC        MOVE.L   D1,D2
+                   SWAP     D1
+                   ADD.L    D2,D1
+                   MOVE.L   D1,BV.RAND(A6)
+7306 L07306        RTS
+
+7308 L07308        MOVEQ    #ERR.BP,D0             ;signal "bad parameter"
+730A L0730A        RTS
+
+730C L0730C        MOVE.L   D7,-(A7)
+730E L0730E        MOVE.W   D0,-(A7)
+                   BSR.S    L0737C
+                   BEQ.S    L0731C
+7314 L07314        ADDQ.W   #2,A7
+7316 L07316        MOVE.L   (A7)+,D7
+                   TST.L    D0
+                   RTS
+
+731C L0731C        MOVE.L   A3,-(A7)
+731E L0731E        MOVEA.L  0(A6,A5.L),A0
+                   MOVEA.L  (A6),A1
+                   ADDA.L   A6,A1
+                   MOVEQ    #IO.FLINE,D0           ;TRAP to fetch a line
+                   MOVE.W   #$80,D2
+                   MOVEQ    #-1,D3                 ;use an infinite timout
+                   TRAP     #3
+                   TST.L    D0
+                   BEQ.S    L07338
+                   MOVEA.L  (A7)+,A3
+                   BRA.S    L07314
+
+7338 L07338        MOVEQ    #SD.PCOL,D0            ;TRAP to set to previous column
+733A L0733A        TRAP     #3
+                   MOVEQ    #SD.NCOL,D0            ;TRAP to set to next column
+                   TRAP     #3
+                   MOVEA.L  (A7)+,A3
+                   MOVEA.L  (A6),A0
+                   SUBA.L   A6,A1
+                   MOVE.L   A1,D7
+                   MOVEA.L  BV.RIP(A6),A1
+                   MOVE.W   (A7)+,D0
+                   SUBQ.B   #2,D0
+                   BLT.S    L07362
+                   BEQ.S    L0735A
+                   JSR      CN_DTOI(PC)            ;convert ascii to integer
+                   BRA.S    L0735E
+
+735A L0735A        JSR      CN_DTOF(PC)            ;convert ascii to floating point
+735E L0735E        BNE.S    L07316
+7360 L07360        BRA.S    L0736A
+
+7362 L07362        MOVEA.L  D7,A0
+7364 L07364        SUBQ.W   #1,A0
+                   JSR      L05496(PC)
+736A L0736A        MOVE.L   A1,BV.RIP(A6)
+                   SUBA.L   BV.CHBAS(A6),A5
+                   JSR      BP_LET(PC)             ;return parameter values
+                   ADDA.L   BV.CHBAS(A6),A5
+                   BRA.S    L07316
+
+737C L0737C        MOVE.B   0(A6,A3.L),D0
+7380 L07380        SUBQ.B   #2,D0
+                   BLE.S    L073AE
+                   SUBQ.B   #1,D0
+                   BNE.S    L073A6
+                   MOVE.B   1(A6,A3.L),D0
+                   ANDI.B   #%00001111,D0
+                   SUBQ.B   #1,D0
+                   BGT.S    L073B6
+                   MOVEA.L  4(A6,A3.L),A2
+                   ADDA.L   BV.VVBAS(A6),A2
+                   CMPI.W   #1,4(A6,A2.L)
+                   BGT.S    L073B6
+                   BRA.S    L073AE
+
+73A6 L073A6        SUBQ.B   #3,D0
+73A8 L073A8        BLT.S    L073B2
+                   SUBQ.B   #1,D0
+                   BGT.S    L073B2
+73AE L073AE        MOVEQ    #0,D0
+                   RTS
+
+73B2 L073B2        MOVEQ    #ERR.BN,D0             ;signal "bad name"
+73B4 L073B4        RTS
+
+73B6 L073B6        MOVEQ    #ERR.NI,D0             ;signal "not implemented"
+73B8 L073B8        RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=BP_RECOL        RECOLOUR INDIVIDUAL PIXELS IN WINDOW                         ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³SYNTAX:          c0 := new colour for black                                   ³
+³                 c1 := new colour for blue                                    ³
+³                 c2 := new colour for red                                     ³
+³                 c3 := new colour for magenta                                 ³
+³                 c4 := new colour for green                                   ³
+³                 c5 := new colour for cyan                                    ³
+³                 c6 := new colour for yellow                                  ³
+³                 c7 := new colour for white                                   ³
+³                                                                              ³
+³                 RECOL [channel,] c0, c1, c2, c3, c4, c5, c6, c7              ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     top of arithmetic stack                             ³
+³                 A3.L     first parameter in name table (relative)            ³
+³                 A5.L     last parameter in name table (relative)             ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:          ERR>BP   invalid colour list                                 ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+73BA BP_RECOL      JSR      L078CA(PC)
+                   BNE.S    L073E2
+                   CMPI.W   #8,D3
+                   BNE.S    L073E0
+                   MOVEA.L  A1,A2
+                   MOVEQ    #7,D0                  ;8 parameters to copy
+73CA L073CA        MOVE.B   1(A6,A2.L),1(A6,A1.L)
+                   SUBQ.W   #2,A2
+                   SUBQ.W   #1,A1
+                   DBF      D0,L073CA
+                   ADDQ.W   #2,A1
+                   MOVEQ    #$26,D4
+                   JMP      L07856(PC)
+
+73E0 L073E0        MOVEQ    #ERR.BP,D0             ;signal "bad parameter"
+73E2 L073E2        RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=BP_EDIT         EDIT LIST OF SUPERBASIC LINES                                ³
+³=BP_AUTO         GENERATE LINE NUMBERS AUTOMATICALLY                          ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³SYNTAX:          first_line := numeric_expression                             ³
+³                 gap := numeric_expression                                    ³
+³                                                                              ³
+³                 EDIT [first_line] [, gap]                                    ³
+³                 AUTO [first_line] [, gap]                                    ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     top of arithmetic stack                             ³
+³                 A3.L     first parameter in name table (relative)            ³
+³                 A5.L     last parameter in name table (relative)             ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+73E4 BP_EDIT       MOVEQ    #0,D4
+                   BRA.S    L073EA
+
+73E8 BP_AUTO       MOVEQ    #10,D4
+73EA L073EA        ST       BV.AUTO(A6)
+                   TST.B    BV.UNRVL(A6)
+                   BNE.S    L07420
+                   BRA.S    L07414
+
+73F6 L073F6        MOVEQ    #0,D5
+73F8 L073F8        CMPA.L   4(A7),A3
+                   BEQ.S    L0740E
+                   JSR      L06DA2(PC)
+                   BEQ.S    L0740E
+                   JSR      L06E40(PC)
+                   BEQ.S    L07410
+                   ADDQ.W   #4,A7
+                   BRA.S    L07472
+
+740E L0740E        MOVEQ    #1,D0
+7410 L07410        RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=BP_RENUM        RENUMBER SUPERBASIC PROGRAM LINES                            ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³SYNTAX:          first := numeric_expression                                  ³
+³                 last := numeric_expression                                   ³
+³                 start := numeric_expression                                  ³
+³                 step := numeric_expression                                   ³
+³                                                                              ³
+³                 RENUM [first [TO last];] [start] [, step]                    ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     top of arithmetic stack                             ³
+³                 A3.L     first parameter in name table (relative)            ³
+³                 A5.L     last parameter in name table (relative)             ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+7412 BP_RENUM      MOVEQ    #10,D4
+7414 L07414        JSR      L076FE(PC)
+                   BEQ.S    L07420
+                   ST       BV.UNDO(A6)
+                   RTS
+
+7420 L07420        MOVE.L   A5,-(A7)
+7422 L07422        MOVE.W   #$7FFF,D7
+                   MOVEQ    #$64,D6
+                   SWAP     D4
+                   BSR.S    L073F6
+                   CMPI.B   #5,D5
+                   BNE.S    L07448
+                   TST.B    D0
+                   BNE.S    L07438
+                   MOVE.W   D1,D4
+7438 L07438        BSR.S    L073F6
+                   CMPI.B   #2,D5
+                   BNE.S    L07472
+                   TST.B    D0
+                   BNE.S    L07454
+                   MOVE.W   D1,D7
+                   BRA.S    L07454
+
+7448 L07448        CMPI.B   #2,D5
+744C L0744C        BNE.S    L07456
+                   TST.B    D0
+                   BNE.S    L07454
+                   MOVE.W   D1,D4
+7454 L07454        BSR.S    L073F6
+7456 L07456        TST.B    D0
+                   BNE.S    L0745C
+                   MOVE.W   D1,D6
+745C L0745C        SWAP     D4
+                   CMPI.B   #1,D5
+                   BNE.S    L0746A
+                   BSR.S    L073F6
+                   BNE.S    L0746A
+                   MOVE.W   D1,D4
+746A L0746A        MOVE.W   D4,D3
+                   SWAP     D4
+                   TST.B    D5
+                   BEQ.S    L07482
+7472 L07472        SF       BV.AUTO(A6)
+                   ADDQ.W   #4,A7
+                   MOVEQ    #ERR.BP,D0             ;signal "bad parameter"
+                   RTS
+
+747C L0747C        ADDQ.W   #2,A7
+747E L0747E        MOVEQ    #ERR.OR,D0             ;signal "out of range"
+                   RTS
+
+7482 L07482        MOVE.W   D7,D5
+7484 L07484        ADDQ.W   #4,A7
+                   TST.B    BV.AUTO(A6)
+                   BEQ.S    L07498
+                   MOVE.W   D6,BV.EDLIN(A6)
+                   MOVE.W   D3,BV.EDINC(A6)
+7494 L07494        MOVEQ    #0,D0                  ;signal "no errors"
+                   RTS
+
+7498 L07498        MOVEA.L  BV.PFBAS(A6),A4
+749C L0749C        CMPA.L   BV.PFP(A6),A4
+                   BGE.S    L07494
+                   CLR.W    -(A7)
+                   CLR.L    BV.LINUM(A6)
+                   TST.W    D4
+                   BEQ.S    L074C6
+                   JSR      L096B0(PC)
+                   CMPA.L   (A6),A4
+                   BEQ.S    L074C6
+                   SUBA.W   BV.LENGTH(A6),A4
+                   MOVE.W   2(A6,A4.L),D2
+                   CMP.W    D2,D6
+                   BLE.S    L0747C
+                   ADDA.W   BV.LENGTH(A6),A4
+                   MOVE.W   D2,(A7)
+74C6 L074C6        MOVEQ    #0,D0
+74C8 L074C8        ADDQ.W   #1,D0
+                   BSR.S    L0753C
+                   BEQ.S    L074C8
+                   BGT.S    L074D4
+                   MOVE.W   #$7FFF,D2
+74D4 L074D4        MOVE.L   D0,D1
+                   SUBQ.W   #1,D1
+                   MULU     D3,D1
+                   ADD.L    D6,D1
+                   EXT.L    D2
+                   CMP.L    D2,D1
+                   BGE.S    L0747C
+                   MOVE.W   D2,-(A7)
+                   MOVEQ    #2,D1
+                   ADD.L    D0,D1
+                   LSL.L    #2,D1
+                   JSR      L04EF0(PC)
+                   MOVEA.L  A0,A3
+                   SUBA.L   BV.VVBAS(A6),A3
+                   MOVE.L   D1,0(A6,A0.L)
+                   SUBA.W   BV.LENGTH(A6),A4
+                   MOVE.W   2(A6,A4.L),BV.LINUM(A6)
+                   ADDA.W   BV.LENGTH(A6),A4
+                   JSR      L096B0(PC)
+                   BSR      L07644
+                   MOVE.W   D6,D0
+                   MOVE.W   4(A6,A4.L),D2
+                   MOVE.W   2(A7),D6
+                   SWAP     D4
+751A L0751A        MOVE.W   D2,0(A6,A0.L)
+                   MOVE.W   D0,2(A6,A0.L)
+                   MOVE.W   D0,4(A6,A4.L)
+                   ADDQ.W   #4,A0
+                   ADD.W    D4,D0
+                   BSR.S    L0753C
+                   BEQ.S    L0751A
+                   MOVE.W   (A7),D5
+                   MOVE.W   D5,0(A6,A0.L)
+                   MOVE.W   D5,2(A6,A0.L)
+                   ADDQ.W   #4,A7
+                   BRA.S    L07568
+
+753C L0753C        MOVE.W   0(A6,A4.L),D1
+7540 L07540        ADDQ.W   #2,A4
+                   ADD.W    D1,BV.LENGTH(A6)
+                   ADDA.W   BV.LENGTH(A6),A4
+                   CMPA.L   BV.PFP(A6),A4
+                   BGE.S    L07560
+                   MOVE.W   4(A6,A4.L),D2
+                   CMP.W    D2,D5
+                   BLT.S    L0755C
+                   MOVEQ    #0,D1
+                   RTS
+
+755C L0755C        MOVEQ    #1,D1
+755E L0755E        RTS
+
+7560 L07560        MOVEQ    #ERR.NC,D1             ;signal "not complete"
+7562 L07562        RTS
+
+7564 L07564        JMP      L9B92(PC)
+
+7568 L07568        ST       BV.EDIT(A6)
+756C L0756C        JSR      L08D70(PC)
+                   BRA.S    L07578
+
+7572 L07572        JSR      L09C30(PC)
+7576 L07576        BNE.S    L075F4
+7578 L07578        BSR.S    L07564
+                   CMPI.W   #$8111,D1
+                   BEQ.S    L075A0
+                   CMPI.W   #$810A,D1
+                   BEQ.S    L0759C
+                   CMPI.W   #$8115,D1
+                   BNE.S    L07572
+758C L0758C        JSR      L0885E(PC)
+                   JSR      L08E58(PC)
+                   BEQ.S    L07572
+                   CMPI.W   #$810A,D1
+                   BNE.S    L0758C
+759C L0759C        ADDQ.W   #2,A4
+                   BSR.S    L07564
+75A0 L075A0        ADDQ.W   #2,A4
+                   BSR.S    L07564
+                   CMPI.W   #$840A,D1
+                   BEQ.S    L07572
+                   SUBI.W   #$F000,D1
+                   BGE.S    L075BC
+75B0 L075B0        MOVE.W   #$8404,D4
+                   JSR      L09C02(PC)
+                   BNE.S    L07572
+                   BRA.S    L075A0
+
+75BC L075BC        MOVEA.L  BV.RIP(A6),A1
+75C0 L075C0        SUBQ.W   #6,A1
+                   MOVE.W   D1,TOS(A6,A1.L)
+                   MOVE.L   2(A6,A4.L),2(A6,A1.L)
+                   JSR      L04830(PC)
+                   MOVE.W   TOS(A6,A1.L),D1
+                   BSR.S    L0764E
+                   BLE.S    L075B0
+                   MOVE.W   D1,TOS(A6,A1.L)
+                   JSR      L04852(PC)
+                   MOVE.W   TOS(A6,A1.L),D0
+                   ADDI.W   #$F000,D0
+                   MOVE.W   D0,0(A6,A4.L)
+                   MOVE.L   2(A6,A1.L),2(A6,A4.L)
+                   BRA.S    L075B0
+
+75F4 L075F4        MOVE.W   BV.LSBEF(A6),D1
+75F8 L075F8        BSR.S    L0764E
+                   MOVE.W   D1,BV.LSBEF(A6)
+                   MOVE.W   BV.LSBAS(A6),D1
+                   BSR.S    L0764E
+                   MOVE.W   D1,BV.LSBAS(A6)
+                   MOVE.W   BV.LSAFT(A6),D1
+                   BSR.S    L0764E
+                   MOVE.W   D1,BV.LSAFT(A6)
+                   MOVEA.L  BV.LNBAS(A6),A1
+                   MOVE.W   TOS(A6,A1.L),D1
+                   BSR.S    L0764E
+                   MOVE.W   D1,TOS(A6,A1.L)
+                   ST       BV.CONT(A6)
+                   BSR.S    L07644
+                   SUBQ.W   #4,A0
+                   MOVE.L   0(A6,A0.L),D1
+                   JSR      L050E2(PC)
+                   MOVEQ    #0,D2
+                   MOVEQ    #0,D5
+                   SUBA.L   A0,A0
+                   JSR      L0888E(PC)
+                   MOVEA.L  D0,A0
+                   JSR      L087D2(PC)
+                   MOVEQ    #0,D0
+                   RTS
+
+7644 L07644        MOVEA.L  BV.VVBAS(A6),A0
+7648 L07648        ADDA.L   A3,A0
+                   ADDQ.W   #4,A0
+                   RTS
+
+764E L0764E        CMP.W    D6,D1
+7650 L07650        BLE.S    L07664
+                   CMP.W    D1,D5
+                   BLT.S    L07664
+                   BSR.S    L07644
+7658 L07658        CMP.W    0(A6,A0.L),D1
+                   ADDQ.W   #4,A0
+                   BGT.S    L07658
+                   MOVE.W   -2(A6,A0.L),D1
+7664 L07664        RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=BP_CLEAR        CLEAR SUPERBASIC VARIABLES                                   ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³SYNTAX:          CLEAR                                                        ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     top of arithmetic stack                             ³
+³                 A3.L     first parameter in name table (relative)            ³
+³                 A5.L     last parameter in name table (relative)             ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+7666 BP_CLEAR      MOVEQ    #0,D6
+                   MOVEQ    #0,D0
+                   MOVE.W   #-1,BV.NXLIN(A6)       ;signal "no next line"
+                   BRA.S    L076AE
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=BP_RUN          START PROGRAM EXECUTION                                      ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³SYNTAX:          line := numeric_expression                                   ³
+³                                                                              ³
+³                 RUN line                                                     ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     top of arithmetic stack                             ³
+³                 A3.L     first parameter in name table (relative)            ³
+³                 A5.L     last parameter in name table (relative)             ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+7672 BP_RUN        JSR      CA_GTINT(PC)           ;get integers,D3 = number found
+                   BNE.S    L076EC
+                   MOVEQ    #6,D6
+                   MOVE.W   D7,BV.NXLIN(A6)
+                   SUBQ.W   #1,D3
+                   BLT.S    L076E2
+                   BEQ.S    L07688
+                   MOVEQ    #ERR.BP,D0             ;signal "bad parameter"
+                   RTS
+
+7688 L07688        MOVE.W   TOS(A6,A1.L),BV.NXLIN(A6)
+768E L0768E        MOVE.B   D7,BV.NXSTM(A6)
+                   ADDQ.L   #2,BV.RIP(A6)
+                   BRA.S    L076E2
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=BP_MERGE        LOAD and MERGE A SUPERBASIC PROGRAM                          ³
+³=BP_MRUN         LOAD,MERGE and RUN A SUPERBASIC PROGRAM                      ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³SYNTAX:          MERGE device                                                 ³
+³                 MRUN device                                                  ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     top of arithmetic stack                             ³
+³                 A3.L     first parameter in name table (relative)            ³
+³                 A5.L     last parameter in name table (relative)             ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+7698 BP_MERGE      BSR.S    L076FE
+                   MOVEQ    #14,D6
+                   TST.B    BV.SING(A6)
+                   BNE.S    L076C4
+                   BSR.S    L076FE
+76A2 BP_MRUN       MOVEQ    #12,D6                 ;! check address label L076A2
+                   BSR.S    L076EE
+                   BNE.S    L076DC
+                   MOVE.W   D7,BV.NXLIN(A6)
+76AE L076AE        TST.B    BV.SING(A6)
+                   BNE.S    L076E2
+                   MOVE.W   BV.LINUM(A6),BV.NXLIN(A6)
+                   MOVE.B   BV.STMNT(A6),BV.NXSTM(A6)
+                   BRA.S    L076E2
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=BP_LOAD         LOAD A SUPERBASIC PROGRAM                                    ³
+³=BP_LRUN         LOAD and RUN A SUPERBASIC PROGRAM                            ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³SYNTAX:          LOAD device                                                  ³
+³                 LRUN device                                                  ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     top of arithmetic stack                             ³
+³                 A3.L     first parameter in name table (relative)            ³
+³                 A5.L     last parameter in name table (relative)             ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+76C2 BP_LOAD       MOVEQ    #10,D6
+76C4 L076C4        BSR.S    L076EE
+                   BRA.S    L076DC
+
+76C8 BP_LRUN       MOVEQ    #8,D6
+                   BSR.S    L076EE
+                   BNE.S    L076DC
+                   MOVE.W   D7,BV.NXLIN(A6)
+                   BRA.S    L076E2
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=BP_NEW          CLEAR SUPERBASIC PROGRAM and VARIABLES                       ³
+³=BP_STOP         TERMINATE PROGRAM EXECUTION                                  ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³SYNTAX:          NEW                                                          ³
+³                 STOP                                                         ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     top of arithmetic stack                             ³
+³                 A3.L     first parameter in name table (relative)            ³
+³                 A5.L     last parameter in name table (relative)             ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+76D4 BP_NEW        MOVEQ    #2,D6
+                   BRA.S    L076DA
+
+76D8 BP_STOP       MOVEQ    #4,D6
+76DA L076DA        MOVEQ    #0,D0
+76DC L076DC        MOVE.W   #-1,BV.NXLIN(A6)
+76E2 L076E2        SF       BV.CONT(A6)
+                   MOVE.W   D6,BV.STOPN(A6)
+                   TST.L    D0
+76EC L076EC        RTS
+
+76EE L076EE        MOVEQ    #1,D4
+76F0 L076F0        JSR      L06408(PC)
+                   BNE.S    L076EC
+                   MOVE.L   A0,BV.COMCH(A6)
+                   MOVEQ    #0,D0                  ;signal "no errors"
+                   RTS
+
+76FE L076FE        TST.B    BV.UNRVL(A6)
+7702 L07702        BNE.S    L07712
+                   MOVE.L   BV.RTP(A6),D0
+                   SUB.L    BV.RTBAS(A6),D0
+                   BEQ.S    L07712
+                   ADDQ.W   #4,A7
+                   MOVEQ    #ERR.NI,D0             ;signal "not implemented"
+7712 L07712        RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=BP_RETRY        RE-EXECUTE SUPERBASIC STATEMENT                              ³
+³=BP_CONTI        CONTINUE HALTED SUPERBASIC PROGRAM                           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³SYNTAX:          RETRY                                                        ³
+³                 CONTINUE                                                     ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     top of arithmetic stack                             ³
+³                 A3.L     first parameter in name table (relative)            ³
+³                 A5.L     last parameter in name table (relative)             ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+7714 BP_RETRY      SUBQ.B   #1,BV.CNSTM(A6)
+                   BGE.S    BP_CONTI
+                   SF       BV.CNSTM(A6)
+771E BP_CONTI      MOVEQ    #16,D6
+                   BRA.S    L076DA
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=BP_TURNT        TURN TURTLE TO SPECIFIED ANGLE                               ³
+³=BP_TURN         TURN TURTLE BY SPECIFIED ANGLE                               ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³SYNTAX:          angle := numeric_expression {in degrees}                     ³
+³                                                                              ³
+³                 TURNTO [channel,] angle                                      ³
+³                 TURN [channel,] angle                                        ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     top of arithmetic stack                             ³
+³                 A3.L     first parameter in name table (relative)            ³
+³                 A5.L     last parameter in name table (relative)             ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+7722 BP_TURNT      BSR      L077B6
+                   BNE.S    L07762
+                   BRA.S    L07738
+
+772A BP_TURN       BSR      L077B6
+                   BNE.S    L07762
+                   BSR      L077D4
+                   JSR      L048D2(PC)
+7738 L07738        LEA      L077E4(PC),A3          ;A3 points at list of operations
+                   LEA      6(A1),A4
+                   SUBQ.W   #6,A1
+                   MOVE.W   #$0809,TOS(A6,A1.L)
+                   MOVE.L   #$5A000000,2(A6,A1.L)
+                   JSR      RI_EXECB(PC)           ;execute list of maths operations
+                   MOVE.W   TOS(A6,A1.L),16(A6,A2.L)
+                   MOVE.L   2(A6,A1.L),18(A6,A2.L)
+7760 L07760        MOVEQ    #0,D0                  ;signal "no errors"
+7762 L07762        RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=BP_PENUP        SWITCH TURTLE GRAPHICS PEN OFF                               ³
+³=BP_PENDO        SWITCH TURTLE GRAPHICS PEN ON                                ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³SYNTAX:          PENUP [channel]                                              ³
+³                 PENDOWN [channel]                                            ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     top of arithmetic stack                             ³
+³                 A3.L     first parameter in name table (relative)            ³
+³                 A5.L     last parameter in name table (relative)             ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+7764 BP_PENUP      MOVEQ    #0,D4
+                   BRA.S    L0776A
+
+7768 BP_PENDO      MOVEQ    #1,D4
+776A L0776A        JSR      L06040(PC)
+                   BNE.S    L07762
+                   MOVE.B   D4,22(A6,A2.L)
+                   BRA.S    L07760
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=BP_MOVE         MOVE TURTLE IN CURRENT DIRECTION                             ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³SYNTAX:          distance := numeric_expression                               ³
+³                                                                              ³
+³                 MOVE [channel,] distance                                     ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     top of arithmetic stack                             ³
+³                 A3.L     first parameter in name table (relative)            ³
+³                 A5.L     last parameter in name table (relative)             ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+7776 BP_MOVE       BSR.S    L077B6
+                   BNE.S    L077B4
+                   BSR.S    L077D4
+                   SUBQ.W   #6,A1
+                   MOVE.W   #$07FB,TOS(A6,A1.L)
+                   MOVE.L   #$477D1A89,2(A6,A1.L)
+                   JSR      L04966(PC)
+                   JSR      L067B4(PC)
+                   JSR      L067C4(PC)
+                   LEA      L077EC(PC),A3          ;A3 points at list of operations
+                   LEA      24(A1),A4
+                   JSR      RI_EXECB(PC)           ;execute list of maths operations
+                   JSR      L067D4(PC)
+                   TST.B    22(A6,A2.L)
+                   BEQ.S    L07760
+                   MOVEQ    #SD.LINE,D0            ;TRAP to draw line
+                   TRAP     #4                     ;convert to absolute addresses
+                   TRAP     #3
+77B4 L077B4        RTS
+
+77B6 L077B6        MOVE.W   #256,D1
+77BA L077BA        JSR      BV_CHRIX(PC)           ;reserve space on arithmetic stack
+                   JSR      L06040(PC)
+                   BNE.S    L077D2
+                   MOVE.L   BV.RIP(A6),-(A7)
+                   JSR      L05C30(PC)
+                   MOVE.L   (A7)+,BV.RIP(A6)
+                   TST.L    D0
+77D2 L077D2        RTS
+
+77D4 L077D4        SUBQ.W   #6,A1
+77D6 L077D6        MOVE.W   16(A6,A2.L),TOS(A6,A1.L)
+                   MOVE.L   18(A6,A2.L),2(A6,A1.L)
+                   RTS
+
+   List of maths operations for the TURN and TURNTO procedures.
+
+77E4 L077E4        DC.B     $FA
+                   DC.B     $F4
+                   DC.B     RI.DIV                 ;divide tos into nos
+                   DC.B     RI.INT                 ;truncate floating point into word
+77E8 L077E8        DC.B     RI.LINT                ;convert back into floating point
+                   DC.B     RI.ABS                 ;take absolute value
+                   DC.B     RI.SUB                 ;subtract tos from nos
+                   DC.B     RI.TERM                ;terminate execution
+
+77EC L077EC        DC.B     $FA
+                   DC.B     $F4
+                   DC.B     $18
+                   DC.B     $0E
+                   DC.B     $EE
+                   DC.B     $0A
+                   DC.B     $FA
+                   DC.B     $F4
+                   DC.B     $1A
+                   DC.B     $0E
+                   DC.B     $E8
+                   DC.B     $0A
+                   DC.W     RI.TERM                ;terminate execution
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=BP_WIDTH        SET DEFAULT WIDTH ON DEVICE                                  ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³SYNTAX:          line_width := numeric_expression                             ³
+³                                                                              ³
+³                 WIDTH [channel,] line_width                                  ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     top of arithmetic stack                             ³
+³                 A3.L     first parameter in name table (relative)            ³
+³                 A5.L     last parameter in name table (relative)             ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+77FA BP_WIDTH      JSR      L078CA(PC)             ;get channel number and following parame
+                   BNE.S    L0780A                 ;exit if any errors
+                   SUBQ.W   #1,D3                  ;one extra parameter found ?
+                   BNE.S    L0780C                 ;exit with error if not
+
+   Copy the width parameter to the appropriate entry in the Superbasic channel
+   table.
+
+                   MOVE.W   TOS(A6,A1.L),CH.WIDTH(A6,A2.L)
+780A L0780A        RTS
+
+780C L0780C        MOVEQ    #ERR.BP,D0             ;signal "bad parameter"
+780E L0780E        RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=BP_WINDO        REDEFINE CHANNEL'S WINDOW                                    ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³SYNTAX:          width := numeric_expression                                  ³
+³                 depth := numeric_expression                                  ³
+³                 x := numeric_expression                                      ³
+³                 y := numeric_expression                                      ³
+³                                                                              ³
+³                 WINDOW [channel,] width, depth, x, y                         ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     top of arithmetic stack                             ³
+³                 A3.L     first parameter in name table (relative)            ³
+³                 A5.L     last parameter in name table (relative)             ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+7810 BP_WINDO      JSR      L078CA(PC)
+                   BNE.S    L07834
+                   MOVEQ    #SD.WDEF,D4            ;TRAP to re-define window
+                   MOVEQ    #$80,D1                ;use a transparent border
+                   CLR.W    D2                     ;and zero border width
+                   BRA.S    L0782E
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=BP_BLOCK        FILL A BLOCK WITH COLOUR                                     ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³SYNTAX:          width := numeric_expression                                  ³
+³                 depth := numeric_expression                                  ³
+³                 x := numeric_expression                                      ³
+³                 y := numeric_expression                                      ³
+³                 colour := numeric_expression {0 .. 7}                        ³
+³                                                                              ³
+³                 BLOCK [channel,] width, depth, x, y, colour                  ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     top of arithmetic stack                             ³
+³                 A3.L     first parameter in name table (relative)            ³
+³                 A5.L     last parameter in name table (relative)             ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+781E BP_BLOCK      JSR      L078CA(PC)
+                   BNE.S    L07834
+                   MOVEQ    #SD.FILL,D4            ;TRAP to fill a block
+                   SUBQ.W   #4,D3
+                   JSR      L07866(PC)
+                   BNE.S    L07834
+782E L0782E        SUBQ.W   #6,A1                  ;retore maths stack pointer
+                   JMP      L07856(PC)             ;do the TRAP
+
+7834 L07834        RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=BP_BORDE        ADD A BORDER TO A WINDOW                                     ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³SYNTAX:          width := numeric_expression                                  ³
+³                 colour := numeric_expression {0 .. 7}                        ³
+³                                                                              ³
+³                 BORDER [channel,] width [, colour]                           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     top of arithmetic stack                             ³
+³                 A3.L     first parameter in name table (relative)            ³
+³                 A5.L     last parameter in name table (relative)             ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+7836 BP_BORDE      JSR      L078CA(PC)
+                   BNE.S    L07834
+                   MOVEQ    #SD.BORDR,D4           ;TRAP to set window border
+                   MOVEQ    #$80,D1                ;use a transparent border
+                   CMPI.W   #1,D3
+                   BLS.S    L0784E
+                   SUBQ.W   #1,D3
+                   JSR      L07866(PC)
+                   BNE.S    L07834
+784E L0784E        MOVE.W   TOS(A6,A1.L),D2
+                   JMP      L07856(PC)
+
+7856 L07856        MOVE.L   D4,D0
+7858 L07858        MOVEQ    #-1,D3                 ;use an infinite timeout
+                   MOVE.L   A1,-(A7)
+                   TRAP     #4                     ;use absolute values
+                   TRAP     #3                     ;do the TRAP
+                   MOVEA.L  (A7)+,A1
+                   TST.L    D0                     ;set flags for interpreter
+                   RTS
+
+7866 L07866        MOVE.W   TOS(A6,A1.L),D1
+786A L0786A        SUBQ.L   #2,A1
+                   SUBQ.W   #1,D3
+                   BEQ.S    L078AC
+                   CMPI.W   #7,D1
+                   BHI.S    L078B6
+                   ORI.W    #$18,D1
+                   CMPI.W   #1,D3
+                   BEQ.S    L07896
+                   ANDI.W   #7,D1
+                   MOVE.W   TOS(A6,A1.L),D2
+                   SUBQ.L   #2,A1
+                   SUBQ.W   #1,D3
+                   LSL.W    #3,D1
+                   CMPI.W   #7,D2
+                   BHI.S    L078B6
+                   OR.W     D2,D1
+7896 L07896        MOVE.W   TOS(A6,A1.L),D2
+                   SUBQ.L   #2,A1
+                   SUBQ.W   #1,D3
+                   BNE.S    L078B6
+                   CMPI.W   #7,D2
+                   BHI.S    L078B6
+                   EOR.W    D2,D1
+                   LSL.W    #3,D1
+                   OR.W     D2,D1
+78AC L078AC        CMPI.W   #$FF,D1
+                   BHI.S    L078B6
+78B2 L078B2        MOVEQ    #0,D0                  ;signal "no errors"
+                   RTS
+
+78B6 L078B6        MOVEQ    #ERR.BP,D0             ;signal "bad parameter"
+78B8 L078B8        RTS
+
+78BA L078BA        CMPI.W   #1,D3
+                   BNE.S    L078B6
+                   MOVE.W   TOS(A6,A1.L),D1
+                   CMP.W    D3,D1
+                   BHI.S    L078B6
+                   BRA.S    L078B2
+
+78CA L078CA        JSR      L06040(PC)
+78CE L078CE        BNE.S    L078E4
+78D0 L078D0        JSR      CA_GTINT(PC)           ;get integers,D3 = number found
+                   BNE.S    L078E4
+                   ADD.L    D3,D3
+                   ADD.L    D3,BV.RIP(A6)
+                   ADDA.L   D3,A1
+                   SUBQ.L   #2,A1
+                   LSR.W    #1,D3
+                   MOVEQ    #0,D0
+78E4 L078E4        RTS
+
+2.23 SuperBASIC functions.
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=BF_ACOS         RETURN ARC COSINE                                            ³
+³=BF_ACOT         RETURN ARC COTANGENT                                         ³
+³=BF_ASIN         RETURN ARC SINE                                              ³
+³=BF_ATAN         RETURN ARC TANGENT                                           ³
+³=BF_COS          RETURN COSINE                                                ³
+³=BF_COT          RETURN COTANGENT                                             ³
+³=BF_EXP          RETURN EXPONENTIAL                                           ³
+³=BF_LN           RETURN NATURAL LOGARITHM                                     ³
+³=BF_LOG10        RETURN LOGARITHM TO BASE 10                                  ³
+³=BF_SIN          RETURN SINE                                                  ³
+³=BF_SQRT         RETURN SQUARE ROOT                                           ³
+³=BF_TAN          RETURN TANGENT                                               ³
+³=BF_DEG          RETURN ANGLE IN DEGREES                                      ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³SYNTAX:          angle := numeric_expression {in radians}                     ³
+³                                                                              ³
+³                 ACOS (angle)    ..etc                                        ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     top of arithmetic stack                             ³
+³                 A3.L     first parameter in name table (relative)            ³
+³                 A5.L     last parameter in name table (relative)             ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+78E6 BF_ACOS       LEA      RI_ACOS(PC),A4
+                   BRA.S    L07958
+
+78EC BF_ACOT       LEA      RI_ACOT(PC),A4
+                   BRA.S    L07958
+
+78F2 BF_ASIN       LEA      RI_ASIN(PC),A4
+                   BRA.S    L07958
+
+78F8 BF_ATAN       LEA      RI_ATAN(PC),A4
+                   BRA.S    L07958
+
+78FE BF_COS        LEA      RI_COS(PC),A4
+                   BRA.S    L07958
+
+7904 BF_COT        LEA      RI_COT(PC),A4
+                   BRA.S    L07958
+
+790A BF_EXP        LEA      RI_EXP(PC),A4
+                   BRA.S    L07958
+
+7910 BF_LN         LEA      RI_LN(PC),A4
+                   BRA.S    L07958
+
+7916 BF_LOG10      LEA      RI_LOG10(PC),A4
+                   BRA.S    L07958
+
+791C BF_SIN        LEA      RI_SIN(PC),A4
+                   BRA.S    L07958
+
+7922 BF_SQRT       LEA      RI_SQRT(PC),A4
+                   BRA.S    L07958
+
+7928 BF_TAN        LEA      RI_TAN(PC),A4
+                   BRA.S    L07958
+
+792E BF_DEG        LEA      RI_DIV(PC),A4
+                   BRA.S    L07938
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=BF_RAD          RETURN ANGLE IN RADIANS                                      ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³SYNTAX:          angle := numeric_expression {in degrees}                     ³
+³                                                                              ³
+³                 RAD (angle)                                                  ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     top of arithmetic stack                             ³
+³                 A3.L     first parameter in name table (relative)            ³
+³                 A5.L     last parameter in name table (relative)             ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+7934 BF_RAD        LEA      RI_MULT(PC),A4
+7938 L07938        JSR      L05C30(PC)
+                   BNE.S    L07970
+                   BSR      L079EE
+                   SUBQ.W   #6,A1
+                   MOVE.W   #$7FB,TOS(A6,A1.L)
+                   MOVE.L   #$477D1A89,2(A6,A1.L)
+                   BRA.S    L07968
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=BF_ABS          RETURN ABSOLUTE VALUE OF NUMBER                              ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³SYNTAX:          number := numeric_expression                                 ³
+³                                                                              ³
+³                 ABS (number)                                                 ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     top of arithmetic stack                             ³
+³                 A3.L     first parameter in name table (relative)            ³
+³                 A5.L     last parameter in name table (relative)             ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+7954 BF_ABS        LEA      RI_ABS(PC),A4
+7958 L07958        JSR      L05C30(PC)
+                   BNE.S    L07970
+                   MOVEQ    #$30,D1
+                   JSR      BV_CHRIX(PC)
+                   MOVEA.L  BV.RIP(A6),A1
+7968 L07968        JSR      (A4)
+796A L0796A        MOVEQ    #2,D4
+796C L0796C        MOVE.L   A1,BV.RIP(A6)
+7970 L07970        RTS
+
+7972 L07972        MOVEQ    #3,D4
+7974 L07974        MOVEQ    #0,D0                  ;signal "no errors"
+                   BRA.S    L0796C
+
+7978 L07978        ADDQ.W   #4,A7
+                   RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=BF_RND          RETURN RANDOM NUMBER WITHIN LIMITS                           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³SYNTAX:          lower_limit := numeric_expression                            ³
+³                 upper_limit := numeric_expression                            ³
+³                                                                              ³
+³                 RND ([lower_limit] [ TO upper_limit])                        ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     top of arithmetic stack                             ³
+³                 A3.L     first parameter in name table (relative)            ³
+³                 A5.L     last parameter in name table (relative)             ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+797C BF_RND        MOVEQ    #1,D5
+                   OR.L     BV.RAND(A6),D5
+                   MOVE.L   D5,D6
+                   MULU     #$163,D5
+                   SWAP     D6
+                   MULU     #$163,D6
+                   SWAP     D6
+                   CLR.W    D6
+                   ADD.L    D6,D5
+                   MOVE.L   D5,BV.RAND(A6)
+                   JSR      CA_GTINT(PC)           ;get integers,D3 = number found
+                   BNE.S    L07970
+                   SUBQ.W   #1,D3
+                   BEQ.S    L079BA
+                   BGT.S    L079B4
+                   BSR.S    L079EE
+                   MOVE.L   D5,D1
+                   LSR.L    #1,D1
+                   MOVE.W   #$800,D0
+79AE L079AE        JSR      L048CC(PC)
+                   BRA.S    L0796A
+
+79B4 L079B4        MOVE.W   TOS(A6,A1.L),D3
+79B8 L079B8        ADDQ.W   #2,A1
+79BA L079BA        MOVE.W   TOS(A6,A1.L),D2
+                   SUB.W    D3,D2
+                   BLT.S    L07A28
+                   ADDQ.W   #1,D2
+                   SWAP     D5
+                   MULU     D2,D5
+                   SWAP     D5
+                   ADD.W    D3,D5
+79CC L079CC        MOVE.W   D5,TOS(A6,A1.L)
+                   BRA.S    L07972
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=BF_PI           RETURN THE VALUE 3.141593                                    ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³SYNTAX:          PI                                                           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     top of arithmetic stack                             ³
+³                 A3.L     first parameter in name table (relative)            ³
+³                 A5.L     last parameter in name table (relative)             ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+79D2 BF_PI         BSR.S    L079EE
+                   MOVE.W   #$0802,D0
+                   MOVE.L   #$6487ED51,D1
+                   BRA.S    L079AE
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=BF_INT          RETURN INTEGER PART OF NUMBER                                ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³SYNTAX:          number := numeric_expression                                 ³
+³                                                                              ³
+³                 INT (number)                                                 ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     top of arithmetic stack                             ³
+³                 A3.L     first parameter in name table (relative)            ³
+³                 A5.L     last parameter in name table (relative)             ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+79E0 BF_INT        JSR      L05C2C(PC)
+                   BNE.S    L07970
+                   MOVE.L   TOS(A6,A1.L),D1
+                   ADDQ.W   #4,A1
+                   BRA.S    L07A12
+
+79EE L079EE        JSR      CA_RERIS(PC)
+79F2 L079F2        MOVEA.L  BV.RIP(A6),A1
+                   RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=BF_PEEK         RETURN VALUE OF BYTE IN MEMORY                               ³
+³=BF_PEEKW        RETURN SIGNED VALUE OF WORD IN MEMORY                        ³
+³=BF_PEEKL        RETURN SIGNED VALUE OF LONG WORD IN MEMORY                   ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³SYNTAX:          address := numeric_expression                                ³
+³                                                                              ³
+³                 PEEK (address)                                               ³
+³                 PEEK_W (address)                                             ³
+³                 PEEK_L (address)                                             ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     top of arithmetic stack                             ³
+³                 A3.L     first parameter in name table (relative)            ³
+³                 A5.L     last parameter in name table (relative)             ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+79F8 BF_PEEK       BSR.S    L07A18
+                   MOVEQ    #0,D5
+                   MOVE.B   (A4),D5
+                   BRA.S    L07A06
+
+7A00 BF_PEEKW      BSR.S    L07A18
+                   BCS.S    L07A28
+                   MOVE.W   (A4),D5
+7A06 L07A06        ADDQ.W   #2,A1
+                   BRA.S    L079CC
+
+7A0A BF_PEEKL      BSR.S    L07A18
+                   BCS.S    L07A28
+                   MOVE.L   (A4),D1
+7A10 L07A10        ADDQ.W   #4,A1
+7A12 L07A12        MOVE.W   #$081F,D0
+                   BRA.S    L079AE
+
+7A18 L07A18        JSR      L05C2C(PC)
+7A1C L07A1C        BNE.S    L07A90
+                   MOVEA.L  TOS(A6,A1.L),A4
+                   MOVE.L   A4,D1
+                   ROR.W    #1,D1
+                   RTS
+
+7A28 L07A28        MOVEQ    #ERR.BP,D0             ;signal "bad parameter"
+7A2A L07A2A        RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=BF_RESPR        RESERVE RESIDENT PROCEDURE SPACE                             ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³SYNTAX:          space := numeric_expression                                  ³
+³                                                                              ³
+³                 RESPR (space)                                                ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     top of arithmetic stack                             ³
+³                 A3.L     first parameter in name table (relative)            ³
+³                 A5.L     last parameter in name table (relative)             ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:          ERR.NC   not complete as TRNSP not empty                     ³
+³                 ERR.OM   out of memory                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   This function reserves space in the resident procedure area which lies
+   at the top of physical RAM. The amount specified is always rouned to the
+   nearest multiple of 8 bytes and a value of zero returns the address of
+   the bottom of the area.
+
+7A2C BF_RESPR      BSR.S    L07A18                 ;check for one parameter in brackets
+                   MOVEQ    #MT.ALRES,D0           ;TRAP to allocate RESPR space
+                   MOVE.L   TOS(A6,A1.L),D1        ;get the amount required
+                   MOVEA.L  A1,A4                  ;and save the maths stack pointer
+                   TRAP     #1                     ;allocate the space,A0 points at area on
+                   MOVE.L   A0,D1                  ;save the start address
+                   MOVEA.L  A4,A1                  ;and restore the maths stack pointer
+                   TST.L    D0                     ;any errors ?
+                   BEQ.S    L07A10                 ;jump forward if not
+                   BRA.S    L07A2A                 ;otherwise clean up the stack
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=BF_BEEPI        RETURN SOUND STATUS                                          ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³SYNTAX:          BEEPING                                                      ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     top of arithmetic stack                             ³
+³                 A3.L     first parameter in name table (relative)            ³
+³                 A5.L     last parameter in name table (relative)             ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+7A42 BF_BEEPI      BSR.S    L079EE
+                   MOVEQ    #1,D1
+                   AND.B    SV_SOUND,D1
+                   BRA.S    L07A12
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=BF_EOF          RETURN FILE OR DATA STATEMENT STATUS                         ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³SYNTAX:          EOF [(channel)]                                              ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     top of arithmetic stack                             ³
+³                 A3.L     first parameter in name table (relative)            ³
+³                 A5.L     last parameter in name table (relative)             ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+7A4E BF_EOF        CMPA.L   A3,A5
+                   BNE.S    L07A5C
+                   JSR      L06154(PC)
+                   SUBQ.B   #1,BV.DAITM(A6)
+                   BRA.S    L07A64
+
+7A5C L07A5C        BSR.S    L07ACE
+7A5E L07A5E        MOVEQ    #0,D0
+                   MOVEQ    #0,D3
+                   TRAP     #3
+7A64 L07A64        MOVEQ    #-10,D4
+                   SUB.L    D0,D4
+                   BSR.S    L079EE
+                   MOVEQ    #0,D1
+                   TST.L    D4
+                   BNE.S    L07A12
+                   MOVEQ    #1,D1
+                   BRA.S    L07A12
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=BV_VER          RETURN SUPERBASIC VERSION NUMBER                             ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³SYNTAX:          VER$                                                         ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     top of arithmetic stack                             ³
+³                 A3.L     first parameter in name table (relative)            ³
+³                 A5.L     last parameter in name table (relative)             ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+7A74 BF_VER        BSR      L079EE
+                   SUBQ.W   #4,A1
+                   MOVE.L   #$024A4D,TOS(A6,A1.L)
+                   BRA.S    L07AC6
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=BV_INKEY        RETURN CHARACTER FROM CHANNEL                                ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³SYNTAX:          time := numeric_expression                                   ³
+³                                                                              ³
+³                 INKEY$  [|(channel)                                          ³
+³                          |(channel, time)                                    ³
+³                          |(time)]                                            ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     top of arithmetic stack                             ³
+³                 A3.L     first parameter in name table (relative)            ³
+³                 A5.L     last parameter in name table (relative)             ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+7A84 BF_INKEY      BSR.S    L07ACE
+                   MOVE.L   A0,-(A7)
+                   BSR      L079EE
+                   JSR      CA_GTINT(PC)           ;get integers,D3 = number found
+7A90 L07A90        BNE.S    L07AD6
+                   MOVEA.L  (A7)+,A0
+                   CMPI.W   #1,D3
+                   BGT.S    L07A28
+                   BLT.S    L07AA2
+                   MOVE.W   TOS(A6,A1.L),D3
+                   ADDQ.W   #2,A1
+7AA2 L07AA2        MOVEA.L  A1,A4
+                   MOVEQ    #1,D0
+                   TRAP     #3
+                   MOVEA.L  A4,A1
+                   ADDQ.L   #1,D0
+                   BEQ.S    L07AC0
+                   SUBQ.L   #1,D0
+                   BNE.S    L07AD8
+                   SUBQ.W   #4,A1
+7AB4 L07AB4        MOVE.B   D1,2(A6,A1.L)
+                   MOVE.W   #1,TOS(A6,A1.L)
+                   BRA.S    L07AC6
+
+7AC0 L07AC0        SUBQ.W   #2,A1
+7AC2 L07AC2        CLR.W    TOS(A6,A1.L)
+7AC6 L07AC6        MOVEQ    #1,D4
+                   MOVEQ    #0,D0
+                   BRA      L0796C
+
+7ACE L07ACE        MOVEQ    #0,D1
+7AD0 L07AD0        JSR      L06042(PC)
+                   BEQ.S    L07AD8
+7AD6 L07AD6        ADDQ.W   #4,A7
+7AD8 L07AD8        RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=BF_CHR          RETURN ASCII CHARACTER                                       ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³SYNTAX:          character_code := numeric_expression                         ³
+³                                                                              ³
+³                 CHR$ (character_code)                                        ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     top of arithmetic stack                             ³
+³                 A3.L     first parameter in name table (relative)            ³
+³                 A5.L     last parameter in name table (relative)             ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+7ADA BF_CHR        BSR      L079EE
+                   JSR      L05C28(PC)
+                   BNE.S    L07AD8
+                   MOVE.W   TOS(A6,A1.L),D1
+                   SUBQ.W   #2,A1
+                   BRA.S    L07AB4
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=BF_FILL         RETURN FILLED STRING                                         ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³SYNTAX:          repeat_string := string_expression                           ³
+³                 length := numeric_expression                                 ³
+³                                                                              ³
+³                 FILL$ (repeat_string, length)                                ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     top of arithmetic stack                             ³
+³                 A3.L     first parameter in name table (relative)            ³
+³                 A5.L     last parameter in name table (relative)             ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+7AEC BF_FILL       SUBQ.W   #8,A5
+                   BSR.S    L07B42
+                   BEQ      L07A28
+                   SUBQ.L   #1,D1
+                   BGT.S    L07AFE
+                   MOVE.B   2(A6,A1.L),3(A6,A1.L)
+7AFE L07AFE        MOVE.W   2(A6,A1.L),D5
+                   ADDQ.L   #4,D1
+                   BCLR     #0,D1
+                   ADDA.L   D1,A1
+                   MOVE.L   A1,BV.RIP(A6)
+                   MOVEA.L  A5,A3
+                   ADDQ.W   #8,A5
+                   JSR      L05C28(PC)
+                   BNE.S    L07AD8
+                   ADDQ.L   #2,BV.RIP(A6)
+                   MOVEQ    #0,D4
+                   MOVE.W   TOS(A6,A1.L),D4
+                   BLT      L07A28
+                   BEQ.S    L07AC6
+                   MOVE.L   D4,D1
+                   BSR.S    L07B66
+7B2C L07B2C        SUBQ.W   #2,A1
+                   MOVE.W   D5,TOS(A6,A1.L)
+                   SUBQ.L   #2,D1
+                   BGT.S    L07B2C
+                   MOVE.W   D4,TOS(A6,A1.L)
+                   BRA.S    L07AC6
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=BF_LEN          RETURN LENGTH OF STRING                                      ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³SYNTAX:          string := string_expression                                  ³
+³                                                                              ³
+³                 LEN (string)                                                 ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     top of arithmetic stack                             ³
+³                 A3.L     first parameter in name table (relative)            ³
+³                 A5.L     last parameter in name table (relative)             ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+7B3C BF_LEN        BSR.S    L07B42
+                   MOVE.W   D1,D5
+                   BRA.S    L07B5A
+
+7B42 L07B42        JSR      L05C34(PC)
+7B46 L07B46        BNE.S    L07AD6
+                   MOVEQ    #0,D5
+                   MOVEQ    #0,D1
+                   MOVE.W   TOS(A6,A1.L),D1
+                   RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=BF_CODE         RETURN ASCII VALUE OF CHARACTER                              ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³SYNTAX:          character := string_expression                               ³
+³                                                                              ³
+³                 CODE (character)                                             ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     top of arithmetic stack                             ³
+³                 A3.L     first parameter in name table (relative)            ³
+³                 A5.L     last parameter in name table (relative)             ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+7B52 BF_CODE       BSR.S    L07B42
+                   BEQ.S    L07B62
+                   MOVE.B   2(A6,A1.L),D5
+7B5A L07B5A        ADDQ.L   #1,D1
+                   BCLR     #0,D1
+                   ADDA.L   D1,A1
+7B62 L07B62        BRA      L079CC
+
+7B66 L07B66        ADDQ.L   #3,D1
+7B68 L07B68        BCLR     #0,D1
+                   MOVE.L   D1,-(A7)
+                   JSR      BV_CHRIX(PC)
+                   MOVEA.L  BV.RIP(A6),A1
+                   MOVE.L   (A7)+,D1
+7B78 L07B78        RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=BF_DIMN         RETURN MAXIMUM SIZE OF DIMENSION                             ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³SYNTAX:          array := identifier                                          ³
+³                 index := numeric_expression                                  ³
+³                                                                              ³
+³                 DIMN (array [,index])                                        ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     top of arithmetic stack                             ³
+³                 A3.L     first parameter in name table (relative)            ³
+³                 A5.L     last parameter in name table (relative)             ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+7B7A BF_DIMN       MOVE.B   0(A6,A3.L),D1
+                   SUBQ.B   #3,D1
+                   BNE.S    L07BC2
+                   MOVE.L   A3,-(A7)
+                   ADDQ.W   #8,A3
+                   JSR      CA_GTINT(PC)           ;get integers,D3 = number found
+                   MOVEA.L  (A7)+,A3
+                   BNE.S    L07B78
+                   SUBQ.W   #1,D3
+                   BGT.S    L07B78
+                   BEQ.S    L07B9C
+                   BSR.S    L07BD8
+                   SUBQ.W   #2,A1
+                   MOVEQ    #1,D1
+                   BRA.S    L07BA2
+
+7B9C L07B9C        MOVE.W   TOS(A6,A1.L),D1
+7BA0 L07BA0        BLE.S    L07BC6
+7BA2 L07BA2        MOVEA.L  4(A6,A3.L),A2
+                   ADDA.L   BV.VVBAS(A6),A2
+                   MOVE.W   4(A6,A2.L),D2
+                   SUB.W    D1,D2
+                   BLT.S    L07BC6
+                   ADDQ.W   #2,A2
+                   LSL.W    #2,D1
+                   ADDA.W   D1,A2
+                   MOVE.W   0(A6,A2.L),TOS(A6,A1.L)
+                   BRA      L07972
+
+7BC2 L07BC2        BSR.S    L07BD8
+7BC4 L07BC4        SUBQ.W   #2,A1
+7BC6 L07BC6        MOVEQ    #0,D5
+                   BRA.S    L07B62
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=BF_DATE         RETURN CURRENT DATE IN SECONDS                               ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³SYNTAX:          DATE                                                         ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     top of arithmetic stack                             ³
+³                 A3.L     first parameter in name table (relative)            ³
+³                 A5.L     last parameter in name table (relative)             ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+7BCA BF_DATE       BSR.S    L07BD8
+                   MOVEQ    #19,D0
+                   TRAP     #1
+                   BCLR     #$1F,D1
+                   BRA      L07A12
+
+7BD8 L07BD8        BRA      L079EE
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=BF_KEYRW        RETURN STATE OF ROW OF KEYBOARD                              ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³SYNTAX:          row := numeric_expression {0 .. 7}                           ³
+³                                                                              ³
+³                 KEYROW (row)                                                 ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     top of arithmetic stack                             ³
+³                 A3.L     first parameter in name table (relative)            ³
+³                 A5.L     last parameter in name table (relative)             ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+7BDC BF_KEYRW      JSR      L05C28(PC)
+                   SUBQ.W   #8,A7
+                   BNE.S    L07C1E
+                   MOVEA.L  A7,A3
+                   MOVE.B   #9,(A3)
+                   MOVE.B   #1,1(A3)
+                   MOVE.L   #0,2(A3)
+                   MOVE.B   1(A6,A1.L),6(A3)
+                   MOVE.B   #2,7(A3)
+                   MOVE.L   A1,-(A7)
+                   MOVEQ    #17,D0
+                   TRAP     #1
+                   MOVEA.L  (A7)+,A1
+                   MOVE.W   D1,TOS(A6,A1.L)
+                   MOVEQ    #3,D4
+                   MOVEA.L  SV_KEYQ,A2
+                   MOVE.L   12(A2),8(A2)
+7C1E L07C1E        ADDQ.W   #8,A7
+                   RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=BF_DATES        RETURN CURRENT DATE and TIME                                 ³
+³=BF_DAY          RETURN CURRENT DAY OF THE WEEK                               ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³SYNTAX:          number := numeric_expression                                 ³
+³                                                                              ³
+³                 DATE$ [(number)]                                             ³
+³                 DAY$ [(number)]                                              ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     top of arithmetic stack                             ³
+³                 A3.L     first parameter in name table (relative)            ³
+³                 A5.L     last parameter in name table (relative)             ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+7C22 BF_DATES      LEA      CN_DATE(PC),A4         ;get date string routine
+                   BRA.S    L07C2C
+
+7C28 BF_DAY        LEA      CN_DAY(PC),A4          ;get day string routine
+7C2C L07C2C        JSR      CA_RERIS(PC)
+                   CMPA.L   A3,A5
+                   BLE.S    L07C42
+                   JSR      L05C2C(PC)
+                   BNE.S    L07C54
+                   MOVE.L   TOS(A6,A1.L),D1
+                   ADDQ.L   #4,A1
+                   BRA.S    L07C4A
+
+7C42 L07C42        MOVEQ    #19,D0
+7C44 L07C44        TRAP     #1
+                   MOVEA.L  BV.RIP(A6),A1
+7C4A L07C4A        JSR      (A4)
+                   MOVEQ    #1,D4
+                   MOVE.L   A1,BV.RIP(A6)
+                   MOVEQ    #0,D0                  ;signal "no errors"
+                   RTS
+

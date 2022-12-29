@@ -1,0 +1,1168 @@
+
+
+
+
+
+
+
+
+
+
+
+
+
+                               QDOS VERSION 1.03
+
+
+                                      AND
+
+
+                            SuperBASIC VERSION "JM"
+
+
+
+                        PARTIALLY COMMENTED DISASSEMBLY
+
+
+
+
+                                      OR
+
+
+
+
+   "Everything you ever wanted to know about the QL ROM but were afraid to ask -
+                            A Technical Blockbuster."
+
+
+                                   CONTENTS
+
+
+
+    1. INTRODUCTION
+
+       1.1 Some notes on style and presentation.
+       1.2 Sources and references.
+       1.3 Why I wrote this book.
+       1.4 How to print out this disassembly.
+       1.5 Variable names and other details.
+       1.6 The hardware memory map.
+       1.7 The QDOS software memory map.
+       1.8 The SuperBASIC software memory map.
+       1.9 The QL hardware.
+
+           1.9.1 The structure of QDOS.
+
+    2. The Disassembly
+
+       2.1 Initialisation and Exception Handlers.
+
+           2.1.1 Switch-on Or Reset Values.
+           2.1.2 System Exception Vectors.
+
+                 XHANDLER Initial Exception handler.
+
+           2.1.3 Interrupt Vectors.
+           2.1.4 Trap Vectors.
+           2.1.5 QDOS System Vectors.
+           2.1.6 Check For Ram Exception Table.
+
+                 CHKRAMEX Check for RAM exception table.
+
+           2.1.7 Dynamic Stop On Memory Test Failure.
+
+                 BADRAM   Dynamic stop on memory test failure.
+
+           2.1.8 Comprehensive main RAM and expansion RAM memory test.
+
+                 MEMTEST  Comprehensive main RAM and expansion RAM memory test.
+
+           2.1.9 Trap handlers for TRAP's #0,#1,#2,#3 and #4.
+
+                 ENTER_SM Enter CPU supervisor mode.
+                 MT_TRAP1 Memory management, job control and system housekeeping.
+                 IO_TRAP2 I/O device allocation.
+                 IO_TRAP3 Actual I/O, file handling and graphics.
+                 SB_TRAP4 Use absolute instead of relative values in next trap.
+
+           2.1.10 The interrupt handlers.
+
+                 SYSINT   System interrupt handler.
+                 EXTNLINT External interrupt handler.
+                 CLEANUP  Clean up routine for all the trap handlers.
+                 CHKSBIT  Check if supervisor mode bit set before trap.
+                 EXITTRAP General exit to restore SuperBASIC's registers.
+
+           2.1.11 Job ID handlers.
+
+                 CHKJBID  Check job id.
+                 GETJBID  Get current job's id & header address.
+
+           2.1.12 I/O timers.
+
+                 TIMER1   Timer for serial and microdrive I/O.
+                 CLRTMODE Entry point when microdrive operations finished.
+
+       2.2 Job control TRAP handlers.
+
+           2.2.1 Handle TRAP #1 functions.
+
+                 CHKTRP1  Handle trap #1 functions.
+
+           2.2.2 Job details.
+
+                 MT_INF   Get system information.
+                 MT_JINF  Get job information.
+
+           2.2.3 Job creation and deletion.
+
+                 MT_CJOB  Create a job.
+                 MT_RJOB  Remove a job.
+                 MT_FRJOB Force remove a job.
+                 FINDSUBS Find subsiduary in job tree.
+                 MT_TRAPV Set up RAM exception table.
+
+       2.3 Memory management TRAP handlers.
+
+           2.3.1 Common heap.
+
+                 MT_ALLOC Allocate heap space.
+                 MT_LNKFR Release heap space.
+                 MT_ALCHP Allocate common heap space.
+                 MT_RECHP Release common heap space.
+
+           2.3.2 Resident Procedure area.
+
+                 MT_ALRES Allocate resident procedure space.
+                 MT_RERES Release resident procedure area.
+
+           2.3.3 SuperBASIC area.
+
+                 MT_ALBAS Allocate basic area.
+                 MT_REBAS Release basic area.
+
+           2.3.4 Device modes.
+
+                 MT_DMODE Set or read display mode.
+                 MT_IPCOM Send IPC command.
+                 MT_BAUD  Set serial port BAUD rate.
+
+           2.3.5 Linked lists.
+
+                 MT_LINK  Link item into list.
+                 MT_UNLNK Unlink item from list.
+
+       2.4 Multi-tasking.
+
+           2.4.1 Frame interrupts.
+
+                 FRAMEINT Handle frame interrupts.
+
+           2.4.2 Scheduler.
+
+                 SCHEDULE Re-arrange jobs to implement multi-tasking.
+
+           2.4.3 Job status.
+
+                 MT_SUSJB Suspend a job.
+                 MT_RELJB Release a suspended job.
+                 MT_PRIOR Change job priority.
+                 MT_ACTIV Activate a job.
+
+           2.4.4 Scheduling mechanism.
+
+                 SHUTDOWN Copy a job's details to job header's storage area.
+                 DECIDE   Find out which job is to be the next one.
+                 STARTUP  Copy a job's details from job header's storage area.
+                 EXECLIST Execute linked list of tasks.
+
+       2.5 Simple device drivers.
+
+           2.5.1 Serial device driver.
+
+                 SEROPEN  Open a serial channel.
+                 SERCLOSE Close a serial channel.
+                 SER_IPC  Send IPC command to open or close a serial port.
+                 SER_IO   General serial I/O.
+                 SE_PEND  Test for pending input.
+                 SE_SBYTE Send a byte.
+                 SE_FBYTE Fetch a byte.
+
+           2.5.2 Pipe device driver.
+
+                 PIPEOPEN Open a pipe channel.
+                 PIPECLOS Close a pipe channel.
+
+           2.5.3 Console and Screen device driver.
+
+                 CONOPEN  Open a console channel.
+                 TRY_SCR  Check if a screen channel was specified instead.
+                 SCRNMOK  Open a screen channel.
+                 SCROPEN  Open a screen or console channel.
+                 CONCLOSE Close a con or scr channel.
+                 CON_IO   General console or screen channel I/O.
+                 SC_PEND  Test pending I/P.
+                 SC_FBYTE Fetch a byte.
+                 SC_FSTRG Fetch a string of bytes.
+                 SC_SSTRG Send a string of bytes.
+                 SC_SBYTE Send a byte.
+                 SC_FLINE Fetch a line.
+                 SC_EDLIN Edit a line.
+
+           2.5.4 Network device driver.
+
+                 NETOPEN  Open a network channel.
+                 NETCLOSE Close a network channel.
+                 NET_IO   General network I/O.
+                 NT_PEND  Test for pending I/P.
+                 NT_FBYTE Fetch a byte.
+                 NT_SBYTE Send a byte.
+
+           2.5.5 Start of scheduler linked list.
+
+                 FLASHCUR Flash the cursor.
+
+       2.6 Directory device drivers.
+
+           2.6.1 Microdrive device driver.
+
+                 REPEATIO Do microdrive I/O operation until complete.
+                 MDV_IO   General microdrive file I/O.
+
+           2.6.2 File system TRAP handlers.
+
+                 FS_CHECK Check pending operations.
+                 FS_FLUSH Flush all buffers.
+                 FS_POSAB Position absolute pointer.
+                 FS_POSRE Position relative pointer.
+                 FS_MDINF Get medium information.
+                 FS_LOAD  Load a file.
+                 FS_SAVE  Save a file.
+                 FS_HEADS Set file header.
+                 FS_HEADR Read file header.
+                 MD_OPEN  Open a microdrive channel.
+                 MD_CLOSE Close a microdrive channel.
+                 FILE_ABS Position file pointer using absolute offset.
+                 FILE_REL Position file pointer using relative offset.
+
+       2.7 Real time clock.
+
+                 MT_CLOCK Do clock funstion.
+
+       2.8 Screen TRAP handlers.
+
+                 WIN_CMND Check for window trap #3 commands.
+
+           2.8.1 Character information.
+
+                 SD_CHAR  Print a character.
+                 SD_PXENQ Get window pixel data.
+                 SD_CHENQ Get window character data.
+
+           2.8.2 Window definition.
+
+                 SD_WDEF  Redefine window.
+                 SD_BORDR Set border width and colour.
+                 SD_BORDE Set border width only.
+                 SD_REDEF Redefine window with new size.
+                 CHK_BORD Form overall window size from parameters.
+                 CHK_SIZE Form new window size inside border.
+
+           2.8.3 Cursor functions.
+
+                 SD_CURE  Enable cursor.
+                 SD_CURS  Disable cursor.
+                 PRNT_CUR Print the cursor if enabled.
+                 DISP_CUR Reprint the cursor.
+                 CHK_CURS Check cursor co-ordinates.
+                 SD_DONL  Do pending newline
+                 SD_NEWL  Do forced newline.
+                 SD_HOME  Reset cursor position to 0,0.
+                 SD_POS   Set cursor position.
+                 SD_TAB   Set horizontal position.
+                 SD_NL    Do newline.
+                 SD_PCOL  Set to previous column.
+                 SD_NCOL  Set to next column.
+                 SD_PROW  Set to previous row.
+                 SD_NROW  Set to next row.
+                 SD_PIXP  Set pixel position.
+
+           2.8.4 Colouring.
+
+                 SD_RECOL Recolour a window.
+                 SD_CLEAR Clear whole window
+                 SD_CLR   Clear a window
+                 SD_SCRLL Scroll a window
+                 SD_PANW  Pan a window.
+                 SD_FILL  Fill a block.
+                 SD_FOUNT Set character fonts.
+                 SD_SETCL Set colours.
+                 SD_SETFL Set flash mode.
+                 SD_SETMD Set write mode
+                 SD_SETUL Set underline mode.
+                 SD_SETSZ Set character size.
+
+           2.8.5 Graphics.
+
+                 SD_GCUR  Set cursor at graphic pos.
+                 SD_SCALE Set graphics scale/origin.
+                 SD_FLOOD Set fill mode/user vectors.
+                 SD_POINT Plot point.
+                 SD_LINE  Draw line.
+                 SD_ARC   Plot arc.
+                 SD_ELIPS Draw circle/ellipse.
+                 DO_TABLE Do table of maths offsets.
+
+           2.8.6 Screen manipulation utilities.
+
+                 UT_SCRLL Scroll a window.
+                 UT_PAN   Pan a window.
+                 COLRMASK Redo colour masks.
+                 PRINT_CH Print a character.
+
+       2.9 Microdrive slaving routines.
+
+                 MD_SLAVE Microdrive forced slaving.
+                 CLR_SBLK Clear the slave blocks used by a drive.
+                 BAD_MEDI Check if medium bad or unformatted.
+                 GAPINT   Gap interrupt handler.
+                 MD_DESEL Switch all microdrive motors off.
+                 MD_SELCT Switch a microdrive motor on.
+
+       2.10 IPC routines.
+
+                 IPC_CMND Do IPC Command.
+                 ACK_INTR Acknowledge peripheral interrupt or command.
+                 INTRFINT Interface interrupt handler.
+                 TRNSMINT Transmit interrupt handler.
+                 POLLTASK Start of polled tasks linked list.
+                 SECTASK  Second task in scheduler linked list.
+                 CHK_IPC  Check IPC input status.
+                 SER_TXRX Do transmit interrupt action for serial ports.
+                 CHK_KEY  Scan the keyboard and decode key press.
+                 CTRL_F5  Switch screen status.
+                 CTRL_C   Change current keyboard queue.
+                 IPC_SET  Set up IPC command.
+                 IPC_SEND Send command to IPC.
+                 IPC_RETN Get IPC return parameter nibble.
+                 IPC_RETB Get IPC return parameter byte.
+
+       2.11 General memory management utilities.
+
+                 MM_ALCHP Allocate common heap.
+                 MM_ALTPA Expand transient program area.
+                 MM_RECHP Release comman heap space.
+                 MM_RETPA Relase transient program area.
+                 MM_FREE  Find amount of free space.
+                 MM_ALLOC Allocate heap space.
+                 MM_SRCH  Search through a free space linked list.
+                 MM_LNKFR Link free space into heap.
+                 MM_ALBAS Allocate basic area.
+                 MM_REBAS Release basic area.
+
+       2.12 I/O sub-system TRAP #2 handler.
+
+                 CHKTRP2  Handle trap #2 functions.
+                 IO_OPEN  Open a channel.
+                 IO_CLOSE Close a channel.
+
+       2.13 I/O sub-system TRAP #3 handler.
+
+                 CHKTRP3  Handle trap #3 functions.
+                 CHKTRP4  Convert to absolute values.
+                 CHKCHID  Check channel id.
+                 DOWAITIO Do waiting I/O.
+                 IO_DELET Delete a file.
+                 IO_OPEN2 Check open type.
+                 IO_FORMT Format a medium.
+                 CHK_DD   Check directory device drivers linked list.
+                 IO_NAME  Decode device name.
+
+       2.14 Queue handling.
+
+                 IO_SERQ  Direct queue handling.
+                 IO_QSET  Set up a queue header.
+                 IO_QTEST Test queue status.
+                 IO_QIN   Put byte into queue.
+                 IO_QOUT  Get byte from queue.
+                 IO_QEOF  Put EOF marker in queue.
+                 IO_SERIO General I/O handling.
+                 IO_FLINE Fetch a line.
+                 IO_SSTRG Send a string of bytes.
+                 IO_LOAD  Load a file.
+                 IO_FSTRG Fetch a string of bytes.
+                 IO_PEND  Test pending input.
+                 IO_FBYTE Fetch a byte.
+                 IO_SBYTE Send a byte.
+                 IO_HEADS Set file header.
+                 IO_HEADR Read file header.
+
+       2.15 System utilities.
+
+                 UT_ERR0  Send error message to channel 0.
+                 UT_ERR   Send error message to channel.
+                 UT_MINT  Print decimal number on channel.
+                 UT_MTEXT Send message to channel.
+                 UT_LINK  Link item into list.
+                 UT_UNLNK Unlink item from list.
+                 UT_WINDW Create window channel.
+                 UT_CON   Create console channel.
+                 UT_SCR   Create screen channel.
+                 UT_CSTR  String comparison.
+
+       2.16 Conversion routines.
+
+                 CN_DTOF  Convert ascii to floating point.
+                 CN_DTOI  Convert ascii to integer.
+                 CN_HTOIB Convert ascii to hex byte.
+                 CN_HTOIW Convert ascii to hex word.
+                 CN_HTOIL Convert ascii to hex long.
+                 CN_BTOIB Convert ascii to binary byte.
+                 CN_BTOIW Convert ascii to binary word.
+                 CN_BTOIL Convert ascii to binary long.
+                 CN_ITOD  Convert integer to ascii.
+                 CN_ITOHL Convert hex long to ascii.
+                 CN_ITOHW Convert hex word to ascii.
+                 CN_ITOHB Convert hex byte to ascii.
+                 CN_ITOBL Convert binary long to ascii.
+                 CN_ITOBW Convert binary word to ascii.
+                 CN_ITOBB Convert binary byte to ascii.
+                 CN_FTOD  Convert floating point to ascii.
+                 CN_DATE  Get date string.
+                 CN_DAY   Get day string.
+
+       2.17 The floating point maths package.
+
+                 RI_SINGL Do single maths operation preserving A6.
+                 RI_LIST  Do list of maths operations preserving A6.
+                 RI_EXEC  Do a maths operation.
+                 RI_EXECB Do a list of maths operations.
+                 RI_SIN   Sin of TOS.
+                 RI_COS   Cosine of TOS.
+                 RI_TAN   Tangent of TOS.
+                 RI_COT   Cotangent of TOS.
+                 RI_ACOS  Arccosine of TOS.
+                 RI_ASIN  Arcsine of TOS.
+                 RI_ACOT  Arccotangent of TOS.
+                 RI_ATAN  Arctangent of TOS.
+                 RI_POWFP TOS raised to power of NOS.
+                 RI_LOG10 Common logarithm of TOS.
+                 RI_LN    Natural logarithm of TOS.
+                 RI_EXP   Exponential of TOS.
+                 RI_SQRT  Square root of TOS.
+                 RI_TRUNC Truncate floating point form into long word integer.
+                 RI_NORND As above with no rounding prior to truncation.
+                 RI_NINT  Integer flaoting point form into word integer.
+                 RI_INT   Truncate floating point form into word integer.
+                 RI_NLINT Integer floating point form into long integer.
+                 RI_LINT  Convert integer word into floating point form.
+                 RI_SUB   Subtract TOS from NOS.
+                 RI_ADD   Add TOS to NOS.
+                 RI_MULT  Multiply NOS by TOS.
+                 RI_DIV   Divide NOS by TOS.
+                 RI_ABS   Take absolute value of TOS.
+                 RI_NEG   Negate TOS.
+                 RI_DUP   Duplicate TOS.
+
+       2.18 Peripheral and SuperBASIC initialisation.
+
+                 CHKPROMS  Check for peripheral ROMs.
+
+       2.19 SuperBASIC stack management.
+
+                 CA_ALRIP Reserve space on maths stack 2.
+                 BV_CHRIX Reserve space on maths stack.
+                 BV_ALBTP Allocate space on backtrack stack.
+                 BV_ALTGP Allocate space on temporary graph stack.
+                 CA_ALNTP Allocate space in name table.
+                 CA_ALRTP Allocate space in return stack.
+                 CA_ALBFP Allocate space in buffer.
+                 CA_ALTKP Allocate space in token table.
+                 CA_ALNLP Allocate space in name list.
+                 CA_ALVVP Allocate space in variable values.
+                 CA_ALCHB Reserve space in SuperBASIC channel table.
+                 CA_ALLNP Allocate space in line number table.
+                 CA_ALPFP Allocate space in program file.
+                 CA_ALSBT Allocate space in SuperBASIC table.
+                 CA_ALSBS Allocate SuperBASIC stack.
+                 CA_GTSTR Get strings.
+                 CA_GTINT Get integers.
+                 CA_GTFP  Get floating points.
+                 CA_GTLIN Get long integers.
+
+       2.20 SuperBASIC procedures.
+
+                 BP_BAUD  Set baud rate for serial channels.
+                 BP_BEEP  Switch sound on or off.
+                 BP_CALL  Call machine code routine.
+                 GETCHID  Get SuperBASIC chanel information from id.
+                 BP_CSIZE Set new character size.
+                 BP_CURSO Position cursor with graphic co-ords.
+                 BP_AT    Position cursor at character co-ords.
+                 BP_ADATE Adjust system clock.
+                 BP_SDATE Reset system clock.
+                 BP_READ  Assign data to list of variables.
+                 BP_EXEC  Load a machine code program and return.
+                 BP_EXECW Load a machine code routine and wait.
+                 BP_LBYTE Load data file into memory.
+                 BP_SEXEC Save an executable program file.
+                 BP_SBYTE Save an area of memory to a device.
+                 BP_DLETE Remove a file from device directory.
+                 BP_DIR   Display device directory.
+                 BP_FORMT Format device medium.
+                 BP_COPY  Copy file.
+                 BP_COPYN Copy file minus header.
+                 BP_CLOSE Close a channel.
+                 BP_OPEN  Link channel with physical device.
+                 BP_OPENI Open existing microdrive file for I/P.
+                 BP_OPENN Open new microdrive file for O/P.
+                 BP_SAVE  Save SuperBASIC program on device.
+                 BP_FILL  Turn graphics fill on or off.
+                 BP_UNDER Turn underline state on or off.
+                 BP_FLASH Turn flash state on or off.
+                 BP_OVER  Select over printing type.
+                 BP_SCALE Alter graphics scale factor and origin.
+                 BP_POINT Draw point relative tp graphics origin.
+                 BP_RPOIN Draw point relative to graphics cursor.
+                 BP_LINE  Draw kine relative to graphics origin.
+                 BP_LINER Draw line relative to graphics cursor.
+                 BP_ELLIP Draw ellipse relative to graphics origin.
+                 BP_ELPSR Draw ellipse relative to graphics cursor.
+                 BP_ARC   Draw arc relative to graphics origin.
+                 BP_ARC_R Draw arc relative to graphics cursor.
+                 BP_INIT  Add SuperBASIC procedures.
+
+       2.21 Procedures and functions list.
+
+                 BP_LET   Return parameter values.
+
+       2.22 SuperBASIC procedures continued.
+
+                 BP_DLINE Remove SuperBASIC program lines.
+                 BP_LIST  List part of program on channel.
+                 SB_CCBTA Convert pre-compiled basic to ascii.
+                 BP_MODE  Set resolution of screen.
+                 BP_NET   Set network station number.
+                 BP_INK   Set current ink colour.
+                 BP_STRIP Set current strip colour.
+                 BP_PAPER Set current paper colour.
+                 BP_CLS   Clear part or all of window.
+                 BP_PAN   Pan part or all of screen.
+                 BP_SCROL Scroll part or all of screen.
+                 BP_PAUSE Delay executing a SuperBASIC program.
+                 BP_POKE  Place byte in memory.
+                 BP_POKEW Place word in memory.
+                 BP_POKEL Place long word in memory.
+                 BP_INPUT Read character(s) from a channel. 
+                 BP_PRINT Print character(s) to a channel.
+                 BP_RNDMZ Reseed random number generator.
+                 BP_RECOL Recolour individual pixels in window.
+                 BP_EDIT  Edit list of SuperBASIC lines.
+                 BP_AUTO  Generate line numbers automatically.
+                 BP_RENUM Renumber SuperBASIC program lines.
+                 BP_CLEAR Clear SuperBASIC variables.
+                 BP_RUN   Start program execution.
+                 BP_MERGE Load and merge a SuperBASIC program.
+                 BP_MRUN  Load, merge and run a SuperBASIC program.
+                 BP_LOAD  Load a SuperBASIC program.
+                 BP_LRUN  Load and run a SuperBASIC program.
+                 BP_NEW   Clear SuperBASIC program and variables.
+                 BP_STOP  Terminate program execution.
+                 BP_RETRY Re-execute SuperBASIC statement.
+                 BP_CONTI Continue halted SuperBASIC program.
+                 BP_TURNT Turn turtle to specified angle.
+                 BP_TURN  Turn turtle by specified angle.
+                 BP_PENUP Switch turtle graphics pen off
+                 BP_PENDO Switch turtle graphics pen on.
+                 BP_MOVE  Move turtle in current direction.
+                 BP_WIDTH Set default width on device.
+                 BP_WINDO Redefine channel's window.
+                 BP_BLOCK Fill a block with colour.
+                 BP_BORDE Add a border to a window.
+
+       2.23 SuperBASIC functions.
+
+                 BF_ACOS  Return arc cosine.
+                 BF_ACOT  Return arc cotangent.
+                 BF_ASIN  Return arc sine.
+                 BF_ATAN  Return arc tangent.
+                 BF_COS   Return cosine.
+                 BF_COS   Return cotangent.
+                 BF_EXP   Return exponential.
+                 BF_LN    Return natural logarithm.
+                 BF_LOG10 Return logarithm to base 10.
+                 BF_SIN   Return sine.
+                 BF_SQRT  Return square root.
+                 BF_TAN   Return tangent.
+                 BF_DEG   Return angle in degrees.
+                 BF_RAD   Return angle in radians.
+                 BF_ABS   Return absolute value of number.
+                 BF_RND   Return random number within limits.
+                 BF_PI    Return the value 3.141593.
+                 BF_INT   Return integer part of number.
+                 BF_PEEK  Return value of byte in memory.
+                 BF_PEEKW Return signed value of word in memory.
+                 BF_PEEKL Return signed value of long word in memory.
+                 BF_RESPR Reserve resident procedure space.
+                 BF_BEEPI Return sound status.
+                 BF_EOF   Return file or data statement status.
+                 BF_VER   Return SuperBASIC version number.
+                 BF_INKEY Return character from channel.
+                 BF_CHR   Return ascii character.
+                 BF_FILL  Return filled string.
+                 BF_LEN   Return length of string.
+                 BF_CODE  Return ascii value of character.
+                 BF_DIMN  Return maximum size of dimension.
+                 BF_DATE  Return current date in seconds.
+                 BF_KEYRW Return state of row of keyboard.
+                 BF_DATES Return current date and time.
+                 BF_DAY   Return current day of the week.
+
+       2.24 Interpreter.
+
+                 SB_SYNTX Basic syntax analyser.
+                 SB_CMPER Error when compiling.
+                 SB_FPCBL Format pre-compiled basic line.
+                 SB_SPFBL Store pre-formatted basic line.
+                 SB_GQLCI Get QDOS list channel id.
+                 SB_ELNOT Expand line number token.
+                 SB_ENMTE Expand name table entry.
+                 SB_ENAMT Expand name token.
+                 SB_ESTRT Expand string token.
+                 SB_ETXTT Expand Text token.
+                 SB_ESPCT Expand space token.
+                 SB_ESEPT Expand seperator token.
+                 SB_EOPST Expand operation symbol token.
+                 SB_EKEYT Expand keyword token.
+                 SB_EMONT Expand mono-operation symbol token.
+                 SB_ESYMT Expand symbol token.
+
+       2.25 Fonts.
+       2.26 Low level device routines.
+
+           2.26.1 Microdrive low level routines.
+
+                 MD_FORMT Format a microdrive medium.
+                 MD_WRITE Write a microdrive sector.
+                 MD_SECTR Read a microdrive sector header.
+                 MD_READ  Read a microdrive sector.
+                 MD_VERIN Verify a microdrive sector.
+
+           2.26.2 Keyboard low level routines.
+           2.26.3 Network low level routines.
+
+                 NT_RPCKT Receive a network packet.
+                 NT_SPCKT Send a network packet.
+
+    3. TRAP #1 calls.
+    4. TRAP #2 calls.
+    5. TRAP #3 calls.
+    6. Channel definition blocks.
+
+       Channel definition block for the serial device driver.
+       Channel definition block for the pipe device driver.
+       Channel definition block for the console/screen device driver.
+       Channel definition block for the network device driver.
+       Channel definition block for the microdrive device driver.
+
+    7. Other data blocks.
+
+       Physical definition block for the microdrive device driver.
+       Queue header.
+       File header.
+       Microdrive sector header.
+       Slave block table entry.
+       User heap or free space block.
+       SuperBASIC channel table block.
+       Device driver linkage block.
+       Job control block.
+
+    8. QDOS system variables.
+    9. SuperBASIC system variables.
+    10. Error codes.
+    11. Arithmetic package operation codes.
+    12. SuperBASIC tokens.
+
+       Token types.
+       Keyword tokens.
+       Symbol tokens.
+       Operation symbol tokens.
+       Mono-operation symbol tokens.
+       Seperator tokens.
+       SuperBASIC variable types.
+       Name table entry.
+       The variable values area entry for an array.
+       The variable values area entry for a REPeat loop.
+       The variable values area entry for a FOR loop.
+       SuperBASIC return stack entry.
+       Rom header.
+
+    13. Peripheral I/O devices.
+    14. IPC commands.
+    15. Numerical list of labels.
+    16. Alphabetical list of labels.
+    17. ROM dump.
+
+1. INTRODUCTION
+
+      This book constitutes a partially commented listing of QDOS version 1.03
+   and SuperBASIC version JM. It is available free from the Quanta library as I
+   have seen other disassemblies both commented and un-commented and have been
+   very dis-satisfied with all of them. It is not based on the origonal source
+   code as I did not have access to this and many of the names are of my own
+   devising as a result. The JS and MG ROM's are also largely similar so this
+   document could also be applied to them with some care.
+
+      It is not intended for the faint hearted as it is basically a commented
+   dis-assembly listing of the contents of the QL ROM and as such it represents
+   what I think the origonal source code would have looked like if I had been
+   the lucky individual chosen to design QDOS and SuperBASIC.
+
+1.1 Some notes on style and presentation.
+
+   Unless the reader is or was a softare engineer in a company which lays down
+   strict rules for documentation standards, they probably approach the topic
+   of documentation as a necessary evil or a chore which is really only for
+   "professionals" and such like.
+
+   Some companies prefer to employ special people known as technical authors.
+   They are employed to produce the bulk of the above mentioned documentation
+   and they usually have all the standard typographical resources they need
+   at their disposal to produce a QUALITY product. Other companies make the
+   designers write the documentation. This usually results in a considerably
+   lower quality product than that produced by the technical authors. There
+   are several reasons for this.
+
+   The first reason is that Software designers are talented people as far as
+   programming is concerned but they probably have had no training whatsoever
+   in writing and will have had no opportunity to acquire writing skills.
+
+   The second reason is that not enough time is allocated to the documentation
+   process itself because of ignorance on the part of managers or of team
+   leaders.
+
+   It can also vary greatly in both quality and quantity and in almost every
+   case some important detail, which will make life easier later on, will have
+   been ommitted. You can also be prettly sure that there are plenty of plain
+   old fashioned mistakes in there somewhere!
+
+   After several years of experience as a so called "professional", I take a
+   somewhat strange and different view towards documentation.
+
+   I have found that writing documentation for a software system tends to give
+   free rein to the creative side of my personality. The same appears to have
+   been the case of my colleages over the years except for those with little
+   or no talent at writing.
+
+   The point of all this potted diatribe is that I am trying to justify why this
+   book is so large and looks the way it does and why it is possibly difficult
+   to understand.
+
+   Documenting 48K of code was no easy task and required a considerable amount
+   of patience and a desire to see the finished result. If you wish to have a
+   go at documenting the other versions of the ROM's then I wish you luck.
+
+   As the intended audience for this dis-assembly is somebody who obviously
+   understands the assembly language of the Motorola MC68000 in detail and who
+   is intriged by and interested in how QDOS and SuperBASIC "do their stuff",
+   the documentation pulls no punches and no description of the CPU instruction
+   set will be given. It is also highly technical and is full of "Buzz" words
+   and other computer jargon because that is the way documentation of this sort
+   is normally written.
+
+   The style adopted will therefore be similar to that produced for any normal
+   software system for a software companies internal use. As a result it will
+   be substantial and will be as detailed as I can possibly make it.
+   
+   Some readers may therefore find the style rather strange and difficult to
+   follow and apologies are given to those individuals if so. The style used
+   obviously reflects my personal and professional preferences as regards
+   documentation.
+
+1.2 Sources and references.
+
+   The information which was available to me and on which this dis-assembly is
+   based, was gleaned from a number of standard texts on the QL, in particular:-
+
+
+
+                  "The Sinclair QDOS Companion" by Andrew Pennell.
+
+                    "QL Advanced User Guide" by Adrian Dickens.
+
+                 "QL Technical Manual" by Sinclair Research Limited.
+
+                "QL SuperBASIC The Definitive Handbook" by Jan Jones.
+
+                    "Advanced QL Machine Code" by Adam Denning.
+
+                 "QL Assembly Language Programming" by Colin Opie.
+
+
+
+   Other sources of information included snippets of conversation at SWINDON
+   computer weekends and user group meetings as well as books about operating
+   systems in general and multitasking operating systems in particular.
+
+   The above books have however been the major source of information as regards
+   the QL and its operating system.
+
+   The first of these has been of invaluable help and many thanks are given to
+   Andrew Pennell for bothering to write it. Without it, I would not have even
+   considered tackling disassembling the ROM at all as it contains descriptions
+   which he freely admits were gained by dis-assembling the ROM for himself!
+
+   The first QL's were very bug ridden and this unfortunatly has given the QL an
+   undeserved bad reputation in the eyes of computer snobs.
+
+   The above bugs luckily were mainly in the Superbasic Interpreter and not in
+   QDOS itself, which has remained largely unchanged throughout all the various
+   versions of the ROMS. This book describes the first of the two "working"
+   versions of QDOS and SuperBASIC in considerable detail and is intended to be
+   roughly equivalent to the similar disassemblies available of the Sinclair
+   Spectrum Basic ROM and the interface two shadow ROM.
+
+   I have distilled the essences of all the above works and combined them in a
+   large pot along with some special seasoning of my own to produce what I hope
+   is a digestable comestible ( or even a midnight snack if like me you work
+   programmer's hours, which is to say odd ones).
+
+   You should find this book fairly easy to read despite its size and scope even
+   though it is highly technical in bits. I have included a number of "asides"
+   where I have thought that a design point needed clarifying or where some
+   theory was required in order for the reader to understand what followed.
+
+
+                                  Happy reading!
+
+
+   C.A.M.
+
+   Havant, Hampshire June 1988
+
+1.3 Why I wrote this book.
+
+      Like most people who are into computers and programming, I still posses a
+   child like interest in how things work and so when I bought my QL, I decided
+   to find out how the operating system worked. When you consider that the QL is
+   still the only multitasking low cost home computer available at this time, it
+   seemed to me to present a wonderful opportunity to find out how a real time,
+   multitasking, operating system containing an advanced version of a structured
+   Basic works.
+
+      I therefore started out on what would later turn out to be a very long job
+   indeed. A year passed with only the main parts of the ROM commented in a very
+   sketchy form and it has taken another two years, at odd momemts, to complete
+   it. I did not really appreciate at the time that it probably took very many
+   people, working full time for a year or more, to write, code and test it, and
+   that their's was undoubtedly the much greater labour of love.
+
+   I also wished to produce a decent disassembly of the ROM having seen and read
+   a large number of other disassemblies, particularly the origonal Library one.
+   I was thoroughly dis-satisfied with all of them as they seemed to have been
+   put together without much thought or skill, for the purposes of producing an
+   assemblable or ROMable code version.
+
+      As the disassembly has not been proof read by either the author of QDOS or
+   the author of SuperBASIC, I have probably mis-interpreted many parts of the
+   ROM and so humble and heart felt apologies are honestly given to both Tony
+   Tebby, Jan Jones et al respectively if I have.
+
+1.4 How to print out this disassembly.
+
+      Although I have used the word "book" here it is of course supplied in the
+   form of a set of disc or microdrive cartridge files. In producing it, I have
+   had to take many decisions about the format of the main listing, and because
+   of this I have decided to use the full range of typesetting facilities which
+   are normally available on most dot matrix printers these days to improve the
+   presentation and hopefully the perceived quality of the book.
+
+   This set of files should therefore be printed out on a printer which supports
+   a condensed printing mode allowing upto at least 132 characters per line or
+   greater. The listing is interspersed throughout with formatting commands for
+   the EPSON LX800 printer and users who possess some other model of printer
+   should use an editor to change these globally to suit whatever printer they
+   have. The commands used are those for producing formfeeds, turning on and off
+   Bold or Emphasised text, turning on and off Double width printing and those
+   for underlining. One over-riding requirement however is that your printer
+   supports the IBM character set as the extended characters ( those with codes
+   above 128 ) have been used throughout the dis-assembly for routine headers,
+   memory maps and other graphics to improve the presentation. A SuperBASIC
+   program, PRINT_IT, will be included in the library at some point, which will
+   allow these characters to be translated to some other user defined character.
+
+      The owner can expect to wait a considerable number of hours, even at draft
+   quality speeds, for the print-outs to complete as the full set of listings
+   cover around about 1000 pages of standard A4 paper.
+
+   The four discs provided should contain the following files:-
+
+    Qdostexts1      Qdostexts2      Qdostexts3      Qdostexts4
+
+    intro           part9           part19          definitions
+    part1           part13          part50          labels_alpha
+    part3           part14          part51          labels_num
+    part5           part15          part99          ramdump
+    part6           part16
+
+   The best results of all can be obtained by using a Laser printer and if you
+   do, a pretty nifty printout results!
+
+1.5 Variable names and other details.
+
+      Most of the variable names used in the listings are denoted by one of two
+   forms, a two character prefix followed by an underscore, "_", and the rest of
+   the variable name meaning that the variable denotes an absolute value. Or it
+   may be a two character prefix followed by a full stop, ".", and the rest of
+   the variable name meaning that it is an offset from some base value.
+
+      As QDOS and SuperBASIC are both written to a highly modular design, I have
+   tried wherever possible to adopt a correspondingly consistant style of
+   documentation similar in manner to that used in the "SUBSET" series currently
+   running in the "Personal Computer World" magazine.
+
+      There is a complete list of the channel definition block offsets, for the
+   job control blocks and various other variables in the appendices including
+   both a numerical and an alphabetical listing of the labels used and their
+   values in hexadecimal.
+
+   The data field has been excluded from the listing itself to allow longer and
+   hopefully more meaningful comments in the comment field.
+
+      Finally for the two letter prefix used in most of the label names, I have
+   used the following conventions which include as a subset, the official ones:-
+
+    BF = SuperBASIC function
+    BP = SuperBASIC procedure
+    BT = slave block table entry
+    BV = SuperBASIC system variable
+    CA = SuperBASIC parameter passing
+    CH = channel definition block entry
+    CN = general conversion routine
+    FH = file header entry
+    FL = FOR loop entry in VV area
+    FS = File system
+    IO = I/O handler
+    JB = job control block entry
+    MC = master chip controller
+    MD = Microdrive function
+    MM = memory management
+    MT = manager TRAP
+    NT = network device driver
+    PC = peripheral chip
+    PP = pipe device driver
+    RA = array entry in VV area
+    RI = floating point maths package
+    RL = REPEAT loop entry in VV area
+    RS = SuperBASIC return stack entry
+    SC = general screen or console I/O
+    SD = Screen device I/O driver
+    SE = serial device driver
+    SH = sector header entry
+    SV = QDOS system variable
+    UH = user heap or free space block entry
+    UT = utility routine
+    VT = SuperBASIC variable type
+ 
+   Some three letter prefix's are also used as follows:-
+
+    CON = console device driver
+    DEV = general device driver
+    ERR = error number
+    IPC = Intelligent peripheral controller
+    KEY = keyword token
+    MDV = microdrive device driver
+    MON = mono-operation symbol token
+    NET = network device driver
+    NTB = name table entry
+    OPS = operation symbol token
+    ROM = external or peripheral rom header
+    SCR = screen device driver
+    SEP = separator token
+    SER = serial device driver
+    SYM = symbol token
+
+1.6 The hardware memory map.
+
+      All personal computers consist of a processor, a few other bits and some
+   memory. This block of memory is normally contiguous put is often broken into
+   individual segments with each segment serving a particular purpose.
+
+   A microprocessor must also have some means of accessing peripherals and the
+   MC68000 has the property that it accesses peripherals as individual locations
+   in the memory map. There are several of these peripherals (or ports as they
+   are called) and they are accessed by addresses within the lower part of the
+   memory map. The complete hardware memory map for the QL is shown below:-
+
+
+   ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿- 100000
+   ³                ³
+   ³ EXPANSION  I/O ³       256 kbytes
+   ³                ³ 
+   ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´- C0000
+   ³                ³
+   ³ EXPANSION  RAM ³       512 kbytes
+   ³                ³ 
+   ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´- 40000
+   ³                ³
+   ³   NORMAL RAM   ³       96 kbytes
+   ³                ³
+   ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´- 28000
+   ³                ³
+   ³   SCREEN RAM   ³       32 kbytes
+   ³                ³
+   ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´- 20000
+   ³                ³
+   ³ EXPANSION  I/O ³       16 kbytes
+   ³                ³
+   ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´- 1C000
+   ³                ³
+   ³ PERIPHERAL I/O ³       16 kbytes
+   ³                ³
+   ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´- 18000
+   ³                ³
+   ³ EXPANSION  I/O ³       32 kbytes
+   ³                ³
+   ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´- 10000
+   ³                ³
+   ³  PLUG IN ROM   ³       16 kbytes
+   ³                ³
+   ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´- 0C000
+   ³                ³
+   ³   SYSTEM ROM   ³       48 kbytes
+   ³                ³
+   ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ- 00000
+
+1.7 The QDOS software memory map.
+
+                   ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿- SV.RAMT
+                   ³                ³
+                   ³    RESIDENT    ³
+                   ³ PROCEDURE AREA ³
+                   ³                ³ 
+                   ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´- SV.RESPR
+                   ³                ³
+                   ³    TRANSIENT   ³
+         SV.TRNFR -³  PROGRAM AREA  ³
+                   ³                ³ 
+                   ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´- SV.TRNSP
+                   ³                ³
+                   ³   SUPERBASIC   ³
+                   ³      AREA      ³
+                   ³                ³
+                   ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´- SV.BASIC
+                   ³                ³
+                   ³     SLAVE      ³
+                   ³     BLOCKS     ³
+                   ³                ³
+                   ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´- SV.FREE
+                   ³                ³
+                   ³     COMMON     ³
+         SV.CHPFR -³      HEAP      ³
+                   ³                ³
+                   ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´- SV.CHEAP (SV.CHTOP)
+                   ³                ³
+                   ³     CHANNEL    ³
+         SV.CHPNT -³      TABLE     ³
+                   ³                ³
+                   ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´- SV.CHBAS (SV.JBTOP)
+                   ³                ³
+                   ³       JOB      ³
+         SV.JBPNT -³      TABLE     ³
+                   ³                ³
+                   ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´- SV.JBBAS (SV.BTTOP)
+                   ³                ³
+                   ³   SLAVE BLOCK  ³
+         SV.BTPNT -³      TABLE     ³
+                   ³                ³
+                   ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´- SV.BTBAS {SV.STACT}
+                   ³                ³
+                   ³   SUPERVISOR   ³
+              A7' -³      STACK     ³
+                   ³                ³
+                   ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´- {SV.STACB}
+                   ³                ³
+                   ³  QDOS SYSTEM   ³
+                   ³   VARIABLES    ³
+                   ³                ³
+                   ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ- {SV_IDENT} (28000)
+
+1.8 The SuperBASIC software memory map.
+
+                   ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿_ BV.SSBAS
+                   ³     USER       ³
+           BV.SSP -³     STACK      ³ 
+                   ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´_ BV.RIBAS
+                   ³   ARITHMETIC   ³ 
+           BV.RIP -³     STACK      ³
+                   ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´_ BV.TGBAS
+                   ³     GRAPH      ³
+           BV.TGP -³     STACK      ³
+                   ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´_ BV.BTBAS
+                   ³   BACKTRACK    ³
+           BV.BTP -³     STACK      ³
+                   ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+                   ³     SPARE      ³
+                   ³     SPACE      ³
+                   ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´ 
+                   ³  LINE NUMBER   ³
+           BV.LNP -³     TABLE      ³
+                   ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´- BV.LNBAS 
+                   ³     RETURN     ³
+           BV.RTP -³     STACK      ³
+                   ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´- BV.RTBAS
+                   ³    CHANNEL     ³
+           BV.CHP -³     TABLE      ³
+                   ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´- BV.CHBAS
+                   ³    VARIABLE    ³
+           BV.VVP -³     VALUES     ³
+                   ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´- BV.VVBAS
+                   ³      NAME      ³
+           BV.NLP -³      LIST      ³
+                   ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´- BV.NLBAS
+                   ³     NAME       ³
+           BV.NTP -³     TABLE      ³
+                   ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´- BV.NTBAS
+                   ³    PROGRAM     ³
+           BV.PFP -³      FILE      ³
+                   ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´- BV.PFBAS
+                   ³     TOKEN      ³
+           BV.TKP -³      LIST      ³
+                   ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´- BV.TKBAS
+                   ³     BUFFER     ³
+           BV.BFP -³                ³
+                   ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´- BV.BFBAS
+                   ³     SYSTEM     ³
+                   ³   VARIABLES    ³
+                   ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´- A6
+                   ³      JOB       ³
+                   ³     HEADER     ³
+                   ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ- SV.BASIC
+
+1.9 The QL hardware.
+
+      The QL hardware consists of an MC68000 CPU, an 8049 second processor,
+   several ULA's (Uncommitted Logic Array) and two ROM's plus various other
+   discrete components. The software splits up into two major components,
+   QDOS and the SuperBASIC interpreter.
+
+1.9.1 The structure of QDOS.
+
+      QDOS is a multitasking operating system which is interrupt driven and
+   poll controlled. This means that the operating system is perpetually
+   working unlike non-multitasking operating systems.
+
+   In a multitasking operating system, the CPU is always running some process
+   or job. In a non-multitasking operating system, the CPU may be executing
+   instructions from a loop a great deal of the time. This characteristic of
+   multitasking operating system means that one cannot be certain which one
+   of the many possible processes is "running" at any given instant except by
+   closely monitoring the memory accesses etc which the CPU is making. It also
+   makes de-bugging very much more difficult.
+
+   Multitasking operating systems as a species are very complex pieces of
+   software and tend to come in the form of a kernel or nucleus of routines
+   which are available to a process or job or application to use when it needs
+   to do something system specific. QDOS is no exception in this regard and
+   approximately 30K is devoted, out of the actual 44K used of the 48K ROM, to
+   the routines which make up QDOS.

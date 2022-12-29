@@ -1,0 +1,3026 @@
+2.7 Real time clock.
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³!MT_RCLCK        READ CLOCK                 (TRAP #1 WITH D0 = $13)           ³
+³!MT_SCLCK        SET CLOCK                  (TRAP #1 WITH D0 = $14)           ³
+³!MT_ACLCK        ADJUST CLOCK               (TRAP #1 WITH D0 = $15)           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³=MT_CLOCK        DO CLOCK FUNCTION                                            ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D1.L     amount of adjustment or time required               ³
+³                                                                              ³
+³EXIT:            D1.L     new time                                            ³
+³                                                                              ³
+³ERRORS:          NONE                                                         ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   The clock is set by writing a rotating binary mask into the clock register in
+   order to simulate the normal counting mechanism used by the clock chip itself.
+
+18B4 MT_CLOCK      LEA      PC_CLOCK,A0            ;A0 points at long word for clock
+18BA GETTIME       MOVE.L   (A0),D2                ;get the time
+                   CMP.L    (A0),D2                ;has it passed through zero
+                   BNE.S    GETTIME                ;re-read it if so
+                   CMPI.B   #MT.SCLK,D0            ;test clock function ?
+                   BGT.S    MT_ACLK                ;jump forward if adjust or set
+                   BEQ.S    MT_SCLK
+                   MOVE.L   D2,D1                  ;copy time to D1 and exit if read
+                   BRA.S    CLK_EXIT
+
+18CC MT_ACLK       ADD.L    D2,D1                  ;add basic time to adjustment
+18CE MT_SCLK       SF       (A0)+                  ;and reset time to zero
+                   MOVEQ    #-%00010001,D1
+                   MOVEQ    #3,D3                  ;number of clock bytes - 1
+18D4 CLKMASK       ROL.L    #8,D1                  ;rotate mask
+                   MOVEQ    #0,D2                  ;clear D2
+                   MOVE.B   D1,D2                  ;set D2 to 256
+                   BRA.S    NEWCLK
+
+18DC SETCLK        MOVE.B   D0,(A0)                ;write mask to clock port 256 times
+18DE NEWCLK        DBF      D2,SETCLK
+                   ROR.B    #1,D0
+                   DBF      D3,CLKMASK             ;next clock byte
+18E8 CLK_EXIT      BRA      CLEANUP
+
+2.8 Screen TRAP handlers.
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=WIN_CMND        CHECK FOR WINDOW TRAP #3 COMMANDS                            ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A0.L     channel definition block                            ³
+³                 A6.L     system variables                                    ³
+³                                                                              ³
+³EXIT:            none                                                         ³
+³                                                                              ³
+³ERRORS:          none                                                         ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+18EC WIN_CMND      MOVE.B   SD.CURF(A0),-(A7)      ;save cursor flag
+                   BLE.S    L018FE                 ;jump forward if enabled
+                   MOVEM.W  D0-2,-(A7)
+                   JSR      PRNT_CUR(PC)           ;print the cursor if enabled
+                   MOVEM.W  (A7)+,D0-2
+18FE L018FE        CMPI.B   #IO.SBYTE,D0           ;simple I/O command ?
+                   BNE.S    L0190A                 ;check for valid command if not
+                   JSR      SD_CHAR(PC)            ;print the character
+                   BRA.S    L01928                 ;test for any errors
+
+190A L0190A        CMPI.W   #SD.GCUR,D0            ;file system command ?
+                   BHI.S    SD_ERRBP               ;exit if so
+                   CMPI.W   #SD.EXTOP,D0           ;external operation ?
+                   BLT.S    SD_ERRBP               ;exit if simple I/O command
+                   BGT.S    L0191C                 ;jump forward if screen I/O command
+                   JSR      (A2)                   ;otherwise do the external operation
+                   BRA.S    L01928
+
+191C L0191C        ADD.B    D0,D0                  ;form word offset into table
+                   MOVEA.W  SD_TBL2-20(PC,D0.W),A3
+                   LSR.L    #1,D0                  ;restore D0
+                   JSR      WIN_CMND(PC,A3.W)      ;call appropriate command
+
+   Test the cursor staus on entry and exit from the screen command.
+
+1928 L01928        TST.B    (A7)+                  ;cursor enabled on entry ?
+                   BLE.S    L01942                 ;exit if so
+                   TST.L    D0                     ;any errors ?
+                   BNE.S    L01942                 ;exit if so
+                   TST.B    SD.CURF(A0)            ;cursor enabled now ?
+                   BGE.S    L01942                 ;exit if not
+                   MOVEM.L  D0-2,-(A7)
+                   JSR      SD_CURE(PC)            ;enable the cursor
+                   MOVEM.L  (A7)+,D0-2
+1942 L01942        TST.L    D0                     ;set flags for exit
+                   RTS
+
+1946 SD_BADP1      ADDQ.L   #4,A7                  ;restore stack
+1948 SD_ERRBP      MOVEQ    #ERR.BP,D0             ;signal "bad parameter"
+                   BRA.S    L01928                 ;and check cursor status
+
+   Table of offsets for general screen I/O.
+
+194C SD_TBL2       DC.W     SD_PXENQ-WIN_CMND      ;read size/cursor position (pixel)
+                   DC.W     SD_CHENQ-WIN_CMND      ;read size/cursor position (character)
+                   DC.W     SD_BORDR-WIN_CMND      ;set window border
+                   DC.W     SD_WDEF -WIN_CMND      ;redefine window
+                   DC.W     SD_CURE -WIN_CMND      ;enable cursor
+                   DC.W     SD_CURS -WIN_CMND      ;disable cursor
+                   DC.W     SD_POS  -WIN_CMND      ;set cursor position
+                   DC.W     SD_TAB  -WIN_CMND      ;set horizontal position
+                   DC.W     SD_NL   -WIN_CMND      ;do newline
+                   DC.W     SD_PCOL -WIN_CMND      ;set to previous column
+                   DC.W     SD_NCOL -WIN_CMND      ;set to next column
+                   DC.W     SD_PROW -WIN_CMND      ;set to previous row
+                   DC.W     SD_NROW -WIN_CMND      ;set to next row
+                   DC.W     SD_PIXP -WIN_CMND      ;set pixel position
+                   DC.W     SD_SCRLL-WIN_CMND      ;scroll entire window
+                   DC.W     SD_SCRLL-WIN_CMND      ;scroll top of window
+                   DC.W     SD_SCRLL-WIN_CMND      ;scroll bottom of window
+                   DC.W     SD_PANW -WIN_CMND      ;pan whole window
+                   DC.W     SD_BADP1-WIN_CMND      ;not implemented
+                   DC.W     SD_BADP1-WIN_CMND      ;not implemented
+                   DC.W     SD_PANW -WIN_CMND      ;pan cursor line
+                   DC.W     SD_PANW -WIN_CMND      ;pan RHS of cursor line
+                   DC.W     SD_CLEAR-WIN_CMND      ;clear whole window
+                   DC.W     SD_CLR  -WIN_CMND      ;clear top of window
+                   DC.W     SD_CLR  -WIN_CMND      ;clear bottom of window
+                   DC.W     SD_CLR  -WIN_CMND      ;clear cursor line
+                   DC.W     SD_CLR  -WIN_CMND      ;clear to right of cursor
+                   DC.W     SD_FOUNT-WIN_CMND      ;set character fonts
+                   DC.W     SD_RECOL-WIN_CMND      ;recolour a window
+                   DC.W     SD_SETCL-WIN_CMND      ;set paper colour
+                   DC.W     SD_SETCL-WIN_CMND      ;set strip colour
+                   DC.W     SD_SETCL-WIN_CMND      ;set ink colour
+                   DC.W     SD_SETFL-WIN_CMND      ;set flash mode
+                   DC.W     SD_SETUL-WIN_CMND      ;set underline mode
+                   DC.W     SD_SETMD-WIN_CMND      ;set write mode
+                   DC.W     SD_SETSZ-WIN_CMND      ;set character size
+                   DC.W     SD_FILL -WIN_CMND      ;fill a block
+                   DC.W     SD_DONL -WIN_CMND      ;do pending newline
+                   DC.W     SD_POINT-WIN_CMND      ;plot point
+                   DC.W     SD_LINE -WIN_CMND      ;draw line
+                   DC.W     SD_ARC  -WIN_CMND      ;plot arc
+                   DC.W     SD_ELIPS-WIN_CMND      ;draw circle/ellipse
+                   DC.W     SD_SCALE-WIN_CMND      ;set graphic scale and origin
+                   DC.W     SD_FLOOD-WIN_CMND      ;set fill mode/user vectors
+                   DC.W     SD_GCUR -WIN_CMND      ;set cursor wuth graphic co-ords
+
+2.8.1 Character information.
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=SD_CHAR         PRINT A CHARACTER                                            ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D1.B              character to print                         ³
+³                                                                              ³
+³EXIT:            none                                                         ³
+³                                                                              ³
+³ERRORS:          none                                                         ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+19A6 SD_CHAR       JSR      CHK_CURS(PC)           ;check cursor co-ordinates
+                   BLT.S    L019D0                 ;and exit if out of range
+                   MOVE.B   D1,D2                  ;copy cursor y co-ordinate
+                   MOVE.L   SD.XMIN(A0),?          ;get window x and y start
+                   ADD.L    SD.XPOS(A0),D0         ;add cursor position
+                   MOVE.W   D0,D1                  ;copy to D1
+                   SWAP     D0                     ;move x co-ordinate into view
+                   MOVE.B   SD.CATTR(A0),D3        ;get character attributes
+                   LEA      SD.SMASK(A0),A1        ;A1 points at colour masks list
+                   MOVEM.L  SD.FOUNT(A0),A2-3      ;then get font addresses
+                   JSR      PRINT_CH(PC)           ;and print the character
+                   BRA      SD_NCOL                ;set to next column
+19D0 L019D0        RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=SD_PXENQ        GET WINDOW PIXEL DATA      (TRAP #3 WITH D0 = $0A)           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D3.W     timeout                                             ³
+³                 A0.L     channel ID                                          ³
+³                 A1.L     start of buffer for results                         ³
+³                                                                              ³
+³EXIT:            D1,D2,D3,A0,A1 and A2 PRESERVED                              ³
+³                                                                              ³
+³ERRORS:          ERR.NC   not complete                                        ³
+³                 ERR.NO   invalid channel ID                                  ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   TRAP handler alters registers so that A0 points at channel definition block.
+
+19D2 SD_PXENQ      JSR      SD_DONL(PC)            ;activate any pending newlines
+                   MOVE.L   SD.XSIZE(A0),(A1)      ;copy window width, depth and cursor
+                   MOVE.L   SD.XPOS(A0),4(A1)      ;position to buffer
+                   MOVEQ    #0,D0                  ;signal "no errors"
+                   RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=SD_CHENQ        GET WINDOW CHARACTER DATA  (TRAP #3 WITH D0 = $0B)           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D3.W     timeout                                             ³
+³                 A0.L     channel ID                                          ³
+³                 A1.L     start of buffer for results                         ³
+³                                                                              ³
+³EXIT:            A1       corrupted                                           ³
+³                 D1,D2,D3,A0 and A2 preserved                                 ³
+³                                                                              ³
+³ERRORS:          ERR.NC   not complete                                        ³
+³                 ERR.NO   invalid channel ID                                  ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   TRAP handler alters registers so that A0 points at channel definition block.
+
+19E4 SD_CHENQ      BSR.S    SD_PXENQ               ;get window pixel data
+                   MOVE.L   D1,-(A7)
+                   MOVE.W   SD.XINC(A0),D0         ;get cursor width
+                   BSR.S    PIXL_DIV               ;divide into window pixel width and
+                   BSR.S    PIXL_DIV               ;into cursor x position
+                   SUBQ.W   #6,A1                  ;A1 points at depth parameter in buffer
+                   MOVE.W   SD.YINC(A0),D0         ;get cursor height
+                   BSR.S    PIXL_DIV               ;divide into window pixel height and
+                   BSR.S    PIXL_DIV               ;into cursor y position
+                   MOVE.L   (A7)+,D1
+                   SUBA.W   #10,A1                 ;restore pointer to buffer
+                   MOVEQ    #0,D0                  ;signal "no errors"
+                   RTS
+
+1A04 PIXL_DIV      MOVEQ    #0,D1                  ;prepare D1
+                   MOVE.W   (A1),D1                ;copy width/depth into low word
+                   DIVU     D0,D1                  ;divide by cursor width/height
+                   MOVE.W   D1,(A1)                ;and replace in buffer
+                   ADDQ.W   #4,A1                  ;then set up for second call
+                   RTS
+
+2.8.2 Window definition.
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=SD_WDEF         REDEFINE WINDOW            (TRAP #3 WITH D0 = $0D)           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D1.B     border colour                                       ³
+³                 D2.W     border width                                        ³
+³                 D3.W     timeout                                             ³
+³                 A0.L     channel ID                                          ³
+³                 A1.L     start of parameter block                            ³
+³                                                                              ³
+³EXIT:            D1 and A1  corrupted                                         ³
+³                 D2,D3,A0 and A2 preserved                                    ³
+³                                                                              ³
+³ERRORS:          ERR.NC   not complete                                        ³
+³                 ERR.OR   window too large                                    ³
+³                 ERR.NO   invalid channel ID                                  ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   TRAP handler alters registers so that A0 points at channel definition block.
+   The parameter block contains the following:-
+
+   1.     Y position                                   $06(A1)
+   2.     X position                                   $04(A1)
+   3.     Window pixel depth                           $02(A1)
+   4.     Window pixel width                           $00(A1)
+
+1A10 SD_WDEF       MOVEM.W  D1-4,-(A7)
+                   JSR      SD_HOME(PC)            ;reset cursor and cancel newlines
+                   MOVEM.W  (A1),D0-3              ;copy parameter block to registers
+                   EXG      D0,D2                  ;exchange x position and width
+                   EXG      D1,D3                  ;exchange y position and depth
+
+   D0 = x , D1 = y , D2 = width , D3 = depth
+
+                   MOVEQ    #0,D4
+                   BCLR     D4,D0                  ;make x co-ordinate and width even
+                   BCLR     D4,D2
+                   TST.W    D2                     ;width zero ?
+                   BEQ      SD_OUTR1               ;exit if so
+                   TST.W    D3                     ;depth zero ?
+                   BEQ      SD_OUTR1               ;exit if so
+                   MOVE.W   D0,D4                  ;form x co-ordinate of RHS in D4
+                   ADD.W    D2,D4
+                   BCS      SD_OUTR1               ;exit if bad width given
+                   CMPI.W   #512,D4                ;RHS ok ?
+                   BHI.S    SD_OUTR1               ;exit if not
+                   MOVE.W   D1,D4                  ;form y co-ordinate of bottom in D4
+                   ADD.W    D3,D4
+                   BCS.S    SD_OUTR1               ;exit if bad height given
+                   CMPI.W   #256,D4                ;bottom ok ?
+                   BHI.S    SD_OUTR1               ;exit if not
+                   CLR.W    SD.BORWD(A0)           ;set border width to zero
+                   BRA.S    SD_REDEF               ;redraw the window to new size
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=SD_BORDR        SET BORDER WIDTH and COLOUR  (TRAP #3 WITH D0 = $0C)         ³
+³=SD_BORDE        SET BORDER WIDTH ONLY                                        ³
+³=SD_REDEF        REDEFINE WINDOW WITH NEW SIZE                                ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D1.B     border colour ($80 = transparent)                   ³
+³                 D2.W     border width                                        ³
+³                 D3.W     timeout                                             ³
+³                 A0.L     channel ID                                          ³
+³                                                                              ³
+³EXIT:            D1       corrupted                                           ³
+³                 D2,D3,A0,A1 and A2 preserved                                 ³
+³                                                                              ³
+³ERRORS:          ERR.NC   not complete                                        ³
+³                 ERR.OR   border too large                                    ³
+³                 ERR.NO   invalid channel ID                                  ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   TRAP handler alters registers so that A0 points at channel definition block.
+
+1A52 SD_BORDR      MOVE.B   D1,SD.BCOLR(A0)        ;set window colour first
+1A56 SD_BORDE      MOVEM.W  D1-4,-(A7)
+                   CMP.W    SD.BORWD(A0),D2        ;border width to change ?
+                   BEQ.S    NO_CHNGE               ;jump forward if not
+                   JSR      SD_HOME(PC)            ;reset cursor position and status
+1A64 NO_CHNGE      MOVEM.W  SD.XMIN(A0),D0-4       ;get window pixel parameters
+                   BSR.S    CHK_BORD               ;form overall window size
+1A6C SD_REDEF      MOVE.W   2(A7),D4               ;get requested border width
+                   CMPI.W   #256,D4                ;width ok ?
+                   BHI.S    SD_OUTR1               ;exit if not
+                   BSR.S    CHK_SIZE               ;check border for size
+
+   Registers D0 - D4 now contain the correct values for the new window:-
+
+   1.     D0 = new x start           (old x start + border width)
+   2.     D1 = new y start           (old y start + border width)
+   3.     D2 = new pixel width       (old pixel width - 4 * border width)
+   4.     D3 = new pixel height      (old pixel height - 2 * border width)
+   5.     D4 = border width
+
+                   MOVEM.W  D0-4,SD.XMIN(A0)       ;update window definitions
+                   BEQ.S    L01ABA                 ;exit if zero border specified
+                   MOVE.W   (A7),D1                ;get requested border colour
+                   CMPI.B   #$80,D1                ;border to be transparent ?
+                   BEQ.S    L01ABA                 ;exit if so
+                   MOVEA.L  A7,A1                  ;A1 points at parameter block on stack
+                   JSR      COLRMASK(PC)           ;redo colour masks
+                   MOVE.W   SD.YMIN(A0),D1         ;reset y start to old value
+                   BSR.S    CHK_BORD               ;form new overall window size
+                   NEG.W    D4                     ;reset border width
+                   EXG      D4,D3                  ;exchange pixel height and border width
+                   JSR      UT_FILL1(PC)           ;fill the block for top border
+                   ADD.W    D4,D1                  ;set y start to bottom of old window
+                   SUB.W    D3,D1                  ;and then of new window
+                   JSR      UT_FILL1(PC)           ;fill the block for bottom border
+                   ADD.W    D3,D1                  ;reset y to top of window
+                   SUB.W    D4,D1                  ;and then bottom of top border
+                   EXG      D4,D3                  ;restore pixel height and border width
+                   ADD.W    D4,D4                  ;double border width for mode 8
+                   EXG      D4,D2                  ;exchange pixel width and border width
+                   JSR      UT_FILL1(PC)           ;fill the block for left border
+                   ADD.W    D4,D0                  ;set x start to RHS of window
+                   SUB.W    D2,D0                  ;and move in by border width
+                   JSR      UT_FILL1(PC)           ;fill the block for right border
+1ABA L01ABA        MOVEQ    #0,D0                  ;signal "no errors"
+                   BRA.S    L01AC0
+
+1ABE SD_OUTR1      MOVEQ    #ERR.OR,D0             ;signal "out of range"
+1AC0 L01AC0        MOVEM.W  (A7)+,D1-4
+                   RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=CHK_BORD        FORM OVERALL WINDOW SIZE FROM PARAMETERS                     ³
+³=CHK_SIZE        FORM NEW WINDOW SIZE INSIDE BORDER                           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D0.W     window x start                                      ³
+³                 D1.W     window y start                                      ³
+³                 D2.W     window pixel width                                  ³
+³                 D3.W     window pixel height                                 ³
+³                 D4.W     border width                                        ³
+³                                                                              ³
+³EXIT:            D0.W     new x start                                         ³
+³                 D1.W     new y start                                         ³
+³                 D2.W     new pixel width                                     ³
+³                 D3.W     new pixel height                                    ³
+³                 D4,A0,A1,A2,A3 preserved                                     ³
+³                                                                              ³
+³ERRORS:          ERR.OR   border to large                                     ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+1AC6 CHK_BORD      NEG.W    D4                     ;form , - border
+1AC8 CHK_SIZE      ADD.W    D4,D1                  ;D1 = y start +/- border
+                   ADD.W    D4,D4                  ;double border width
+                   SUB.W    D4,D3                  ;D3 = height +/- 2 * border
+                   BLE.S    TOO_BIG                ;exit if too large
+                   ADD.W    D4,D0                  ;D0 = x start +/- 2 * border
+                   ADD.W    D4,D4                  ;double border width again
+                   SUB.W    D4,D2                  ;D2 = width +/- 4 * border
+                   BLE.S    TOO_BIG                ;exit if too large
+                   ASR.W    #2,D4                  ;reset border width
+                   RTS
+
+1ADC TOO_BIG       ADDQ.W   #4,A7                  ;restore stack
+                   BRA.S    SD_OUTR1               ;and exit with error
+
+2.8.3 Cursor functions.
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=SD_CURE         ENABLE CURSOR              (TRAP #3 WITH D0 = $0E)           ³
+³=SD_CURS         DISABLE CURSOR             (TRAP #3 WITH D0 = $0F)           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D3.W     timeout                                             ³
+³                 A0.L     channel ID                                          ³
+³                                                                              ³
+³EXIT:            D1 and A1  corrupted                                         ³
+³                 D2,D3,A0 and A2 preserved                                    ³
+³                                                                              ³
+³ERRORS:          ERR.NC   not complete                                        ³
+³                 ERR.OR   cursor will not fit in window                       ³
+³                 ERR.NO   invalid channel ID                                  ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   TRAP handler alters registers so that A0 points at channel definition block.
+
+1AE0 SD_CURE       MOVEQ    #1,D2
+                   TST.B    SD.CURF(A0)            ;cursor already enabled ?
+                   BGT.S    L01B24                 ;exit if so
+                   JSR      SD_DONL(PC)            ;activate any pending newlines
+                   BRA.S    DISP_CUR               ;print the cursor if it fits
+
+1AEE SD_CURS       MOVEQ    #0,D2
+                   TST.B    SD.CURF(A0)            ;cursor already disabled ?
+                   BGT.S    DISP_CUR               ;un-print the cursor if it fits
+                   MOVE.B   D2,SD.CURF(A0)         ;signal "suppressed"
+                   BRA.S    L01B24
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=PRNT_CUR        PRINT THE CURSOR IF ENABLED                                  ³
+³=DISP_CUR        REPRINT THE CURSOR                                           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A0.L     channel definition block                            ³
+³                                                                              ³
+³EXIT:            D1.W     cursor y co-ordinate                                ³
+³                                                                              ³
+³ERRORS:          ERR.OR   cursor too large for window                         ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+1AFC PRNT_CUR      MOVE.B   SD.CURF(A0),D2         ;cursor enabled ?
+                   BEQ.S    L01B24                 ;exit if not
+                   NEG.B    D2
+1B04 DISP_CUR      JSR      CHK_CURS(PC)           ;check cursor co-ordinates
+                   BLT.S    L01B26                 ;exit if too large
+                   MOVE.B   D2,SD.CURF(A0)         ;signal "enabled"
+                   MOVE.L   SD.XMIN(A0),D0         ;get window start
+                   ADD.L    SD.XPOS(A0),D0         ;add requested cursor position
+                   MOVE.W   D0,D1                  ;copy y co-ordinate to D1
+                   SWAP     D0                     ;move x co-ordinate into low word
+                   MOVEM.W  SD.XINC(A0),D2-3       ;and get window data
+                   JSR      UT_FILL0(PC)           ;print the cursor
+1B24 L01B24        MOVEQ    #0,D0                  ;signal "no errors"
+1B26 L01B26        RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=CHK_CURS        CHECK CURSOR CO-ORDINATES                                    ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A0.L     channel definition block                            ³
+³                                                                              ³
+³EXIT:            D1,D2,D3,A0,A1,A2 and A3 preserved                           ³
+³                                                                              ³
+³ERRORS:          ERR.OR   cursor too large for window                         ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   TRAP handler alters registers so that A0 points at channel definition block.
+
+1B28 CHK_CURS      MOVE.L   SD.XPOS(A0),D0         ;get cursor co-ordinates
+                   BMI.S    SD_OUTR2               ;and exit if x co-ordinate too small
+                   TST.W    D0                     ;y co-ordinate ok ?
+                   BMI.S    SD_OUTR2               ;exit if too small
+                   ADD.L    SD.XINC(A0),D0         ;add cursor width and height
+                   CMP.W    SD.YSIZE(A0),D0        ;out of screen ?
+                   BHI.S    SD_OUTR2               ;exit if too large
+                   SWAP     D0                     ;move x co-ordinate into view
+                   CMP.W    SD.XSIZE(A0),D0        ;out of screen ?
+                   BHI.S    SD_OUTR2               ;exit if too large
+                   MOVEQ    #0,D0                  ;signal "no errors"
+                   RTS
+
+1B48 SD_OUTR2      MOVEQ    #ERR.OR,D0             ;signal "out of range"
+                   RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=SD_DONL         DO PENDING NEWLINE         (TRAP #3 WITH D0 = $2F)           ³
+³=SD_NEWL         DO FORCED NEWLINE                                            ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D3.W     timeout                                             ³
+³                 A0.L     channel ID                                          ³
+³                                                                              ³
+³EXIT:            D1 and A1  corrupted                                         ³
+³                 D2,D3,A0 and A2 preserved                                    ³
+³                                                                              ³
+³ERRORS:          ERR.NC   not complete                                        ³
+³                 ERR.NO   invalid channel ID                                  ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   TRAP handler alters registers so that A0 points at channel definition block.
+
+1B4C SD_DONL       TST.B    SD.NLSTA(A0)           ;any pending newlines ?
+                   BEQ.S    END_NL                 ;exit if not
+1B52 SD_NEWL       MOVEM.L  D0-2/A1,-(A7)
+                   JSR      SD_NL(PC)              ;do newline
+                   BEQ.S    EXIT_NL                ;and exit if out of screen
+                   MOVEQ    #SD.SCROL,D0           ;signal "scroll entire window"
+                   MOVE.W   SD.YINC(A0),D1         ;get cursor height
+                   NEG.W    D1                     ;signal "scroll up"
+                   JSR      SD_SCRLL(PC)           ;scroll window
+                   CLR.W    SD.XPOS(A0)            ;start at beginning of new line
+1B6C EXIT_NL       SF       SD.NLSTA(A0)           ;signal "no pending newlines"
+                   MOVEM.L  (A7)+,D0-2/A1
+1B74 END_NL        RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=SD_HOME         RESET CURSOR POSITION TO 0,0                                 ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A0.L     channel definition block                            ³
+³                                                                              ³
+³EXIT:            none                                                         ³
+³                                                                              ³
+³ERRORS:          none                                                         ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+1B76 SD_HOME       CLR.L    SD.XPOS(A0)            ;set cursor co-ordinates to 0,0
+                   BRA.S    CANCEL                 ;reset newline status and exit
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=SD_POS          SET CURSOR POSITION        (TRAP #3 WITH D0 = $10)           ³
+³=SD_TAB          SET HORIZONTAL POSITION    (TRAP #3 WITH D0 = $11)           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D1.W     x position in characters                            ³
+³                 D2.W     y position in characters if SD.POS                  ³
+³                 D3.W     timeout                                             ³
+³                 A0.L     channel ID                                          ³
+³                                                                              ³
+³EXIT:            D1 and A1  corrupted                                         ³
+³                 D2,D3,A0 and A2 preserved                                    ³
+³                                                                              ³
+³ERRORS:          ERR.NC   not complete                                        ³
+³                 ERR.OR   window not large enough                             ³
+³                 ERR.NO   invalid channel ID                                  ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   TRAP handler alters registers so that A0 points at channel definition block.
+
+1B7C SD_POS        MULU     SD.YINC(A0),D2         ;multiply line number by cursor height
+                   BRA.S    SD_COL                 ;and likewise for column number
+
+1B82 SD_TAB        MOVE.W   SD.YPOS(A0),D2         ;get cursor y co-ordinate
+1B86 SD_COL        MULU     SD.XINC(A0),D1         ;multiply column number by cursor width
+                   BRA.S    SD_PIXP                ;set cursor pixel position
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=SD_NL           DO NEWLINE                 (TRAP #3 WITH D0 = $12)           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D3.W     timeout                                             ³
+³                 A0.L     channel ID                                          ³
+³                                                                              ³
+³EXIT:            D1 and A1  corrupted                                         ³
+³                 D2,D3,A0 and A2 preserved                                    ³
+³                                                                              ³
+³ERRORS:          ERR.NC   not complete                                        ³
+³                 ERR.OR   if at bottom of window                              ³
+³                 ERR.NO   invalid channel ID                                  ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   TRAP handler alters registers so that A0 points at channel definition block.
+
+1B8C SD_NL         MOVEQ    #0,D1                  ;set x position to start of line
+                   MOVE.W   SD.YPOS(A0),D2         ;get y position and increment by the
+                   ADD.W    SD.YINC(A0),D2         ;current cursor height
+                   BRA.S    SD_PIXP                ;set new cursor position
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=SD_PCOL         SET TO PREVIOUS COLUMN     (TRAP #3 WITH D0 = $13)           ³
+³=SD_NCOL         SET TO NEXT COLUMN         (TRAP #3 WITH D0 = $14)           ³
+³=SD_PROW         SET TO PREVIOUS ROW        (TRAP #3 WITH D0 = $15)           ³
+³=SD_NROW         SET TO NEXT ROW            (TRAP #3 WITH D0 = $16)           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D3.W     timeout                                             ³
+³                 A0.L     channel ID                                          ³
+³                                                                              ³
+³EXIT:            D1 and A1  corrupted                                         ³
+³                 D2,D3,A0 and A2 preserved                                    ³
+³                                                                              ³
+³ERRORS:          ERR.NC   not complete                                        ³
+³                 ERR.OR   cursor out of window                                ³
+³                 ERR.NO   invalid channel ID                                  ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   TRAP handler alters registers so that A0 points at channel definition block.
+
+1B98 SD_PCOL       MOVE.W   SD.XPOS(A0),D1         ;get x position and decrement by the
+                   SUB.W    SD.XINC(A0),D1         ;current cursor width
+                   BRA.S    L01BAA
+
+1BA2 SD_NCOL       MOVE.W   SD.XPOS(A0),D1         ;get x position and increment by the
+                   ADD.W    SD.XINC(A0),D1         ;current cursor width
+1BAA L01BAA        MOVE.W   SD.YPOS(A0),D2         ;get y position
+                   BRA.S    SD_PIXP                ;and set cursor position
+
+1BB0 SD_PROW       MOVE.W   SD.YPOS(A0),D2         ;get y position and decrement by the
+                   SUB.W    SD.YINC(A0),D2         ;current cursor height
+                   BRA.S    L01BC2
+
+1BBA SD_NROW       MOVE.W   SD.YPOS(A0),D2         ;get y position and increment by the
+                   ADD.W    SD.YINC(A0),D2         ;current cursor height
+1BC2 L01BC2        MOVE.W   SD.XPOS(A0),D1         ;get x position and continue into...
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=SD_PIXP         SET PIXEL POSITION         (TRAP #3 WITH D0 = $17)           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D1.W     x position                                          ³
+³                 D2.W     y position                                          ³
+³                 D3.W     timeout                                             ³
+³                 A0.L     channel ID                                          ³
+³                                                                              ³
+³EXIT:            D1 and A1  corrupted                                         ³
+³                 D2,D3,A0 and A2 preserved                                    ³
+³                                                                              ³
+³ERRORS:          ERR.NC   not complete                                        ³
+³                 ERR.OR   window not large enough                             ³
+³                 ERR.NO   invalid channel ID                                  ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   TRAP handler alters registers so that A0 points at channel definition block and
+   A6 points at system variables.
+
+1BC6 SD_PIXP       MOVE.W   D1,D0                  ;get x position to set flags
+                   BLT.S    SD_OUTR3               ;and exit if out of window
+                   ADD.W    SD.XINC(A0),D0         ;form x co-ordinate + cursor width
+                   CMP.W    SD.XSIZE(A0),D0        ;within window ?
+                   BHI.S    SD_OUTR3               ;exit if not
+                   MOVE.W   D2,D0                  ;get y position to set flags
+                   BLT.S    SD_OUTR3               ;and exit if out of window
+                   ADD.W    SD.YINC(A0),D0         ;form y co-ordinate + cursor height
+                   CMP.W    SD.YSIZE(A0),D0        ;within window ?
+                   BHI.S    SD_OUTR3               ;exit if not
+                   BTST     #3,SV.MCSTA(A6)        ;mode 4 or 8 ?
+                   BEQ.S    L01BEE                 ;jump forward if mode 4
+                   BCLR     #0,D1                  ;otherwise make position even
+1BEE L01BEE        MOVEM.W  D1-2,SD.XPOS(A0)       ;update channel definition block
+1BF4 CANCEL        SF       SD.NLSTA(A0)           ;cancel any pending newlines
+                   MOVEQ    #0,D0                  ;signal "no errors"
+                   RTS
+
+1BFC SD_OUTR3      MOVEQ    #ERR.OR,D0             ;signal "out of range"
+                   RTS
+
+2.8.4 Colouring.
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=SD_RECOL        RECOLOUR A WINDOW          (TRAP #3 WITH D0 = $26)           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D3.W     timeout                                             ³
+³                 A0.L     channel ID                                          ³
+³                 A1.L     location of colour list                             ³
+³                                                                              ³
+³EXIT:            D1 and A1  corrupted                                         ³
+³                 D2,D3,A0 and A2 preserved                                    ³
+³                                                                              ³
+³ERRORS:          ERR.NC   not complete                                        ³
+³                 ERR.NO   invalid channel ID                                  ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+1C00 SD_RECOL      MOVEQ    #0,D0                  ;signal "whole window"
+                   LEA      UT_FILL3(PC),A2        ;A2 points at window recolour routine
+                   BRA.S    SD_DO_OP               ;do the operation
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³!SD_CLRTP        CLEAR TOP OF WINDOW        (TRAP #3 WITH D0 = $21)           ³
+³!SD_CLRBT        CLEAR BOTTOM OF WINDOW     (TRAP #3 WITH D0 = $22)           ³
+³!SD_CLRLN        CLEAR CURSOR LINE          (TRAP #3 WITH D0 = $23)           ³
+³!SD_CLRRT        CLEAR TO RIGHT OF CURSOR   (TRAP #3 WITH D0 = $24)           ³
+³!SD_SCROL        SCROLL ENTIRE WINDOW       (TRAP #3 WITH D0 = $18)           ³
+³!SD_SCRTP        SCROLL TOP OF WINDOW       (TRAP #3 WITH D0 = $19)           ³
+³!SD_SCRBT        SCROLL BOTTOM OF WINDOW    (TRAP #3 WITH D0 = $1A)           ³
+³!SD_PAN          PAN WHOLE WINDOW           (TRAP #3 WITH D0 = $1B)           ³
+³!SD_PANLN        PAN CURSOR LINE            (TRAP #3 WITH D0 = $1E)           ³
+³!SD_PANRT        PAN RHS OF CURSOR LINE     (TRAP #3 WITH D0 = $1F)           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³=SD_CLEAR        CLEAR WHOLE WINDOW         (TRAP #3 WITH D0 = $20)           ³
+³=SD_CLR          CLEAR A WINDOW                                               ³
+³=SD_SCRLL        SCROLL A WINDOW                                              ³
+³=SD_PANW         PAN A WINDOW                                                 ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D1.W     amount of movement if scroll or pan                 ³
+³                 D3.W     timeout                                             ³
+³                 A0.L     channel ID                                          ³
+³                                                                              ³
+³EXIT:            D1 and A1  corrupted                                         ³
+³                 D2,D3,A0 and A2 preserved                                    ³
+³                                                                              ³
+³ERRORS:          ERR.NC   not complete                                        ³
+³                 ERR.NO   invalid channel ID                                  ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   TRAP handler alters registers so that A0 points at channel definition block and
+   A6 points at system variables.
+
+1C08 SD_CLEAR      JSR      SD_HOME(PC)            ;set cursor position to 0,0
+                   MOVEQ    #SD.CLEAR,D0           ;signal "clear whole window"
+1C0E SD_CLR        SUBI.W   #$20,D0                ;form clear type (0,1,2,3 or 4)
+                   LEA      UT_FILL1(PC),A2        ;A2 points at block fill routine
+                   BRA.S    SD_SETUP
+
+1C18 SD_SCRLL      SUBI.W   #$18,D0                ;form scroll type (0,1 or 2)
+                   LEA      UT_SCRLL(PC),A2        ;A2 points at scroll routine
+                   BRA.S    SD_SETUP
+
+1C22 SD_PANW       SUBI.W   #$1B,D0                ;form pan type (0,3 or 4)
+                   LEA      UT_PAN(PC),A2          ;A2 points at pan routine
+                   BTST     #3,SV.MCSTA(A6)        ;mode 4 or 8 ?
+                   BEQ.S    SD_SETUP               ;jump forward if mode 4
+                   BCLR     #0,D1                  ;otherwise make amount even
+
+   Process types are as follows:-
+
+   1.     0 = whole window
+   2.     1 = top excluding the cursor line
+   3.     2 = bottom excluding the cursor line
+   4.     3 = whole of the cursor line
+   5.     4 = right hand end of cursor line including cursor
+
+1C36 SD_SETUP      LEA      SD.PMASK(A0),A1        ;A1 points at colour masks list
+1C3A SD_DO_OP      MOVEM.L  D4-5,-(A7)
+                   MOVE.W   D1,D4                  ;copy amount to D4
+                   MOVE.W   D0,D5                  ;and process type to D5
+                   MOVEM.W  SD.XMIN(A0),D0-3       ;then copy window data
+                   SUBQ.W   #1,D5                  ;check move type
+                   BLT.S    SD_WHOLE               ;jump forward if whole window
+                   BGT.S    SD_REST                ;and if cursor line or bottom
+                   MOVE.W   SD.YPOS(A0),D3         ;make height = amount above cursor
+                   BRA.S    SD_WHOLE               ;and pan this
+
+   Cursor line or bottom of window to be processed . The registers are
+   set up as follows:-
+
+   1.     D0 = window x start
+   2.     D1 = window y start
+   3.     D2 = window pixel width
+   4.     D3 = window pixel height
+   5.     D4 = amount
+   6.     D5 = move type (now 0 to 3)
+
+1C54 SD_REST       ADD.W    SD.YPOS(A0),D1         ;make window y start = cursor line
+                   SUBQ.W   #2,D5                  ;check process types
+                   BGE.S    SD_CLINE               ;jump forward for cursor line
+                   SUB.W    SD.YPOS(A0),D3         ;D3 = height including cursor line
+                   MOVE.W   SD.YINC(A0),D5         ;get the cursor height
+                   ADD.W    D5,D1                  ;form y start of bottom of screen
+                   SUB.W    D5,D3                  ;and height of bottom of screen
+                   BLE.S    L01C7E                 ;exit if too small
+                   BRA.S    SD_WHOLE               ;otherwise to the process
+
+1C6C SD_CLINE      MOVE.W   SD.YINC(A0),D3         ;set window height to cursor height
+                   TST.W    D5                     ;all of line ?
+                   BEQ.S    SD_WHOLE               ;jump forward if so
+                   ADD.W    SD.XPOS(A0),D0         ;otherwise come in to cursor position
+                   SUB.W    SD.XPOS(A0),D2         ;and then just past
+1C7C SD_WHOLE      JSR      (A2)                   ;do the operation
+1C7E L01C7E        MOVEQ    #0,D0                  ;signal "no errors"
+                   MOVEM.L  (A7)+,D4-5
+                   RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=SD_FILL         FILL A BLOCK               (TRAP #3 WITH D0 = $2E)           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D1.B     colour of block                                     ³
+³                 D3.W     timeout                                             ³
+³                 A0.L     channel ID                                          ³
+³                 A1.L     location of parameter block                         ³
+³                                                                              ³
+³EXIT:            D1 and A1  corrupted                                         ³
+³                 D2,D3,A0 and A2 preserved                                    ³
+³                                                                              ³
+³ERRORS:          ERR.NC   not complete                                        ³
+³                 ERR.OR   block over window edge                              ³
+³                 ERR.NO   invalid channel ID                                  ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   TRAP handler alters registers so that A0 points at channel definition block.
+   The parameter block contains the following:-
+
+   1.     Y position                                   $06(A1)
+   2.     X position                                   $04(A1)
+   3.     Block pixel depth                            $02(A1)
+   4.     Block pixel width                            $00(A1)
+
+1C86 SD_FILL       LEA      UT_FILL1(PC),A3        ;A3 points at block fill routine
+                   BTST     #3,SD.CATTR(A0)        ;XOR printing ?
+                   BEQ.S    L01C96                 ;jump forward if not otherwise
+                   LEA      UT_FILL2(PC),A3        ;A3 points at block recolour routine
+1C96 L01C96        MOVEA.L  A1,A2                  ;A2 points at parameter block
+                   SUBQ.L   #4,A7                  ;create room for one more entry
+                   MOVEA.L  A7,A1                  ;A1 points at new parameter block
+                   JSR      COLRMASK(PC)           ;redo colour masks
+                   MOVE.L   #$01FF01FF,D3          ;511 in top and bottom words
+                   BTST     #3,SV.MCSTA(A6)        ;mode 4 or 8 ?
+                   BEQ.S    L01CB2                 ;jump forward if mode 4
+                   BCLR     #16,D3                 ;510 in top word,511 in bottom word
+1CB2 L01CB2        MOVEM.L  (A2),D0/D2             ;get block parameters
+                   EXG      D0,D2                  ;exchange block size and co-ordinates
+                   AND.L    D3,D0                  ;ensure co-ordinates and block size in
+                   AND.L    D3,D2                  ;range 0 - 511
+                   MOVE.L   D0,D3                  ;copy co-ordinates to D3
+                   ADD.L    D2,D3                  ;add block size to block x and y start
+                   CMP.W    SD.YSIZE(A0),D3        ;block bottom within window ?
+                   BGT.S    SD_OUTR4               ;exit if not
+                   SWAP     D3                     ;move x co-ordinate into view
+                   CMP.W    SD.XSIZE(A0),D3        ;block RHS within window ?
+                   BGT.S    SD_OUTR4               ;exit if not
+                   ADD.L    SD.XMIN(A0),D0         ;add window x and y start
+                   MOVE.W   D2,D3                  ;set up for block fill
+                   SWAP     D2
+                   MOVE.W   D0,D1
+                   SWAP     D0
+                   JSR      (A3)                   ;do the operation
+                   MOVEQ    #0,D0                  ;signal "no errors"
+1CDE L01CDE        ADDQ.W   #4,A7                  ;restore stack
+                   RTS
+
+1CE2 SD_OUTR4      MOVEQ    #ERR.OR,D0             ;signal "out of range"
+                   BRA.S    L01CDE
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=SD_FOUNT        SET CHARACTER FONTS        (TRAP #3 WITH D0 = $25)           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D3.W     timeout                                             ³
+³                 A0.L     channel ID                                          ³
+³                 A1.L     font 1                                              ³
+³                 A2.L     font 2                                              ³
+³                                                                              ³
+³EXIT:            D1 and A1  corrupted                                         ³
+³                 D2,D3,A0 and A2 preserved                                    ³
+³                                                                              ³
+³ERRORS:          ERR.NC   not complete                                        ³
+³                 ERR.NO   invalid channel ID                                  ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   TRAP handler alters registers so that A0 points at channel definition block.
+
+1CE6 SD_FOUNT      MOVE.L   A1,D0                  ;new first font required ?
+                   BGT.S    L01CF0                 ;jump forward if so otherwise reset
+                   LEA      FONT_1,A1              ;A1 to default first font
+1CF0 L01CF0        MOVE.L   A2,D0                  ;new second font required ?
+                   BGT.S    L01CFA                 ;jump forward if so otherwise reset
+                   LEA      FONT_2,A2              ;A2 to default second font
+1CFA L01CFA        MOVEM.L  A1-2,SD.FOUNT(A0)      ;update the font pointers
+                   MOVEQ    #0,D0                  ;signal "no errors"
+                   RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³!SD_SETPA        SET PAPER COLOUR           (TRAP #3 WITH D0 = $27)           ³
+³!SD_SETST        SET STRIP COLOUR           (TRAP #3 WITH D0 = $28)           ³
+³!SD_SETIN        SET INK COLOUR             (TRAP #3 WITH D0 = $29)           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³=SD_SETCL        SET COLOURS                                                  ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D1.B     colour                                              ³
+³                 D3.W     timeout                                             ³
+³                 A0.L     channel ID                                          ³
+³                                                                              ³
+³EXIT:            D1 and A1  corrupted                                         ³
+³                 D2,D3,A0 and A2 preserved                                    ³
+³                                                                              ³
+³ERRORS:          ERR.NC   not complete                                        ³
+³                 ERR.NO   invalid channel ID                                  ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   TRAP handler alters registers so that A0 points at channel definition block.
+
+1D04 SD_SETCL      SUBI.W   #$27,D0                ;form byte offset for colour byte
+
+   Set the appropriate colour byte in the channel definition block using
+   the above offset. (0 = paper , 1 = strip , 2 = ink)
+
+                   MOVE.B   D1,SD.PCOLR(A0,D0.W)
+                   LSL.W    #2,D0                  ;form long word offset for mask
+
+   Now point at the correct colour mask long word using the above offset.
+
+                   LEA      SD.PMASK(A0,D0.W),A1
+                   MOVEQ    #0,D0                  ;signal "no errors"
+                   JMP      COLRMASK(PC)           ;recalculate above colour mask
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=SD_SETFL        SET FLASH MODE             (TRAP #3 WITH D0 = $2A)           ³
+³=SD_SETMD        SET WRITE MODE             (TRAP #3 WITH D0 = $2C)           ³
+³=SD_SETUL        SET UNDERLINE MODE         (TRAP #3 WITH D0 = $2B)           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D1.B     mode                                                ³
+³                 D3.W     timeout                                             ³
+³                 A0.L     channel ID                                          ³
+³                                                                              ³
+³EXIT:            D1 and A1  corrupted                                         ³
+³                 D2,D3,A0 and A2 preserved                                    ³
+³                                                                              ³
+³ERRORS:          ERR.NC   not complete                                        ³
+³                 ERR.NO   invalid channel ID                                  ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   TRAP handler alters registers so that A0 points at channel definition block and
+   A6 points at system variables.
+
+1D18 SD_SETFL      BTST     #3,SV.MCSTA(A6)        ;mode 4 or 8 ?
+                   BEQ.S    L01D94                 ;exit if mode 4
+                   MOVEQ    #%00000010,D0          ;mask for flash bit
+                   BRA.S    TEST_BIT               ;set the attribute
+
+   Write modes are: -1 = EOR , 0 = strip background , 1 = transparent.
+
+1D24 SD_SETMD      MOVEQ    #%00001100,D0          ;mask for background bits
+                   LSL.B    #2,D1                  ;move attribute into position
+                   BRA.S    SET_ATTR               ;set character attribute byte
+
+1D2A SD_SETUL      MOVEQ    #%00000001,D0          ;mask for underline bit
+1D2C TEST_BIT      TST.B    D1                     ;switch on or off ?
+                   SNE      D1                     ;set all the bits if on
+                   BRA.S    SET_ATTR               ;set character attribute byte
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=SD_SETSZ        SET CHARACTER SIZE         (TRAP #3 WITH D0 = $2D)           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D1.W     character width (see table)                         ³
+³                 D2.W     character height (see table)                        ³
+³                 D3.W     timeout                                             ³
+³                 A0.L     channel ID                                          ³
+³                                                                              ³
+³EXIT:            D1 and A1  corrupted                                         ³
+³                 D2,D3,A0 and A2 preserved                                    ³
+³                                                                              ³
+³ERRORS:          ERR.NC   not complete                                        ³
+³                 ERR.NO   invalid channel ID                                  ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   TRAP handler alters registers so that A0 points at channel definition block and
+   A6 points at system variables.
+
+1D32 SD_SETSZ      JSR      SD_DONL(PC)            ;do pending newlines
+                   MOVEQ    #%01110000,D0          ;mask for size bits in attribute byte
+                   ANDI.W   #%00000011,D1          ;height in range 0-3
+                   ANDI.W   #%00000001,D2          ;width in range 0-1
+                   BTST     #3,SV.MCSTA(A6)        ;4 or 8 colour mode ?
+                   BEQ.S    GET_SIZE               ;use even numbered set if mode 4
+                   BSET     #1,D1                  ;and odd numbered set if mode 8
+
+   Get the required height from one of the two sets of cursor sizes.
+
+1D4C GET_SIZE      MOVE.B   CTABLE_1(PC,D1.W),SD.XINC+1(A0)     ;width
+                   MOVE.B   CTABLE_2(PC,D2.W),SD.YINC+1(A0)     ;height
+
+                   LSL.B    #1,D1                  ;move height into bits 1 and 2
+                   OR.B     D2,D1                  ;add in width bit
+                   LSL.B    #4,D1                  ;move both to top nibble
+                   BSR.S    SET_ATTR               ;and set character attributes byte
+                   MOVE.W   SD.XPOS(A0),D0         ;get cursor x co-ordinate
+                   ADD.W    SD.XINC(A0),D0         ;add width of cursor
+                   CMP.W    SD.XSIZE(A0),D0        ;within window ?
+                   BLS.S    SD_XOK1                ;jump forward if so
+                   JSR      SD_NEWL(PC)            ;otherwise do forced newline
+1D72 SD_XOK1       MOVE.W   SD.YPOS(A0),D0         ;get cursor y co-ordinate
+                   ADD.W    SD.YINC(A0),D0         ;add height of cursor
+                   CMP.W    SD.YSIZE(A0),D0        ;within window ?
+                   BLS.S    SD_YOK1                ;jump forward if so
+
+   Cursor must be at the bottom of the window so scroll it up by the
+   cursor height.
+
+                   MOVEQ    #$18,D0                ;signal "scroll whole window"
+                   MOVEQ    #-10,D1                ;up by 10 pixels
+                   JSR      SD_SCRLL(PC)           ;scroll it
+                   SUBI.W   #10,SD.YPOS(A0)        ;update cursor y co-ordinate
+                   BGE.S    SD_YOK1                ;and exit if still inside window
+                   CLR.W    SD.YPOS(A0)            ;otherwise set to zero and exit
+1D94 L01D94        BRA.S    SD_YOK1
+
+   Set the character attributes byte.
+
+1D96 SET_ATTR      AND.B    D0,D1                  ;preserve cursor size bits
+                   NOT.B    D0                     ;invert them
+                   AND.B    D0,SD.CATTR(A0)        ;and insert in attribute buyte
+                   OR.B     D1,SD.CATTR(A0)
+1DA2 SD_YOK1       MOVEQ    #0,D0                  ;signal "no errors"
+                   RTS
+
+   Table of cursor sizes for the two valid modes.
+
+1DA6 CTABLE_1      DC.B     6        type 0 width
+                   DC.B     8        type 1  " "
+                   DC.B     12       type 2  " "
+                   DC.B     16       type 3  " "
+
+1DAA CTABLE_2      DC.B     10       type 0 height
+                   DC.B     20       type 1  " "
+
+2.8.5 Graphics.
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=SD_GCUR         SET CURSOR at GRAPHIC POS   (TRAP #3 WITH D0 = $36)          ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D3.W     timeout                                             ³
+³                 A0.L     channel ID                                          ³
+³                 A1.L     maths stack pointer                                 ³
+³                                                                              ³
+³EXIT:            D1 and A1 corrupted                                          ³
+³                 D2,D3,A0 and A2 preserved                                    ³
+³                                                                              ³
+³ERRORS:          ERR.NC   not complete                                        ³
+³                 ERR.NO   invalid channel ID                                  ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   TRAP handler alters registers so that A0 points at channel definition block.
+   The maths stack also contains four floating point parameters for the cursor
+   pixel offset and graphics co-ordinates.
+
+1DAC SD_GCUR       LEA      $18(A1),A4             ;A4 points at variables area above parameters
+                   JSR      L02134(PC)             ;copy window origin onto maths stack
+                   MOVE.L   L02198 + 2(PC),-(A1)
+                   MOVE.W   L02198(PC),-(A1)
+                   JSR      L02030(PC)             ;copy cursor height and scale onto stack
+
+   Maths stack now contains 9 floating point parameters in order:-
+
+   1.     Vertical pixel offset of cursor     $30(A1)
+   2.     Horizontal pixel offset of cursor   $2A(A1)
+   3.     Graphics y co-ordinate              $24(A1)
+   4.     Graphics x co-ordinate              $1E(A1)
+   5.     Window origin y co-ordinate         $18(A1)
+   6.     Window origin x co-ordinate         $12(A1)
+   7.     ?                                   $0C(A1)
+   8.     cursor pixel height                 $06(A1)
+   9.     graphics scale factor               $00(A1)
+
+                   LEA      MLIST_1(PC),A3         ;A3 points at table of maths operations
+                   JSR      RI_LIST(PC)            ;do list of operations preserving A6
+                   LEA      $18(A1),A1             ;A1 points at variables area
+                   BSR.S    SD_FTOIW               ;convert parameter to word
+                   MOVE.W   (A1)+,D1               ;get the x co-ordinate
+                   BSR.S    SD_FTOIW               ;convert next parameter to word
+                   MOVE.W   SD.YSIZE(A0),D2        ;get the y co-ordinate
+                   SUB.W    (A1)+,D2               ;subtract cursor size
+                   BSET     #7,SD.CATTR(A0)        ;signal "graphics positioned"
+                   JMP      L01BE2(PC)             ;set pixel position using D2 and D1
+
+1DE2 SD_FTOIW      MOVEQ    #RI.NINT,D0            ;signal "convert INT f.p. to word"
+                   JMP      RI_SINGL(PC)           ;do single operation preserving A6
+
+   Table of maths operations for setting graphics cursor.
+
+1DE8 MLIST_1       DC.B     RI.ABS                 ;take absolute value of scale factor
+                   DC.B     RI.DIV                 ;divide into cursor height
+                   DC.B     RI.DUP                 ;duplicate it
+                   DC.B     $EE                    ;copy to variables area
+                   DC.B     $DC
+                   DC.B     RI.SUB
+                   DC.B     RI.MULT
+                   DC.B     $FA
+                   DC.B     RI.SUB
+                   DC.B     $FB
+                   DC.B     $E8
+                   DC.B     $E2
+                   DC.B     RI.SUB
+                   DC.B     RI.MULT
+                   DC.B     RI.MULT
+                   DC.B     $F4
+                   DC.B     RI.ADD
+                   DC.B     $F5
+                   DC.W     0                      ;end of list
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=SD_SCALE        SET GRAPHICS SCALE/ORIGIN  (TRAP #3 WITH D0 = $34)           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D3.W     timeout                                             ³
+³                 A0.L     channel ID                                          ³
+³                 A1.L     maths stack pointer                                 ³
+³                                                                              ³
+³EXIT:            D1 and A1 corrupted                                          ³
+³                 D2,D3,A0 and A2 preserved                                    ³
+³                                                                              ³
+³ERRORS:          ERR.NC   not complete                                        ³
+³                 ERR.NO   invalid channel ID                                  ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   TRAP handler alters registers so that A0 points at channel definition block
+   The maths stack contains the following floating point parameters:-
+
+   1.     Scale factor                        $0C(A1)
+   2.     X position of graphics origin       $06(A1)
+   3.     Y position of Graphics origin       $00(A1)
+
+1DFC SD_SCALE      LEA      SD.YORG(A0),A2         ;A2 points at position for origin and scale
+                   MOVEQ    #$12,D0                ;number of words to copy
+
+   Copy the three floating point no's from the maths stack to the channel
+   definition block.
+
+1E02 L01E02        MOVE.W   (A1)+,(A2)+            ;copy one word
+                   SUBQ.W   #2,D0                  ;decrement count
+                   BNE.S    L01E02                 ;copy next 17 words
+                   RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=SD_FLOOD        SET FILL MODE/USER VECTORS (TRAP #3 WITH D0 = $35)           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D1.L     0 = switch off                                      ³
+³                          1 = switch on or restart                            ³
+³                          odd = switch off user vector                        ³
+³                          even = address of user fill vector to be used       ³
+³                                                                              ³
+³                 D3.W     timeout                                             ³
+³                 A0.L     channel ID                                          ³
+³                                                                              ³
+³EXIT:            D1 and A1 corrupted                                          ³
+³                 D2,D3,A0,A2 and A3 preserved                                 ³
+³                                                                              ³
+³ERRORS:          ERR.NC   not complete                                        ³
+³                 ERR.OM   number room for fill buffer                         ³
+³                 ERR.NO   invalid channel ID                                  ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   TRAP handler alters registers so that A0 points at channel definition block and
+   A6 points at system variables.
+
+1E0A SD_FLOOD      MOVEA.L  A0,A4                  ;A4 points at channel definition block
+                   TST.L    D1                     ;call to switch off ?
+                   BNE.S    L01E1A                 ;jump forward if not
+                   BSR.S    L01E52                 ;reclaim buffer if fill mode on
+                   MOVE.B   #0,SD.FMOD(A4)         ;signal "fill mode off"
+                   BRA.S    L01E4C
+
+1E1A L01E1A        CMPI.L   #1,D1                  ;call to switch on ?
+                   BNE.S    L01E3C                 ;jump forward if not
+                   BSR.S    L01E52                 ;reclaim buffer if fill mode on
+                   MOVE.B   #1,SD.FMOD(A4)         ;signal "fill mode on"
+                   MOVE.L   #1040,D1               ;length of fill buffer required
+                   JSR      MM_ALCHP(PC)           ;find the space, A0 points at the start of the area on exit
+                   BNE.S    L01E4E                 ;exit if out of memory
+                   MOVE.L   A0,SD.FBUF(A4)         ;otherwise set pointer to buffer
+                   BRA.S    L01E4C
+
+1E3C L01E3C        BTST     #0,D1                  ;odd or even ?
+1E40 L01E40        BEQ.S    L01E48                 ;jump forward if even
+                   CLR.L    SD.FUSE(A4)            ;signal "no user fill vectors"
+                   BRA.S    L01E4C
+
+1E48 L01E48        MOVE.L   D1,SD.FUSE(A4)         ;set pointer to user fill vector
+1E4C L01E4C        MOVEQ    #0,D0                  ;signal "no errors"
+1E4E L01E4E        MOVEA.L  A4,A0                  ;restore pointer to channel
+                   RTS
+
+1E52 L01E52        TST.B    SD.FMOD(A4)            ;test fill mode
+                   BEQ.S    L01E60                 ;exit if off
+                   MOVEA.L  SD.FBUF(A4),A0         ;A0 points at fill buffer
+                   JSR      MM_RECHP(PC)           ;reclaim the space
+1E60 L01E60        RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=SD_POINT        PLOT POINT                 (TRAP #3 WITH D0 = $)             ³
+³=SD_LINE         DRAW LINE                  (TRAP #3 WITH D0 = $)             ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D3.W     timeout                                             ³
+³                 A0.L     channel ID                                          ³
+³                 A1.L     maths stack pointer                                 ³
+³                                                                              ³
+³EXIT:            D1 and A1 corrupted                                          ³
+³                 D2,D3,A0 and A2 preserved                                    ³
+³                                                                              ³
+³ERRORS:          ERR.NC   not complete                                        ³
+³                 ERR.NO   invalid channel ID                                  ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   TRAP handler alters registers so that A0 points at channel definition block.
+   For an SD.POINT call, the maths stack contains two floating point
+   parameters:-
+
+   1.     X co-ordinate                       $06(A1)
+   2.     Y co-ordinate                       $00(A1)
+
+1E62 SD_POINT      MOVE.L   A4,-(A7)
+                   LEA      $0C(A1),A4             ;A4 points at variables area above parameters
+                   MOVE.L   -(A4),-(A1)            ;duplicate the two parameters
+                   MOVE.L   -(A4),-(A1)            ;for the line drawing routine
+                   MOVE.L   -(A4),-(A1)
+                   MOVEA.L  (A7)+,A4
+
+   For an SD. LINE call, the maths stack contains four parameters:-
+
+   1.     X co-ordinate of start of line      $12(A1)
+   2.     Y co-ordinate of start of line      $0C(A1)
+   3.     X co-ordinate of end of line        $06(A1)
+   4.     Y co-ordinate of end of line        $00(A1)
+
+   For a POINT call, the maths stack has the two parameters duplicated.
+
+1E70 SD_LINE       MOVEM.L  A3/A5,-(A7)
+                   LEA      MTABLE_1(PC),A3        ;A3 points at table of offsets
+                   SUBQ.L   #6,A1                  ;create space for one more number
+                   BRA      DO_TABLE               ;do table of maths offsets
+
+   Table of offsets for plotting points and drawing lines.
+
+1E7E MTABLE_1      DC.W     1                      ;number of operations - 1
+                   DC.W     MLIST_0 - *            ;first list is null
+                   DC.W     L01FB4 - *
+                   DC.W     MLIST_3 - *            ;second list follows
+                   DC.W     L0208E - *
+
+   List of maths operations for plotting points and drawing lines.
+
+1E88 MLIST_3       DC.B     $DC
+                   DC.B     RI.DUP
+                   DC.B     $D0
+                   DC.B     RI.SUB
+                   DC.B     RI.DUP
+                   DC.B     RI.DUP
+                   DC.B     RI.DUP
+                   DC.B     RI.DUP
+                   DC.B     $E8
+                   DC.B     $F4
+                   DC.B     RI.SUB
+                   DC.B     $BE
+                   DC.B     RI.MULT
+                   DC.B     $FA
+                   DC.B     $EE
+                   DC.B     RI.SUB
+                   DC.B     $BE
+                   DC.B     RI.MULT
+                   DC.B     $DC
+                   DC.B     RI.DUP
+                   DC.B     RI.DUP
+1E9D MLIST_0       DC.B     0                      ;end of list
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=SD_ARC          PLOT ARC          (TRAP #3 WITH D0 = $)                      ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D3.W     timeout                                             ³
+³                 A0.L     channel ID                                          ³
+³                 A1.L     maths stack pointer                                 ³
+³                                                                              ³
+³EXIT:            D1 and A1 corrupted                                          ³
+³                 D2,D3,A0 and A2 preserved                                    ³
+³                                                                              ³
+³ERRORS:          ERR.NC   not complete                                        ³
+³                 ERR.NO   invalid channel ID                                  ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   TRAP handler alters registers so that A0 points at channel definition block
+   The maths stack contains the following floating point parameters:-
+
+   1.     X co-ordinate of start of arc       $18(A1)
+   2.     Y co-ordinate of start of arc       $12(A1)
+   3.     X co-ordinate of end of arc         $0C(A1)
+   4.     Y co-ordinate of end of arc         $06(A1)
+   5.     Angle of arc                        $00(A1)
+
+1E9E SD_ARC        MOVEM.L  A3/A5,-(A7)
+                   LEA      2(A1),A4               ;A4 points at mantissa of Angle parameter
+                   TST.L    (A4)+                  ;negative ?
+                   BGT.S    L01EBC                 ;jump forward if not otherwise
+                   MOVEQ    #RI.NEG,D0             ;signal "negate TOS"
+                   JSR      RI_SINGL(PC)           ;do single operation preserving A6
+                   MOVEM.L  (A4)+,D2-7             ;swop start and end parameters around
+                   MOVEM.L  D2-4,-(A4)
+                   MOVEM.L  D5-7,-(A4)
+1EBC L01EBC        LEA      MTABLE_2(PC),A3        ;A3 points at table of offsets
+                   BRA      DO_TABLE               ;do table of maths offsets
+
+   Table of offsets for plotting arcs.
+
+1EC4 MTABLE_2      DC.W     3                      ;number of operations - 1
+                   DC.W     MLIST_0 - *            ;first list is null
+                   DC.W     L01FB4 - *
+                   DC.W     MLIST_4 - *
+                   DC.W     L01F00 - *
+                   DC.W     MLIST_5 - *
+                   DC.W     L01F26 - *
+                   DC.W     MLIST_B - *
+                   DC.W     L02080 - *
+
+   List of maths operations for plotting arcs
+
+1ED6 MLIST_4       DC.B     $FA
+                   DC.B     $EE
+                   DC.B     RI.SUB
+                   DC.B     $E2
+                   DC.B     $C4
+                   DC.B     RI,MULT
+                   DC.B     $B8
+                   DC.B     RI.DIV
+                   DC.B     $D0
+                   DC.B     RI.ADD
+                   DC.B     $F4
+                   DC.B     $E8
+                   DC.B     RI.SUB
+                   DC.B     RI.DUP
+                   DC.B     RI.DUP
+                   DC.B     RI.MULT
+                   DC.B     $A6
+                   DC.B     RI.DUP
+                   DC.B     RI.MULT
+                   DC.B     RI.ADD
+                   DC.B     $E2
+                   DC.B     $CA
+                   DC.B     RI.DIV
+                   DC.B     RI.SIN
+                   DC.B     RI.DUP
+                   DC.B     RI.ADD
+                   DC.B     RI.DUP
+                   DC.B     RI.MULT
+                   DC.B     RI.DIV
+                   DC.B     RI.DUP
+                   DC.B     RI.SQRT
+                   DC.B     $9A
+                   DC.B     $A6
+                   DC.B     $B2
+                   DC.B     RI.ADD
+                   DC.B     RI.DIV
+                   DC.B     RI.ATAN
+                   DC.B     $E2
+                   DC.B     $CA
+                   DC.B     RI.DIV
+                   DC.B     RI.SUB
+                   DC.B     0                      ;end of list
+
+   Routine to plot arcs.
+
+1F00 L01F00        TST.B    -$58(A4)
+                   BMI.S    L01F14
+                   MOVE.L   L02198 + 14(PC),-(A1)
+                   MOVE.W   L02198 + 12(PC),-(A1)
+                   MOVEQ    #10,D0
+1F14 L01F14?       BSR      RI_SINGL               ;do a maths operation,preserving A6
+                   MOVE.L   -$1E(A4),D0
+                   SWOP     D0
+                   SUBQ.W   #1,D0
+                   SWAP     D0
+                   CMP.L    L02198 + 12(PC),D0
+                   BLT.S    L01F26
+                   CLR.L    D2
+1F26 L01F26        RTS
+
+   List of maths operations for plotting arcs.
+
+1F28 MLIST_5       DC.B     RI.RUP
+                   DC.B     $E2
+                   DC.B     RI.ADD
+                   DC.B     RI.RUP
+                   DC.B     RI.ADD
+                   DC.B     RI.COS
+                   DC.B     $D0
+                   DC.B     RI.ADD
+                   DC.B     $A7
+                   DC.B     RI.RUP
+                   DC.B     RI.COS
+                   DC.B     RI.RUP
+                   DC.B     $8E
+                   DC.B     RI.MULT
+                   DC.B     $CA
+                   DC.B     $8E
+                   DC.B     RI.DIV
+                   DC.B     RI.RUP
+                   DC.B     $B9
+                   DC.B     $B3
+                   DC.B     $88
+                   DC.B     RI.SIN
+                   DC.B     RI.RUP
+                   DC.B     $8E
+                   DC.B     RI.MULT
+                   DC.B     $89
+                   DC.B     $8F
+                   DC.B     $94
+                   DC.B     $9B
+                   DC.B     0                      ;end of list
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=SD_ELIPS        DRAW CIRCLE/ELLIPSE        (TRAP #3 WITH D0 = $)             ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D3.W     timeout                                             ³
+³                 A0.L     channel ID                                          ³
+³                 A1.L     maths stack pointer                                 ³
+³                                                                              ³
+³EXIT:            D1 and A1 corrupted                                          ³
+³                 D2,D3,A0 and A2 preserved                                    ³
+³                                                                              ³
+³ERRORS:          ERR.NC   not complete                                        ³
+³                 ERR.NO   invalid channel ID                                  ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   TRAP handler alters registers so that A0 points at channel definition block.
+   The maths stack contains the following floating point parameters:-
+
+   1.     X co-ordinate of centre             $18(A1)
+   2.     Y co-ordinate of centre             $12(A1)
+   3.     Eccentricity (1 for a circle)       $0C(A1)
+   4.     Radius                              $06(A1)
+   5.     Angle of rotation                   $00(A1)
+
+1F46 SD_ELIPS      MOVEM.L  A3/A5,-(A7)
+                   LEA      MTABLE_3(PC),A3        ;A3 points at table of offsets
+                   BRA      DO_TABLE               ;do table of maths offsets
+
+1F52 L01F52        RTS
+
+   Table of offsets for drawing ellipses.
+
+1F54 MTABLE_3      DC.W     3                      ;number of parameters - 1
+                   DC.W     MLIST_6 - *
+                   DC.W     L01F70 - *
+                   DC.W     L01F6F - *             ;list is null
+                   DC.W     L01FB4 - *
+                   DC.W     MLIST_8 - *
+                   DC.W     L01F52 - *             ;routine is null
+                   DC.W     MLIST_B - *
+                   DC.W     L0208E - *
+
+   List of maths operations for drawing ellipses.
+
+1F66 MLIST_6       DC.B     $E8
+                   DC.B     RI.ABS
+                   DC.B     $E9
+                   DC.B     $EE
+                   DC.B     $EE
+                   DC.B     RI.ABS
+                   DC.B     $E8
+                   DC.B     RI.MULT
+                   DC.B     $EF
+1F6F L01F6F        DC.B     0                      ;end of list
+
+   Routine for drawing ellipses.
+
+1F70 L01F70        CMPI.W   #$0801,(A1)
+                   ADDQ.W   #6,A1
+                   BGE.S    L01F8A
+                   MOVE.L   #$6487ED51,-(A1)
+                   MOVE.W   #$0801,-(A1)
+                   LEA      MLIST_7(PC),A3
+                   JSR      RI_LIST(PC)            ;do list of operations,preserving A6
+1F8A L01F8A        RTS
+
+   List of maths operations for above routine.
+
+1F8C MLIST_7       DC.B     RI.ADD
+                   DC.B     $EE
+                   DC.B     $E8
+                   DC.B     $EF
+                   DC.B     $E9
+                   DC.B     0                      ;end of list
+
+   List of maths operations for drawing ellipses.
+
+1F92 MLIST_8       DC.B     $DC
+                   DC.B     $C4
+                   DC.B     RI.DUP
+                   DC.B     RI.ADD
+                   DC.B     $E8
+                   DC.B     RI.DUP
+                   DC.B     RI.MULT
+                   DC.B     $EE
+                   DC.B     RI.DUP
+                   DC.B     RI.MULT
+                   DC.B     $E2
+                   DC.B     RI.SIN
+                   DC.B     RI.DUP
+                   DC.B     $E8
+                   DC.B     RI.MULT
+                   DC.B     RI.DUP
+                   DC.B     $FA
+                   DC.B     RI.ADD
+                   DC.B     RI.DUP
+                   DC.B     $FB
+                   DC.B     $EF
+                   DC.B     $E2
+                   DC.B     RI.COS
+                   DC.B     RI.DUP
+                   DC.B     $E8
+                   DC.B     RI.MULT
+                   DC.B     RI.DUP
+                   DC.B     RI.NEG
+                   DC.B     $F4
+                   DC.B     RI.ADD
+                   DC.B     RI.DUP
+                   DC.B     $F5
+                   DC.B     $E9
+                   DC.B     0                      ;end of list
+
+   Routine for plotting points and drawing lines,arcs & ellipses.
+
+1FB4 L01FB4        MOVEM.L  D0-1/A4,-(A7)
+                   CLR.L    -(A1)                  ;push a zero onto the maths stack
+                   CLR.W    -(A1)
+                   MOVEQ    #1,D0
+                   ROR.L    #2,D0
+                   MOVE.W   #$800,D1
+
+   Push the values $080040000000,$080140000000,$080240000000,$080340000000
+   $080440000000 onto the maths stack.
+
+                   MOVEQ    #4,D2                  ;5 floating points no's to push
+1FC6 L01FC6        MOVE.L   D0,-(A1)               ;push mantissa and then exponent
+                   MOVE.W   D1,-(A1)
+                   ADDQ.W   #1,D1                  ;increment exponent
+                   DBF      D2,L01FC6
+
+                   ADDQ.W   #1,(A1)                ;increment exponent of last number pushe
+                   LEA      L021AA(PC),A3          ;A3 points at list of floating point no'
+                   MOVEQ    #8,D2
+1FD8 L01FD8        MOVE.W   -(A3),-(A1)
+                   DBF      D2,L01FD8
+
+                   MOVE.W   SD.XSIZE(A0),-$1A(A6)
+                   MOVE.W   SD.YSIZE(A0),-$1E(A6)
+                   CLR.W    -$1C(A6)
+                   CLR.W    -$20(A6)
+                   MOVE.W   SD.XMIN(A0),-$34(A6)
+                   MOVE.W   SD.YMIN(A0),-$38(A6)
+                   CLR.W    -$36(A6)
+                   CLR.W    -$3A(A6)
+                   MOVE.B   SD.CATTR(A0),-$23(A6)
+                   MOVE.B   SD.FMOD(A0),-$32(A6)
+                   MOVE.L   SD.FBUF(A0),-$2A(A6)
+                   MOVE.L   SD.FUSE(A0),-$2E(A6)
+                   MOVEQ    #1,D2
+                   BSR.S    L02030                 ;copy cursor height and scale onto stack
+                   LEA      MLIST_9(PC),A3         ;A3 points at list of maths operations
+                   BSR      RI_LIST                ;do list of operations preserving A6
+                   MOVEM.L  (A7)+,D0-1/A4
+                   RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=       COPY CURSOR HEIGHT and SCALE TO MATHS STACK                           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+
+   push cursor height onto the maths stack and convert to floating point.
+
+2030 L02030        MOVE.W   SD.YSIZE(A0),-(A1)
+                   SUBQ.W   #1,(A1)                ;reduce it by one
+                   MOVEQ    #RI.LINT,D0            ;signal "convert INT word to f.p."
+                   BSR      RI_SINGL               ;do single operation preserving A6
+
+   Now copy graphics scale.
+
+                   MOVE.L   SD.SCAL + 2(A0),-(A1)
+                   MOVE.W   SD.SCAL(A0),-(A1)
+                   RTS
+
+   List of maths operations.
+
+2046 MLIST_9       DC.B     RI.ABS
+                   DC.B     RI.DIV
+                   DC.B     RI.RUP
+                   DC.B     $FA
+204A MLIST_A       DC.B     RI.MULT
+                   DC.B     $FB
+                   DC.B     RI.RUP
+                   DC.B     $F4
+                   DC.B     RI.MULT
+                   DC.B     $F5
+                   DC.B     RI.RUP
+                   DC.B     $EE
+                   DC.B     RI.MULT
+                   DC.B     $EF
+                   DC.B     $E8
+                   DC.B     RI.MULT
+                   DC.B     $E9
+                   DC.B     0                      ;end of list
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=DO_TABLE        DO TABLE OF MATHS OFFSETS                                    ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     parameter block on maths stack                      ³
+³                 A3.L     table of maths offsets                              ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   The table consists of a word giving the number of long words -1 to follow
+   and then a sequence of word offsets as follows:-
+
+   1.     First (High) word is an offset to a list of maths operations.
+   2.     Second (low) word is an offset to a routine to be called after
+          the above list of operations have been performed.
+
+2058 DO_TABLE      MOVEM.L  D1-7/A0/A2/A4-6,-(A7)
+                   LINK     A6,-$3A                ;create large data space on stack
+
+   A6 now points at end of 58 byte parameter block.
+
+                   LEA      $1E(A1),A4             ;A4 points at base of variables area
+                   MOVE.W   (A3)+,D1               ;get number of operations required - 1
+2066 L02066        PEA      2(A3)                  ;push address of low word
+
+   Now add the offset given in the high word to the address of the high
+   word to give the address of the list of maths operations.
+
+                   ADDA.W   (A3),A3                ;add offset word to address of word
+                   BSR      RI_LIST                ;do list of operations preserving A6
+                   MOVEA.L  (A7)+,A3               ;get address of low word
+                   PEA      2(A3)                  ;push address of next high word
+
+   Add the offset given in the low word to the address of the low word to
+   give the address of the routine to call.
+
+                   ADDA.W   (A3),A3                ;add offset word to address of word
+                   JSR      (A3)                   ;and call the routine
+                   MOVEA.L  (A7)+,A3               ;get address of next high word
+                   DBF      D1,L02066              ;continue until end of table reached
+
+2080 L02080        UNLK     A6                     ;restore stack and registers
+                   MOVEM.L  (A7)+,D1-7/A0/A2/A4-6
+                   MOVEM.L  (A7)+,A3/A5
+                   MOVEQ    #0,D0                  ;signal "no errors"
+                   RTS
+
+   Routine for plotting points and drawing lines & ellipses.
+
+208E L0208E        MOVEM.L  D0-1/A3,-(A7)
+                   TST.L    D2
+                   BEQ      L0211C
+                   MOVE.L   D2,-$10(A6)
+                   MOVEQ    #-1,D3
+                   BTST     #3,SV.MCSTA
+                   BEQ.S    L020B0
+                   ADD.L    D2,D2
+                   LSL.L    #1,D3
+                   ADDQ.W   #1,-$30(A4)
+20B0 L020B0        MOVE.W   D3,-$22(A6)
+                   NEG.L    D2
+                   MOVE.L   D2,-$04(A6)
+                   MOVE.L   D2,-$0C(A6)
+                   CLR.L    -8(A6)
+                   BSR      L02030                 ;copy cursor height and scale onto stack
+                   MOVEQ    #RI.DIV,D0             ;signal "divide TOS into NOS"
+                   BSR      RI_SINGL               ;do single operation preserving A6
+                   BSR.S    L02134                 ;copy window origin onto maths stack
+                   LEA      MLIST_C(PC),A3         ;A3 points at list of maths operations
+                   BSR      RI_LIST                ;do list of operations preserving A6
+                   BSR.S    L02122
+                   MOVE.L   D1,D2
+                   BSR.S    L02122
+                   MOVE.L   D1,D3
+                   BSR.S    L02122
+                   MOVE.L   D1,D4
+                   BSR.S    L02122
+                   MOVE.L   D1,D6
+                   BSR.S    L02122
+                   MOVE.L   D1,D7
+                   LEA      -$60(A4),A1
+                   BSR.S    L0212E
+                   MOVEA.W  (A1)+,A5
+                   LEA      -$18(A4),A1
+                   BSR.S    L0212A
+                   MOVE.L   (A1)+,-$18(A6)
+                   BSR.S    L0212A
+                   MOVE.L   (A1)+,D1
+                   AND.W    -$22(A6),D1
+                   MOVE.L   D1,-$14(A6)
+                   BSR.S    L0212A
+                   MOVE.L   (A1)+,D1
+                   BSR.S    L0212A
+                   MOVE.L   (A1)+,D0
+                   AND.W    -$22(A6),D0
+                   BSR      L021AA                 ;???????????
+                   BSR      L02222
+211C L0211C        MOVEM.L  (A7)+,D0-1/A3
+                   RTS
+
+2122 L02122        ADDQ.W   #4,(A1)
+                   BSR.S    L0212A
+                   MOVE.L   (A1)+,D1
+                   RTS
+
+212A L0212A        MOVEQ    #RI.NLINT,D0           ;signal "convert INT f.p. to long"
+                   BRA.S    L02130
+
+212E L0212E        MOVEQ    #RI.NINT,D0            ;signal "convert INT f.p. to word"
+2130 L02130        JMP      RI_SINGL(PC)           ;do single operation preserving A6
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=       COPY THE FLOATING POINT WINDOW ORIGIN TO PARAMETER BLOCK              ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+
+2134 L02134        MOVE.L   $52(A0),-(A1)          ;copy top four bytes of SD.XORG then
+                   MOVE.L   $4E(A0),-(A1)          ;bottom two bytes and top two bytes of
+                   MOVE.L   $4A(A0),-(A1)          ;SD.YORG and finally rest of SD.YORG
+                   RTS
+
+   List of maths operations for plotting arcs and drawing ellipses.
+
+2142 MLIST_B       DC.B     $94
+                   DC.B     $9A
+                   DC.B     RI.SUB
+                   DC.B     $82
+                   DC.B     RI.MULT
+                   DC.B     $8E
+                   DC.B     RI.MULT
+                   DC.B     $8E
+                   DC.B     RI.DUP
+                   DC.B     RI.MULT
+                   DC.B     RI.DUP
+                   DC.B     $9A
+                   DC.B     RI.MULT
+                   DC.B     $82
+                   DC.B     RI.DUP
+                   DC.B     RI.MULT
+                   DC.B     RI.DUP
+                   DC.B     $9A
+                   DC.B     RI.MULT
+                   DC.B     $70
+                   DC.B     $94
+                   DC.B     RI.MULT
+                   DC.B     RI.ADD
+                   DC.B     $71
+                   DC.B     $94
+                   DC.B     RI.MULT
+                   DC.B     RI.ADD
+                   DC.B     RI.DUP
+                   DC.B     $7C
+                   DC.B     RI.MULT
+                   DC.B     $76
+                   DC.B     $88
+                   DC.B     RI.MULT
+                   DC.B     RI.ADD
+                   DC.B     RI.NEG
+                   DC.B     $70
+                   DC.B     $88
+                   DC.B     RI.MULT
+                   DC.B     $76
+                   DC.B     $7C
+                   DC.B     RI.MULT
+                   DC.B     RI.ADD
+                   DC.B     $83
+                   DC.B     $7D
+                   DC.W     0                      ;end of list
+
+   List of maths operations.
+
+2170 MLIST_C       DC.B     $64
+                   DC.B     RI.MULT
+                   DC.B     RI.NEG
+                   DC.B     RI.DUP
+                   DC.B     $F4
+                   DC.B     RI.ADD
+                   DC.B     $F5
+                   DC.B     $E8
+                   DC.B     RI.ADD
+                   DC.B     $E9
+                   DC.B     RI.MULT
+                   DC.B     RI.NEG
+                   DC.B     RI.DUP
+                   DC.B     $FA
+                   DC.B     RI.ADD
+                   DC.B     $AC
+                   DC.B     RI.MULT
+                   DC.B     $FB
+                   DC.B     $EE
+                   DC.B     RI.ADD
+                   DC.B     $AC
+                   DC.B     RI.MULT
+                   DC.B     $EF
+                   DC.B     $D0
+                   DC.B     $AC
+                   DC.B     RI.DIV
+                   DC.B     RI.DUP
+                   DC.B     $76
+                   DC.B     RI.MULT
+                   DC.B     $77
+                   DC.B     RI.DUP
+                   DC.B     $82
+                   DC.B     RI.MULT
+                   DC.B     $83
+                   DC.B     RI.DUP
+                   DC.B     RI.MULT
+                   DC.B     $70
+                   DC.B     RI.MULT
+                   DC.B     $71
+                   DC.B     0                      ;end of list
+
+   Table of three floating point no's for window limits.
+
+2198 L02198        DC.B     $08,$01,$56,$B8,$51,$EC
+                   DC.B     $07,$F7,$41,$89,$37,$4C
+                   DC.B     $08,$02,$64,$87,$ED,$51
+
+21AA L021AA        CMPA.L   #-1,A5                 ;RECHECK THIS ??????????
+                   BEQ.S    L021BC
+                   TST.L    D2
+                   BEQ.S    L02218
+                   TST.L    D3
+                   BEQ.S    L02218
+                   BRA.S    L021BE
+
+21BC L021BC        SUBA.L   A5,A5
+21BE L021BE        MOVEA.L  D3,A1
+                   MOVEA.L  D4,A2
+                   ADDA.L   A1,A2
+                   MOVEA.L  D2,A3
+                   ADDA.L   D4,A3
+                   ADDA.L   A2,A3
+                   ADD.L    D4,D3
+                   NEG.L    D3
+                   ASR.L    #1,D3
+                   ADD.L    D7,D3
+                   MOVE.L   D6,D4
+                   SUB.L    D3,D4
+                   ASR.L    #2,D2
+                   NEG.L    D2
+                   SUB.L    D6,D2
+                   ASR.L    #1,D2
+                   ADD.L    D3,D2
+                   MOVE.L   A5,-(A7)
+                   MOVE.L   D2,-(A7)
+                   MOVE.L   D3,D7
+                   MOVE.L   D4,D6
+                   JSR      L0238A(PC)
+                   MOVEA.L  (A7)+,A0
+                   MOVEA.W  #8,A4
+                   MOVE.B   #-1,-$24(A6)
+21F8 L021F8        TST.L    D7
+                   BLT.S    L02200
+                   TST.L    D6
+                   BGE.S    L0221E
+2200 L02200        TST.B    -$24(A6)
+                   BGE.S    L0220C
+                   BSR      L022E2
+                   BRA.S    L02210
+
+220C L0220C        BSR      L02328
+2210 L02210        CMPA.W   #0,A4
+                   BGT.S    L021F8
+                   ADDQ.L   #4,A7
+2218 L02218        ADDQ.L   #4,A7
+                   JMP      L0211C(PC)
+
+221E L0221E        MOVEA.L  (A7)+,A4
+                   RTS
+
+2222 L02222        BSR      L023E2
+                   BSR.S    L02288
+                   MOVE.L   A0,D4
+                   BGE.S    L0223C
+                   MOVE.L   -4(A6),D4
+                   MOVE.L   -8(A6),D5
+                   SUB.L    A1,D7
+                   ADD.L    A2,D6
+                   ADDA.L   D7,A0
+                   BRA.S    L0224A
+
+223C L0223C        MOVE.L   -$0C(A6),D4
+                   MOVE.L   -$10(A6),D5
+                   SUB.L    A2,D7
+                   ADD.L    A3,D6
+                   SUBA.L   D6,A0
+224A L0224A        ADD.L    D4,D0
+                   ADD.L    D5,D1
+                   TST.L    D5
+                   BGE.S    L0225A
+                   ADDA.L   #$80,A5
+                   BRA.S    L02262
+
+225A L0225A        BEQ.S    L02264
+                   SUBA.L   #$80,A5
+2262 L02262        SWAP     D3
+2264 L02264        MOVEQ    #1,D5
+                   BTST     #3,SV.MCSTA
+                   BEQ.S    L02272
+                   MOVEQ    #2,D5
+2272 L02272        TST.L    D4
+                   BGE.S    L0227E
+                   ROL.W    D5,D2
+                   BCC.S    L02286
+                   SUBQ.L   #2,A5
+                   BRA.S    L02286
+
+227E L0227E        BEQ.S    L02286
+                   ROR.W    D5,D2
+                   BCC.S    L02286
+                   ADDQ.L   #2,A5
+2286 L02286        BRA.S    L02222
+
+2288 L02288        MOVE.W   A4,D4
+                   BLT.S    L022DE
+                   SUBQ.W   #2,D4
+                   BGT.S    L022B8
+                   MOVE.L   D1,D4
+                   SUB.L    -$18(A6),D4
+                   BGE.S    L0229A
+                   NEG.L    D4
+229A L0229A        SUBQ.L   #1,D4
+                   BGT.S    L022B8
+                   MOVE.L   D0,D4
+                   SUB.L    -$14(A6),D4
+                   BGE.S    L022A8
+                   NEG.L    D4
+22A8 L022A8        BTST     #3,SV.MCSTA
+                   BEQ.S    L022B4
+                   SUBQ.L   #1,D4
+22B4 L022B4        SUBQ.L   #1,D4
+                   BLE.S    L022DE
+22B8 L022B8        TST.L    D7
+                   BNE.S    L022C0
+                   TST.L    D6
+                   BEQ.S    L022DE
+22C0 L022C0        BGE.S    L022CE
+                   TST.B    -$24(A6)
+                   BGT.S    L022CE
+                   BSR      L022E2
+                   BRA.S    L02288
+
+22CE L022CE        TST.L    D6
+                   BGE.S    L022E0
+                   TST.B    -$24(A6)
+                   BLT.S    L022E0
+                   BSR      L02328
+                   BRA.S    L02288
+
+22DE L022DE        ADDQ.L   #4,A7
+22E0 L022E0        RTS
+
+22E2 L022E2        TST.L    -4(A6)
+                   BNE.S    L022EC
+                   NEG.L    -12(A6)
+22EC L022EC        TST.L    -8(A6)
+                   BNE.S    L022F6
+                   NEG.L    -16(A6)
+22F6 L022F6        MOVE.L   A1,D4
+                   NEG.L    D4
+                   MOVEA.L  D4,A1
+                   ADD.L    A2,D4
+                   MOVEA.L  D4,A2
+                   ADDA.L   A1,A2
+                   MOVE.L   D4,D5
+                   LSL.L    #2,D5
+                   SUB.L    A3,D5
+                   MOVEA.L  D5,A3
+                   NEG.L    D7
+                   SUB.L    D4,D7
+                   MOVE.L   A0,D5
+                   NEG.L    D5
+                   SUB.L    D6,D5
+                   ADD.L    D7,D5
+                   MOVEA.L  D5,A0
+                   SUB.L    D7,D6
+                   SUB.L    D7,D6
+                   SUB.L    D4,D6
+                   SUBQ.L   #1,A4
+                   MOVE.B   #1,-$24(A6)
+                   RTS
+
+2328 L02328        TST.L    -8(A6)
+                   BNE.S    L0233A
+                   CLR.L    -4(A6)
+                   MOVE.L   -$10(A6),-8(A6)
+                   BRA.S    L0234A
+
+233A L0233A        TST.L    -4(A6)
+                   BNE.S    L0234A
+                   CLR.L    -8(A6)
+                   MOVE.L   -12(A6),-4(A6)
+234A L0234A        MOVE.L   A2,D4
+                   LSL.L    #1,D4
+                   SUB.L    A3,D4
+                   MOVE.L   D4,D5
+                   SUB.L    A1,D5
+                   MOVEA.L  D5,A1
+                   SUBA.L   A3,A2
+                   MOVE.L   A3,D5
+                   NEG.L    D5
+                   MOVEA.L  D5,A3
+                   MOVE.L   A2,D5
+                   ASR.L    #1,D5
+                   NEG.L    D5
+                   ADD.L    D6,D5
+                   ADD.L    D5,D7
+                   MOVE.L   D6,D5
+                   ASR.L    #1,D5
+                   NEG.L    D5
+                   SUB.L    A0,D5
+                   ADD.L    D7,D5
+                   MOVEA.L  D5,A0
+                   MOVE.L   A3,D5
+                   ASR.L    #3,D5
+                   ADDA.L   D5,A0
+                   NEG.L    D6
+                   ASR.L    #1,D4
+                   ADD.L    D4,D6
+                   SUBQ.L   #1,A4
+                   MOVE.B   #-1,-$24(A6)
+                   RTS
+
+238A L0238A        MOVEM.L  D0-1,-(A7)
+                   CLR.L    D2
+                   NEG.L    D1
+                   SUBQ.L   #1,D1
+                   MOVE.W   SD.YSIZE(A0),D2
+                   ADD.W    $1A(A0),D2
+                   ADD.L    D2,D1
+                   MOVE.W   $18(A0),D2
+                   ADD.L    D2,D0
+                   MOVE.L   $3E(A0),D3
+                   BTST     #0,D1
+                   BEQ.S    L023B0
+                   SWAP     D3
+23B0 L023B0        MOVEA.L  #SCREEN,A5
+                   LSL.L    #7,D1
+                   ADDA.L   D1,A5
+                   MOVE.L   D0,D1
+                   LSR.L    #3,D1
+                   LSL.L    #1,D1
+                   ADDA.L   D1,A5
+                   ANDI.W   #$F,D0
+                   MOVEQ    #0,D2
+                   MOVE.W   #$8080,D2
+                   BTST     #3,SV.MCSTA
+                   BEQ.S    L023DA
+                   MOVE.W   #$C0C0,D2
+23DA L023DA        ROR.W    D0,D2
+                   MOVEM.L  (A7)+,D0-1
+                   RTS
+
+23E2 L023E2        CMP.L    -$20(A6),D1
+                   BCC      L0249E
+                   TST.B    -$32(A6)
+                   BEQ      L02474
+                   MOVEM.L  D0-3/A0-1,-(A7)
+                   MOVEA.L  D1,A0
+                   ADDA.L   A0,A0
+                   ADDA.L   A0,A0
+                   ADDA.L   #$10,A0
+                   ADDA.L   -$2A(A6),A0
+                   MOVE.L   (A0),D2
+                   BSET     #31,D0
+                   MOVE.L   D0,(A0)
+                   LSL.L    #1,D0
+                   ASR.L    #1,D0
+                   LSL.L    #1,D2
+                   BCC.S    L0246E
+                   ASR.L    #1,D2
+                   MOVE.L   D2,D4
+                   SUB.L    D0,D4
+                   BGE.S    L02420
+                   EXG      D0,D2
+2420 L02420        TST.L    D0
+                   BGE.S    L02426
+                   MOVEQ    #0,D0
+2426 L02426        TST.L    D2
+                   BLT.S    L0246E
+                   CMP.L    -$1C(A6),D0
+                   BGE.S    L0246E
+                   CMP.L    -$1C(A6),D2
+                   BLT.S    L0243A
+                   MOVE.L   -$1C(A6),D2
+243A L0243A        SUB.L    D0,D2
+                   ADD.L    -$36(A6),D0
+                   NEG.L    D1
+                   ADD.L    -$3A(A6),D1
+                   ADD.L    -$20(A6),D1
+                   SUBQ.L   #1,D1
+                   MOVE.W   D3,-(A7)
+                   MOVE.W   D3,-(A7)
+                   SWAP     D3
+                   MOVE.W   D3,-(A7)
+                   MOVE.W   D3,-(A7)
+                   MOVEA.L  A7,A1
+                   MOVEQ    #1,D3
+                   BTST     #3,-$23(A6)
+                   BNE.S    L02468
+                   JSR      UT_FILL1(PC)
+                   BRA.S    L0246C
+
+2468 L02468        JSR      UT_FILL2(PC)
+246C L0246C        ADDQ.L   #8,A7
+246E L0246E        MOVEM.L  (A7)+,D0-3/A0-1
+                   RTS
+
+2474 L02474        CMP.L    -$1C(A6),D0
+                   BCC.S    L0249E
+                   SWAP     D2
+                   SWAP     D3
+                   MOVE.L   D3,D4
+                   AND.L    D2,D4
+                   BTST     #3,-$23(A6)
+                   BNE.S    L02498
+                   MOVE.L   (A5),D5
+                   NOT.L    D2
+                   AND.L    D2,D5
+                   NOT.L    D2
+                   OR.L     D4,D5
+                   MOVE.L   D5,(A5)
+                   BRA.S    L0249A
+
+2498 L02498        EOR.L    D4,(A5)
+249A L0249A        SWAP     D2
+                   SWAP     D3
+249E L0249E        RTS
+
+2.8.6 Screen manipulation utilities.
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=UT_FILL0                                                                     ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:                                                                        ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+24A0 UT_FILL0      MOVEM.L  D0-7/A0-6,-(A7)
+                   BSR.S    L024C2
+                   MOVE.L   #$FF00FF,D6
+                   MOVE.L   D6,D7
+                   BRA.S    L02528
+
+24B0 L024B0        MOVE.L   (A1),D6
+                   MOVE.W   D6,D7
+                   SWAP     D7
+                   MOVE.W   D6,D7
+                   MOVE.W   (A1),D6
+                   BTST     #0,D1
+                   BNE.S    L024C2
+                   EXG      D6,D7
+24C2 L024C2        LSL.W    #7,D1
+                   MOVEA.L  #SCREEN,A1
+                   ADDA.W   D1,A1
+                   LSL.W    #6,D3
+                   MOVEA.W  D3,A2
+                   ADDA.L   A2,A2
+                   MOVE.W   D0,D1
+                   LSR.W    #4,D1
+                   LSL.W    #2,D1
+                   ADDA.W   D1,A1
+                   ADDA.L   A1,A2
+                   MOVEA.W  #$80,A3
+                   LSR.W    #2,D1
+                   ADD.W    D0,D2
+                   MOVE.W   D2,D3
+                   SUBQ.W   #1,D3
+                   ASR.W    #4,D3
+                   SUB.W    D1,D3
+                   MOVEA.W  D3,A5
+                   ADDA.W   A5,A5
+                   ADDA.W   A5,A5
+                   BSR.S    L02502
+                   MOVE.L   D5,D4
+                   MOVE.W   D2,D0
+                   BSR.S    L02502
+                   NOT.L    D5
+                   BNE.S    L02500
+                   MOVEQ    #-1,D5
+2500 L02500        RTS
+
+2502 L02502        MOVEQ    #-1,D5
+                   ANDI.W   #$F,D0
+                   LSR.W    D0,D5
+                   MOVE.W   D5,D0
+                   LSL.L    #8,D5
+                   MOVE.W   D0,D5
+                   LSL.L    #8,D5
+                   MOVE.B   D0,D5
+                   RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=UT_FILL1                                                                     ³
+³=UT_FILL2                                                                     ³
+³=UT_FILL3                                                                     ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:                                                                        ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+2516 UT_FILL1      MOVEM.L  D0-7/A0-6,-(A7)
+                   BSR.S    L024B0
+2522 UT_FILL2      LEA      L02644(PC),A6
+                   BRA.S    L0254C
+
+252E UT_FILL3      MOVEM.L  D0-7/A0-6,-(A7)
+                   BSR.S    L024B0
+                   LEA      L0264C(PC),A6
+                   BRA.S    L0254C
+
+252E L0252E        MOVEM.L  D0-7/A0-6,-(A7)
+                   MOVEA.L  A1,A4
+                   BSR.S    L024C2
+                   ADD.W    D3,D3
+                   ADDQ.W   #1,D3
+                   BTST     #3,$34(A6)
+                   BNE.S    L02548
+                   LEA      L02696(PC),A6
+                   BRA.S    L0254C
+
+2548 L02548        LEA      L02660(PC),A6
+254C L0254C        BSR      L0263E
+                   MOVEM.L  (A7)+,D0-7/A0-6
+                   RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=UT_SCRLL        SCROLL A WINDOW                                              ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:                                                                        ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+2556 UT_SCRLL      MOVEM.L  D0-7/A0-6,-(A7)
+                   BSR      L024B0
+                   MOVE.W   $12(A7),D2
+                   NEG.W    D2
+                   LSL.W    #7,D2
+                   BVS.S    L0251C
+                   BGT.S    L02588
+                   EXG      A2,A1
+                   MOVEA.W  #$FF80,A3
+                   ADDA.L   A3,A1
+                   ADDA.L   A3,A2
+                   MOVE.W   A1,D0
+                   SUB.W    A2,D0
+                   TST.B    D0
+                   BNE.S    L0257E
+                   EXG      D6,D7
+257E L0257E        LEA      0(A1,D2.W),A4
+                   CMPA.L   A2,A4
+                   BLS.S    L0251C
+                   BRA.S    L02590
+
+2588 L02588        LEA      0(A1,D2.W),A4
+                   CMPA.L   A4,A2
+                   BLS.S    L0251C
+2590 L02590        LEA      L02654(PC),A6
+                   SUBA.W   D2,A2
+                   BSR      L0263E
+                   ADDA.W   D2,A2
+                   BRA      L0251C
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=UT_PAN          PAN A WINDOW                                                 ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:                                                                        ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+25A0 UT_PAN        MOVEM.L  D0-7/A0-6,-(A7)
+                   BSR      L024B0
+                   SWAP     D3
+                   MOVE.W   $12(A7),D2
+                   NEG.W    D2
+                   BGT.S    L025E2
+                   NEG.W    D2
+                   MOVE.W   D2,D3
+                   ANDI.W   #$F,D3
+                   ADDI.W   #16,D3
+                   SWAP     D3
+                   LSR.W    #4,D2
+                   CMP.W    D3,D2
+                   BHI      L0251C
+                   SUB.W    D2,D3
+                   MOVEA.W  #$FFFC,A0
+                   ADDA.W   A5,A1
+                   ADDA.W   A5,A2
+                   MOVEA.L  A1,A4
+                   LSL.W    #2,D2
+                   SUBA.W   D2,A4
+                   MOVE.L   A5,D2
+                   NEG.L    D2
+                   MOVEA.L  D2,A5
+                   EXG      D4,D5
+                   BRA.S    L02604
+
+25E2 L025E2        MOVEA.W  #4,A0
+                   MOVE.W   D2,D3
+                   ANDI.W   #$F,D3
+                   NEG.W    D3
+                   ADDI.W   #16,D3
+                   SWAP     D3
+                   LSR.W    #4,D2
+                   CMP.W    D3,D2
+                   BHI      L0251C
+                   SUB.W    D2,D3
+                   LSL.W    #2,D2
+                   LEA      0(A1,D2.W),A4
+2604 L02604        ADDQ.W   #1,D3
+                   LEA      L026C8(PC),A6
+                   BRA      L0254C
+
+260E L0260E        MOVE.W   D3,D0
+                   BMI.S    L02642
+                   EXG      D6,D7
+                   MOVE.L   (A1),-(A7)
+                   MOVE.L   0(A1,A5.W),-(A7)
+                   JMP      (A6)
+
+261C L0261C        SUBQ.W   #4,A1
+261E L0261E        MOVE.L   (A1),D0
+                   AND.L    D5,D0
+                   MOVE.L   D5,D1
+                   NOT.L    D1
+                   AND.L    (A7)+,D1
+                   OR.L     D1,D0
+                   MOVE.L   D0,(A1)
+                   SUBA.L   A5,A1
+                   MOVE.L   (A1),D0
+                   AND.L    D4,D0
+                   MOVE.L   D4,D1
+                   NOT.L    D1
+                   AND.L    (A7)+,D1
+                   OR.L     D1,D0
+                   MOVE.L   D0,(A1)
+                   ADDA.L   A3,A1
+263E L0263E        CMPA.L   A2,A1
+                   BNE.S    L0260E
+2642 L02642        RTS
+
+2644 L02644        MOVE.L   D6,(A1)+
+                   DBF      D0,L02644
+                   BRA.S    L0261C
+
+264C L0264C        EOR.L    D6,(A1)+
+                   DBF      D0,L0264C
+                   BRA.S    L0261C
+
+2654 L02654        LEA      0(A1,D2.W),A4
+2658 L02658        MOVE.L   (A4)+,(A1)+
+                   DBF      D0,L02658
+                   BRA.S    L0261C
+
+2660 L02660        MOVE.B   (A1),D6
+                   MOVE.B   1(A1),D7
+                   MOVEQ    #3,D1
+2668 L02668        MOVEQ    #0,D2
+                   MOVE.B   D6,D2
+                   LSL.B    #6,D2
+                   LSL.W    #1,D2
+                   MOVE.B   D7,D2
+                   LSL.B    #6,D2
+                   LSR.W    #6,D2
+                   MOVE.B   0(A4,D2.W),D2
+                   ROXR.B   #1,D2
+                   ROXR.B   #1,D7
+                   ROXR.B   #1,D2
+                   ROXR.B   #1,D7
+                   ROR.B    #1,D6
+                   ROXR.B   #1,D2
+                   ROXR.B   #1,D6
+                   DBF      D1,L02668
+                   MOVE.B   D6,(A1)+
+                   MOVE.B   D7,(A1)+
+                   DBF      D0,L02660
+                   BRA.S    L0261C
+
+2696 L02696        MOVE.B   (A1),D6
+                   MOVE.B   1(A1),D7
+                   MOVEQ    #7,D1
+269E L0269E        MOVEQ    #0,D2
+                   MOVE.B   D6,D2
+                   LSL.B    #7,D2
+                   LSL.W    #1,D2
+                   MOVE.B   D7,D2
+                   LSL.B    #7,D2
+                   LSR.W    #6,D2
+                   MOVE.B   0(A4,D2.W),D2
+                   ROXR.B   #2,D2
+                   ROXR.B   #1,D7
+                   ROXR.B   #1,D2
+                   ROXR.B   #1,D6
+                   DBF      D1,L0269E
+                   MOVE.B   D6,(A1)+
+                   MOVE.B   D7,(A1)+
+                   DBF      D0,L02696
+                   BRA      L0261C
+
+26C8 L026C8        MOVE.W   A5,-(A7)
+                   MOVE.L   A4,-(A7)
+                   MOVE.L   D6,-(A7)
+                   ADDA.L   A1,A5
+                   MOVE.L   (A5),D2
+                   AND.L    D5,D2
+                   MOVE.L   D5,D1
+                   NOT.L    D1
+                   AND.L    D6,D1
+                   OR.L     D1,D2
+                   MOVE.L   D2,(A5)
+                   ADDA.L   A0,A5
+                   SWAP     D3
+                   MOVEP.W  0(A4),D1
+                   MOVEP.W  1(A4),D2
+                   BRA.S    L0270C
+
+26EC L026EC        ADDA.L   A0,A4
+26EE L026EE        SWAP     D1
+                   SWAP     D2
+                   MOVEP.W  0(A4),D1
+                   MOVEP.W  1(A4),D2
+                   MOVE.L   D1,D6
+                   ROR.L    D3,D6
+                   MOVEP.W  D6,0(A1)
+                   MOVE.L   D2,D6
+                   ROR.L    D3,D6
+                   MOVEP.W  D6,1(A1)
+                   ADDA.L   A0,A1
+270C L0270C        SUBQ.W   #1,D0
+                   BGT.S    L026EC
+                   BLT.S    L02716
+                   MOVEA.L  A7,A4
+                   BRA.S    L026EE
+
+2716 L02716        MOVE.L   (A7)+,D6
+                   MOVEA.L  (A7)+,A4
+                   SWAP     D3
+                   BRA.S    L02722
+
+271E L0271E        MOVE.L   D6,(A1)
+                   ADDA.L   A0,A1
+2722 L02722        CMPA.L   A1,A5
+                   BNE.S    L0271E
+                   MOVEA.W  (A7)+,A5
+                   ADDA.L   A3,A4
+                   SUBA.L   A0,A1
+                   BRA      L0261E
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=COLRMASK        REDO COLOUR MASKS                                            ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:                                                                        ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+2730 COLRMASK      MOVEM.L  D1-2,-(A7)
+                   BSR.S    L02776
+                   MOVE.W   D2,(A1)
+                   MOVE.W   D2,2(A1)
+                   LSR.B    #3,D1
+                   BEQ.S    L02770
+                   BSR.S    L02776
+                   LSR.B    #3,D1
+                   BTST     #0,D1
+                   BEQ.S    L0274E
+                   EOR.W    D2,2(A1)
+274E L0274E        CMPI.B   #1,D1
+                   BEQ.S    L02770
+                   BTST     #3,$34(A6)
+                   BEQ.S    L02762
+                   ANDI.W   #$3333,D2
+                   BRA.S    L02766
+
+2762 L02762        ANDI.W   #$5555,D2
+2766 L02766        EOR.W    D2,(A1)
+                   TST.B    D1
+                   BEQ.S    L02770
+                   EOR.W    D2,2(A1)
+2770 L02770        MOVEM.L  (A7)+,D1-2
+                   RTS
+
+2776 L02776        MOVE.B   D1,D2
+                   ANDI.W   #7,D2
+                   ROR.L    #2,D2
+                   LSL.W    #7,D2
+                   ROL.L    #2,D2
+                   BTST     #3,$34(A6)
+                   BEQ.S    L02790
+                   MULU     #$55,D2
+                   BRA.S    L02796
+
+2790 L02790        LSR.W    #1,D2
+                   MULU     #255,D2
+2796 L02796        RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=PRINT_CH        PRINT A CHARACTER                                            ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:                                                                        ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+2798 PRINT_CH      MOVEM.L  D0-7/A0-6,-(A7)
+                   MOVEM.L  (A1),D6-7
+                   BTST     #0,D1
+                   BNE.S    L027AA
+                   SWAP     D6
+                   SWAP     D7
+27AA L027AA        ANDI.W   #255,D2
+                   MOVEA.L  A2,A4
+                   SUB.B    (A4)+,D2
+                   CMP.B    (A4)+,D2
+                   BLS.S    L027C2
+                   ADD.B    (A2),D2
+                   MOVEA.L  A3,A4
+                   SUB.B    (A4)+,D2
+                   CMP.B    (A4)+,D2
+                   BLS.S    L027C2
+                   MOVEQ    #0,D2
+27C2 L027C2        ADDA.W   D2,A4
+                   LSL.W    #3,D2
+                   ADDA.W   D2,A4
+                   MOVEA.L  #SCREEN,A1
+                   LSL.W    #7,D1
+                   ADDA.W   D1,A1
+                   MOVE.W   D0,D1
+                   LSR.W    #3,D0
+                   ADD.W    D0,D0
+                   ADDA.W   D0,A1
+                   ANDI.W   #7,D1
+                   MOVEA.W  #$80,A3
+                   MOVEA.W  #-1,A5
+                   BTST     #0,D3
+                   BEQ.S    L027EE
+                   ADDQ.W   #2,A5
+27EE L027EE        MOVEQ    #0,D0
+                   MOVEQ    #$7E,D2
+                   ADD.W    D2,D2
+                   MOVEQ    #0,D5
+                   BTST     #6,D3
+                   BEQ.S    L02810
+                   MOVEQ    #-1,D0
+                   MOVE.W   #$FFF0,D2
+                   ADDQ.W   #8,D1
+                   BTST     #1,D3
+                   BEQ.S    L02810
+                   MOVE.W   #$4010,D5
+                   ROR.L    D1,D5
+2810 L02810        BTST     #5,D3
+                   BEQ.S    L02818
+                   ASR.B    #4,D2
+2818 L02818        MOVEQ    #0,D4
+                   BTST     #4,D3
+                   BEQ.S    L02822
+                   MOVEQ    #-1,D4
+2822 L02822        ROR.L    D1,D2
+                   LEA      L02880(PC),A6
+                   BTST     #2,D3
+                   BEQ.S    L0283C
+                   LEA      L02896(PC),A6
+                   BTST     #3,D3
+                   BEQ.S    L0283C
+                   LEA      L02892(PC),A6
+283C L0283C        MOVEA.L  A1,A2
+                   MOVE.B   D2,D0
+                   LSL.W    #8,D2
+                   MOVE.B   D0,D2
+                   LSL.W    #8,D5
+                   MOVE.W   #9,D0
+                   MOVEQ    #0,D3
+                   BRA.S    L02878
+
+284E L0284E        CMP.W    A5,D0
+                   BNE.S    L02858
+                   MOVEQ    #-1,D3
+                   ADDQ.W   #1,A4
+                   BRA.S    L02870
+
+2858 L02858        MOVEQ    #0,D3
+                   MOVE.B   (A4)+,D3
+                   BEQ.S    L02878
+                   TST.L    D0
+                   BGE.S    L02868
+                   LSR.B    #1,D3
+                   MOVE.W   L028D6(PC,D3.W),D3
+2868 L02868        ROR.W    D1,D3
+                   MOVE.B   D3,D4
+                   LSL.W    #8,D3
+                   MOVE.B   D4,D3
+2870 L02870        AND.W    D2,D3
+                   MOVE.W   D3,D4
+                   SWAP     D3
+                   MOVE.W   D4,D3
+2878 L02878        MOVE.W   D3,D4
+                   AND.W    D7,D4
+                   OR.W     D5,D4
+                   JMP      (A6)
+
+2880 L02880        EOR.W    D2,D3
+                   AND.W    D6,D3
+                   OR.W     D4,D3
+                   MOVE.W   D2,D4
+                   NOT.W    D4
+                   AND.W    (A1),D4
+                   OR.W     D3,D4
+                   MOVE.W   D4,(A1)
+                   BRA.S    L0289E
+
+2892 L02892        EOR.W    D4,(A1)
+                   BRA.S    L0289E
+
+2896 L02896        NOT.W    D3
+                   AND.W    (A1),D3
+                   OR.W     D4,D3
+                   MOVE.W   D3,(A1)
+289E L0289E        SWAP     D6
+                   SWAP     D7
+                   ADDA.L   A3,A1
+                   TST.L    D4
+                   BGE.S    L028B0
+                   SWAP     D3
+                   BCHG     #$1E,D4
+                   BNE.S    L02878
+28B0 L028B0        DBF      D0,L0284E
+                   CLR.W    D2
+                   ROL.L    #8,D2
+                   BEQ.S    L028D0
+                   CLR.W    D5
+                   ROL.L    #8,D5
+                   SUBQ.B   #8,D1
+                   ANDI.B   #$F,D1
+                   MOVEA.L  A2,A1
+                   ADDQ.W   #2,A1
+                   SUBA.W   #9,A4
+                   BRA      L0283C
+
+28D0 L028D0        MOVEM.L  (A7)+,D0-7/A0-6
+                   RTS
+
+   Table of masks.
+
+28D6 L028D6        DC.W     %0000000000000000
+                   DC.W     %0000000000110000
+                   DC.W     %0000000011000000
+                   DC.W     %0000000011110000
+                   DC.W     %0000001100000000
+                   DC.W     %0000001100110000
+                   DC.W     %0000001111000000
+                   DC.W     %0000001111110000
+                   DC.W     %0000110000000000
+                   DC.W     %0000110000110000
+                   DC.W     %0000110011000000
+                   DC.W     %0000110011110000
+                   DC.W     %0000111100000000
+                   DC.W     %0000111100110000
+                   DC.W     %0000111111000000
+                   DC.W     %0000111111110000
+                   DC.W     %0011000000000000
+                   DC.W     %0011000000110000
+                   DC.W     %0011000011000000
+                   DC.W     %0011000011110000
+                   DC.W     %0011001100000000
+                   DC.W     %0011001100110000
+                   DC.W     %0011001111000000
+                   DC.W     %0011001111110000
+                   DC.W     %0011110000000000
+                   DC.W     %0011110000110000
+                   DC.W     %0011110011000000
+                   DC.W     %0011110011110000
+                   DC.W     %0011111100000000
+                   DC.W     %0011111100110000
+                   DC.W     %0011111111000000
+                   DC.W     %0011111111110000
+
+2.9 Microdrive slaving routines.
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=MD_SLAVE        MICRODRIVE FORCED SLAVING                                    ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     location of offending slave block                   ³
+³                 A2.L     physical definition block                           ³
+³                 A3.L     assumed start of linkage block                      ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:          none                                                         ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   TRAP handler alters registers so that A0 points at channel definition block a
+   A6 points at system variables.
+
+2916 MD_SLAVE      SF       FS.FILES + 1(A2)       ;signal "no files open"
+                   MOVEQ    #0,D1                  ;prepare D1
+                   MOVE.B   FS.DRIVN(A2),D1        ;get drive number
+                   LEA      SV.MDRUN(A6),A3
+                   ST       9(A3,D1.W)             ;signal "pending operations"
+                   TST.B    (A3)                   ;any microdrives turning ?
+                   BNE.S    L02952                 ;exit if so
+                   MOVEQ    #%00010000,D0          ;mask for control register status bit
+                   JSR      TIMER1(PC)             ;wait a bit and update status
+
+   Currently turning microdrive is now the one to be used.
+
+                   MOVE.B   D1,(A3)                ;signal "this drive turning"
+                   MOVE.B   #-6,SV.MDCNT(A6)       ;set microdrive counter
+                   LEA      PC_MCTRL,A3            ;A3 points at microdrive control registe
+                   JSR      MD_SELCT(PC)           ;switch on the microdrive motor
+
+   Now signal "microdrive turning" and reset interrupt register. The actual
+   transfer of bytes will occur under gap interrupts.
+
+                   ORI.B    #%00100000,SV.PCINT(A6)
+                   MOVE.B   SV.PCINT(A6),PC_INTR
+2952 L02952        RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=CLR_SBLK        CLEAR THE SLAVE BLOCKS USED BY A DRIVE                       ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A5.L     physical definition block                           ³
+³                 A6.L     system variables                                    ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:          none                                                         ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   The stack should contain a word for the drive ID at 8(A7).
+   First find all the slave blocks used by this drive and reclaim them.
+
+2954 CLR_SBLK      MOVE.W   8(A7),D0               ;get drive ID (drive number in bits 2-5)
+                   LSL.W    #2,D0                  ;move drive number into high nibble
+                   ADDQ.W   #1,D0                  ;and set "available" bit
+                   MOVEA.L  SV.BTBAS(A6),A1        ;A1 points at slave block table
+2960 L02960        MOVEQ    #%11110001,D1          ;mask for status byte drive number bits
+                   AND.B    (A1),D1                ;mask off "waiting" bits
+                   CMP.B    D1,D0                  ;block for this drive ?
+                   BNE.S    L0296C                 ;jump forward if not
+                   MOVE.B   #1,(A1)                ;signal "empty block" to reclaim it
+296C L0296C        ADDQ.W   #8,A1                  ;point at next entry in table
+                   CMPA.L   SV.BTTOP(A6),A1        ;end of table ?
+                   BLT.S    L02960                 ;check next slave block if not
+
+   All the slave blocks belonging to this drive have been found and have
+   been set to "empty" and are therefore available to the file system.
+   Now clear the table of pending sector operations.
+
+                   LEA      MD.PENDG(A5),A1        ;A1 points at table of pending operation
+                   MOVEQ    #127,D0                ;number of long words to clear
+297A L0297A        CLR.L    (A1)+                  ;signal "no pending operations"
+                   DBF      D0,L0297A
+                   RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=                CHECK MEDIUM DETAILS                                         ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A5.L     physical definition block                           ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   the medium name does not match that of the cartridge in the drive.
+
+2982 L02982        TST.B    FS.BADM(A5)            ;bad medium ?
+                   BLE.S    BAD_MEDI               ;exit if so
+                   TST.B    FS.FILES(A5)           ;any files open ?
+                   BNE.S    BAD_MEDI               ;exit if so
+                   TST.B    D7                     ;any errors ?
+                   BNE.S    BAD_HEAD               ;exit if so
+                   LEA      MD.MAP(A5),A1          ;use microdrive map as a buffer
+                   JSR      MD_READ                ;read a sector into the buffer and
+                   BRA.S    BAD_HEAD               ;branch if failed
+
+   The read was successful. All we require is the new medium name for
+   the file system on this drive since it seems to be ok.
+
+299E L0299E        LEA      8(A7),A1
+                   LEA      FS.MNAME(A5),A2        ;A2 points at medium name in definition
+                   MOVE.L   (A1)+,(A2)+            ;copy the medium name from the buffer
+                   MOVE.L   (A1)+,(A2)+            ;block on the stack to the physical
+                   MOVE.L   (A1)+,(A2)+            ;definition block
+                   BSR.S    CLR_SBLK               ;clear all slave blocks for drive
+29AE L029AE        SF       FS.BADM(A5)            ;signal "medium ok"
+29B2 BAD_HEAD      BRA      MD_EXIT2               ;clear up stack and exit
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=BAD_MEDI        CHECK IF MEDIUM BAD OR UNFORMATTED                           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A5.L     physical definition block                           ³
+³                 A6.L     system variables                                    ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+29B6 BAD_MEDI      LEA      FS.MNAME(A5),A1        ;A1 points at medium name
+                   TST.B    (A1)                   ;formatted ?
+                   BEQ.S    MED_OK                 ;jump forward if so
+
+   Must be either an unformatted cartridge or a sector fault has occured,
+   so print an error message on channel #1 or #0 if possible.
+
+                   SUBA.L   A0,A0                  ;clear A0
+                   MOVEQ    #10,D2                 ;length of medium name
+                   JSR      L03A24(PC)             ;print the name on error channel
+                   MOVEQ    #ERR.FE,D0             ;signal "bad medium"
+                   JSR      UT_ERR(PC)             ;print message on error channel
+29CC MED_OK        BSR.S    CLR_SBLK               ;clear all the blocks for this drive
+                   ST       FS.BADM(A5)            ;signal "bad medium"
+                   BRA      L02AFC                 ;check for any pending operations
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=GAPINT          GAP INTERRUPT HANDLER                                        ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           none                                                         ³
+³                                                                              ³
+³EXIT:            none                                                         ³
+³                                                                              ³
+³ERRORS:          none                                                         ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   TRAP handler alters registers so that A5 and A7 point at saved SUPERBASIC
+   registers,A6 points at system variables and D7 = D0.
+   The registers are saved in the order:-
+
+   1.     Long word for program counter       $0E(A5)
+   2.     Word for status register            $0C(A5)
+   3.     Long word for A6                    $08(A5)
+   4.     Long word for A5                    $04(A5)
+   5.     Long word for D7                    $00(A5)
+
+29D6 GAPINT        MOVEM.L  D0-6/A0-4,-(A7)        ;save the rest of the registers also
+                   LEA      PC_MCTRL,A3            ;A3 points at microdrive control registe
+                   MOVEQ    #0,D0                  ;prepare D0
+                   MOVE.B   SV.MDRUN(A6),D0        ;get currently turning microdrive number
+                   BEQ      MD_EXIT3               ;exit if none turning
+                   SUBA.W   #14,A7                 ;create room for buffer
+                   MOVEA.L  A7,A1                  ;A1 points at buffer
+                   LEA      SV.MDDID(A6),A5        ;A5 points at table of drive ID's
+                   SF       7(A5,D0.W)             ;signal "no pending operations"
+                   MOVE.B   -1(A5,D0.W),D0         ;get drive ID
+                   MOVE.W   D0,-(A7)               ;save ID
+                   MOVEA.L  16(A5,D0.W),A5         ;A5 points at pointer to physical defini
+                   MOVE.L   A5,-(A7)               ;save pointer
+                   MOVE.B   SV.MDCNT(A6),D2        ;get microdrive counter
+                   BGE.S    L02A0C                 ;jump forward if still negative
+                   ADDQ.B   #1,D2                  ;otherwise increment count
+2A0C L02A0C        JSR      MD_SECTR               ;read a microdrive sector header
+
+   Return points for the three read sector header errors.
+
+2A12 L02A12        BRA.S    BAD_MEDI               ;branch if bad medium
+                   BRA.S    BAD_HEAD               ;branch if bad header
+
+   The read was successful. D7 contains the sector no. The buffer now
+   contains the following data:-
+
+   1.     Byte containing "invisible" $FF     -$0E(A1)
+   2.     Sector number byte                  -$0D(A1)
+   3.     Ascii of file name                  -$0C(A1)
+   4.     Random number word set on format    -$02(A1)
+
+   and occurs below the word containing the drive ID & long word containing
+   the pointer to the physical definition block. Now check the medium
+   name in case a new cartridge has been inserted and its changed.
+
+                   MOVEQ    #11,D0                 ;12 bytes to check
+                   LEA      FS.FILES(A5),A2        ;A2 points at end of file name
+2A1C L02A1C        MOVE.B   -(A2),D1               ;get byte from definition block
+                   CMP.B    -(A1),D1               ;same as byte from medium name
+                   BNE      L02982                 ;check new cartridge if not
+                   DBF      D0,L02A1C              ;otherwise check next byte
+
+                   TST.B    FS.BADM(A5)            ;medium ok ?
+                   BGT.S    L029AE                 ;exit if not
+                   ADD.W    D7,D7                  ;form offset into microdrive map
+                   BNE.S    L02A3E                 ;jump forward unless sector 0
+
+   Increment the failure count since we have just loaded sector zero.
+
+                   ADDQ.B   #1,MD.FAIL(A5)         ;increment count
+                   CMPI.B   #8,MD.FAIL(A5)         ;have we failed more than 8 times ?
+                   BGT.S    L02A12                 ;exit if so
+2A3E L02A3E        ADDA.W   D7,A5                  ;use A5 as a table base
+                   MOVEQ    #0,D1                  ;prepare D1
+                   MOVE.W   $228(A5),D1            ;get sector's pending operations word
+                   BEQ      L02ADE                 ;jump forward if number operations
+                   TST.B    D2                     ;test microdrive count
+                   BLE.S    L02A50                 ;jump forward if still -ve
+                   SF       D2                     ;otherwise clear count
+2A50 L02A50        MOVE.B   D2,SV.MDCNT(A6)        ;update count
+                   TST.W    D1                     ;any pending operations ?
+                   BLT      L02B36                 ;jump forward if so
+
+   D1 high byte = status,D1 low byte = block number in file.
+
+                   LSL.L    #3,D1                  ;form offset into slave block table
+                   MOVEA.L  SV.BTBAS(A6),A4        ;A4 points at slave block table base
+                   ADDA.L   D1,A4                  ;then at slave block for this sector
+                   MOVE.L   A4,-(A7)
+                   LSL.L    #6,D1                  ;form byte number in file
+                   LEA      0(A6,D1.L),A1
+                   BTST     #2,(A4)
+                   BNE.S    L02AC0
+                   BTST     #1,(A4)
+                   BNE.S    L02A80
+                   JSR      MD_READ                ;read a microdrive sector
+
+   Return points for the two read microdrive sector errors.
+
+                   BRA.S    MD_EXIT1               ;branch if failed
+                   BRA.S    L02A88                 ;branch if ok
+
+2A80 L02A80        JSR      MD_VERIN               ;verify a microdrive sector
+
+   Return points for the two verify microdrive sector errors.
+
+                   BRA.S    L02A98                 ;branch if failed
+2A88 L02A88        MOVEQ    #3,D0                  ;branch if ok
+                   CLR.W    MD.PENDG(A5)
+                   MOVEA.L  4(A7),A1
+                   SF       $24(A1)
+                   BRA.S    L02AD2
+
+2A98 L02A98        MOVEQ    #7,D0
+                   BRA.S    L02AD2
+
+   General exit to clear up stack and acknowledge inturrupts.
+
+2A9C MD_EXIT1      ADDQ.W   #4,A7
+2A9E MD_EXIT2      ADDA.W   #20,A7                 ;restore stack pointer
+2AA2 MD_EXIT3      MOVE.B   SV.PCINT(A6),D7        ;get copy of interrupt register
+                   ORI.B    #%00000001,D6          ;set gap interrupt bit
+2AA6 MD_EXIT4      ANDI.B   #%11011111,D7          ;?????? check label ?????? and clear
+                   MOVE.B   D7,1(A3)               ;acknowledge interrupt and reset
+                   MOVE.B   SV.PCINT(A6),1(A3)
+                   MOVEM.L  (A7)+,D0-6/A0-4
+                   BRA      EXITTRAP
+
+2AC0 L02AC0        TST.B    D2
+                   BMI.S    MD_EXIT1               ;clear up stack and exit
+                   MOVE.W   $28(A5),-(A7)
+                   JSR      MD_WRITE               ;write a microdrive sector
+                   ADDQ.W   #2,A7
+                   MOVEQ    #11,D0
+2AD2 L02AD2        MOVEQ    #-16,D1
+                   MOVEA.L  (A7)+,A4
+                   AND.B    (A4),D1
+                   OR.B     D0,D1
+                   MOVE.B   D1,(A4)
+                   MOVEQ    #5,D2
+2ADE L02ADE        TST.B    D2
+                   BMI.S    L02B2E
+                   ADDQ.B   #1,D2
+                   CMPI.B   #8,D2
+                   BLT.S    L02B2E
+                   MOVEQ    #0,D2
+                   MOVEQ    #0,D0
+                   MOVEA.L  (A7),A5
+                   LEA      MD.PENDG(A5),A5
+2AF4 L02AF4        TST.W    (A5)+
+                   BNE.S    L02B2E
+                   ADDQ.B   #1,D0
+                   BNE.S    L02AF4
+
+   Check for any pending microdrive operations.
+
+2AFC L02AFC        JSR      MD_DESEL               ;switch off all the motors
+                   MOVEQ    #8,D1                  ;number of bytes to test
+                   LEA      SV.MDSTA(A6),A5        ;A5 points at table of status bytes
+2B08 L02B08        TST.B    -1(A5,D1.W)            ;test status (start with drive 8)
+                   BNE.S    L02B22                 ;jump forward if pending operations
+                   SUBQ.B   #1,D1                  ;next drive number down
+                   BNE.S    L02B08                 ;check status unless all 8 done
+
+                   CLR.B    SV.MDRUN(A6)           ;number currently turning microdrives
+                   ANDI.B   #%11011111,SV.PCINT(A6)
+                   JSR      CLRTMODE(PC)           ;acknowledge gap interrupt
+                   BRA.S    L02B32
+
+   More pending operations required so switch on required motor.
+
+2B22 L02B22        MOVE.B   D1,SV.MDRUN(A6)        ;this is the currently turning drive
+                   JSR      MD_SELCT               ;switch on the motor
+                   MOVEQ    #-6,D2                 ;up/down count
+2B2E L02B2E        MOVE.B   D2,SV.MDCNT(A6)        ;set up drive count
+2B32 L02B32        BRA      MD_EXIT2               ;clear up stack and exit
+
+2B36 L02B36        LEA      $28(A5),A1
+                   ADDQ.W   #1,D1
+                   BNE.S    L02B54
+                   TST.B    D2
+                   BMI      MD_EXIT2               ;clear up stack and exit
+                   MOVE.W   #$8000,-(A7)
+                   JSR      MD_WRITE               ;write a microdrive sector
+                   ADDQ.W   #2,A7
+                   MOVEQ    #-2,D1
+                   BRA.S    L02B62
+
+2B54 L02B54        JSR      MD_VERIN               ;verify microdrive sector
+
+   Return points for the two verify microdrive sector errors.
+
+                   BRA.S    L02B60                 ;branch if failed
+                   MOVEQ    #0,D1                  ;branch if ok
+                   BRA.S    L02B62
+
+2B60 L02B60        MOVEQ    #-1,D1
+2B62 L02B62        MOVE.W   D1,MD.PENDG(A5)
+                   BRA      MD_EXIT2               ;clear up stack and exit
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=MD_DESEL        SWITCH ALL MICRODRIVE MOTORS OFF                             ³
+³=MD_SELCT        SWITCH A MICRODRIVE MOTOR ON                                 ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D1.W     motor number                                        ³
+³                 A3.L     address of microdrive control register              ³
+³                                                                              ³
+³EXIT:            D1 and D2  corrupted                                         ³
+³                 D3,A0,A1,A2 and A3 preserved                                 ³
+³                                                                              ³
+³ERRORS:          none                                                         ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+2B6A MD_DESEL      MOVEQ    #%00000010,D2
+                   MOVEQ    #7,D1                  ;set loop count to process all drives
+                   BRA.S    L02B74
+
+2B70 MD_SELCT      MOVEQ    #%00000011,D2
+                   SUBQ.W   #1,D1                  ;set up loop count based on drive number
+
+   Now cycle through all the drive control logic until the requested drive
+   is reached or through all the drives if de-select required.
+
+2B74 L02B74        MOVE.B   D2,(A3)                ;signal "select drive logic"
+                   MOVEQ    #%00111001,D0          ;timing constant for high O/P pulse
+                   ROR.L    D0,D0
+                   BCLR     #1,D2                  ;signal "alter motor status"
+                   MOVE.B   D2,(A3)                ;send pulse to update status
+                   MOVEQ    #%00111001,D0          ;timing constant for low O/P pulse
+                   ROR.L    D0,D0
+                   MOVEQ    #2,D2
+                   DBF      D1,L02B4               ;and cycle round next drive
+                   RTS
+

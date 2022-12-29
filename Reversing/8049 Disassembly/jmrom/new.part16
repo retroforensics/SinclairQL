@@ -1,0 +1,2005 @@
+2.20 SuperBASIC procedures.
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=BP_BAUD         SET BAUD RATE FOR SERIAL CHANNELS                            ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³SYNTAX:          rate := numeric_expression                                   ³
+³                                                                              ³
+³                 BAUD rate                                                    ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     top of arithmetic stack                             ³
+³                 A3.L     first parameter in name table (relative)            ³
+³                 A5.L     last parameter in name table (relative)             ³
+³                                                                              ³
+³EXIT:            none                                                         ³
+³                                                                              ³
+³ERRORS:          ERR.BP   invalid baud rate                                   ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   This is the first of the SUPERBASIC procedures and functions command
+   handlers. Note that unlike the spectrum, only a few of these routines
+   check the syntax of the SUPERBASIC statement and most only expect to be
+   followed by a particular number of parameters.
+   The syntax definitions are given along with the other entry conditions
+   and use the standard notation given in the user guide in the "concepts"
+   section.
+
+5F3C BP_BAUD       JSR      L078D0(PC)             ;check for one integer parameter
+                   BNE.S    BAUD_EXI               ;and exit if none
+                   MOVE.W   TOS(A6,A1.L),D1        ;get the required baud rate
+                   MOVEQ    #MT.BAUD,D0            ;TRAP to set serial port baud rate
+                   TRAP     #1                     ;set it
+                   TST.L    D0                     ;any errors ?
+                   BMI.S    BAUD_ERR               ;jump forward if so
+                   MOVEQ    #0,D0                  ;signal "no errors"
+5F50 BAUD_EXI      RTS
+
+5F52 BAUD_ERR      MOVEQ    #ERR.BP,D0             ;signal "bad parameter"
+                   RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=BP_BEEP         SWITCH SOUND ON OR OFF                                       ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³SYNTAX: duration and grad_x := mumeric_expression {-32768 .. 32767}           ³
+³        pitch_1 and pitch_2 := numeric_expression {0 .. 255}                  ³
+³        grad_y := numeric_expression {-8 .. 7}                                ³
+³        wrap,fuzzy and random := numeric_expression {0 .. 15}                 ³
+³                                                                              ³
+³        BEEP [ duration, pitch_1                                              ³
+³             [ , pitch_2, grad_x, grad_y                                      ³
+³             [ , wrap                                                         ³
+³             [ , fuzzy                                                        ³
+³             [ , random ]]]]]                                                 ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     top of arithmetic stack                             ³
+³                 A3.L     first parameter in name table (relative)            ³
+³                 A5.L     last parameter in name table (relative)             ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   The parameters are not given in the same order as they occur in the
+   IPC command so this table gives the position in the command string for
+   the corresponding parameter in the SUPERBASIC statement.
+
+5F56 BEEPTBL       DC.W     6        duration
+                   DC.W     0        pitch
+                   DC.W     2        pitch_2
+                   DC.W     4        grad_x
+                   DC.W     8        grad_y
+                   DC.W     10       wrap
+                   DC.W     14       fuzzy
+                   DC.W     12       random
+
+5F66 BEEP_EXI      ADD.L    D3,D3                  ;form number of bytes used on stack
+                   ADD.L    D3,BV.RIP(A6)          ;update arithmetic stack pointer
+5F6C BEEP_END      ADDA.W   #$18,A7                ;restore stack and registers
+                   MOVEM.L  (A7)+,D4-7/A3-5
+                   TST.L    D0                     ;set flags to test for any errors
+                   RTS
+
+5F78 BP_BEEP       JSR      CA_GTINT(PC)           ;get word integers,D3 = number found
+                   MOVEM.L  D4-7/A3-5,-(A7)
+                   ADDA.W   #-$18,A7               ;A7 points at parameter block on stack
+                   MOVEA.L  A7,A3                  ;copy pointer
+                   BNE.S    BEEP_EXI               ;and exit if error in expression
+
+                   MOVEQ    #ERR.BP,D0             ;signal "bad parameter"
+                   CMPI.W   #0,D3                  ;command to stop sound ?
+                   BEQ.S    SOUNDOFF               ;jump forward if so
+
+   Valid no's of parameters are : 2,5,6,7 and 8.
+
+                   CMPI.W   #1,D3                  ;invalid number ?
+                   BEQ.S    BEEP_EXI               ;exit if so
+                   CMPI.W   #3,D3
+                   BEQ.S    BEEP_EXI
+                   CMPI.W   #4,D3
+                   BEQ.S    BEEP_EXI
+                   CMPI.W   #8,D3                  ;more then 8 parameters ?
+                   BGT.S    BEEP_EXI               ;exit if so
+
+                   LEA      BEEPTBL(PC),A5         ;A5 points at table of parameter numbers
+                   MOVEQ    #1,D2                  ;initialise parameter count
+5FAE L05FAE        MOVE.W   TOS(A6,A1.L),D0        ;get parameter from arithmetic stack
+                   CMPI.W   #2,D2                  ;pitch ?
+                   BEQ.S    L05FBE                 ;process parameter if so
+                   CMPI.W   #3,D2                  ;pitch_2 ?
+                   BNE.S    L05FC0                 ;jump forward if not
+
+5FBE L05FBE        ADDQ.W   #1,D0                  ;add one to pitch value
+5FC0 L05FC0        ROR.W    #8,D0                  ;and swop high & low bytes around
+                   JSR      BEEP_INS(PC)           ;insert in IPC command string
+                   ADDA.W   #2,A1                  ;point at next paramter
+                   CMP.W    D3,D2                  ;finished ?
+                   BLE.S    L05FAE                 ;next entry if not
+
+                   CMPI.W   #3,D2                  ;duration and pitch only ?
+                   BEQ.S    L05FDC
+5FD4 L05FD4        MOVEQ    #0,D0                  ;signal "no errors"
+                   CMPI.W   #8,D2                  ;all parameters specified ?
+                   BGT.S    SOUNDON                ;do command if so
+5FDC L05FDC        JSR      BEEP_INS(PC)           ;otherwise insert extra parameters
+                   BRA.S    L05FD4                 ;and do command
+
+5FE2 SOUNDON       MOVE.B   #10,(A3)               ;"initiate sound process" command
+                   MOVE.B   #16,1(A3)              ;number of parameters to follow
+                   MOVE.L   #$4444AA66,$2(A3)      ;number of bits to send from each
+                   MOVE.B   #1,$16(A3)             ;signal "send number reply"
+                   MOVEQ    #MT.IPCOM,D0           ;TRAP to send command to IPC
+                   TRAP     #1
+                   BRA      BEEP_EXI
+
+6002 SOUNDOFF      MOVE.B   #11,(A3)               ;"kill sound process" command
+                   MOVE.B   #0,1(A3)               ;number of parameters to follow
+                   MOVE.B   #1,6(A3)               ;signal "send number reply"
+                   MOVEQ    #MT.IPCOM,D0           ;TRAP to send command to IPC
+                   TRAP     #1
+                   BRA      BEEP_END
+
+   Insert parameters into IPC command string.
+
+601A BEEP_INS      MOVEA.W  (A5)+,A4               ;get parameter position
+                   MOVE.W   D0,6(A3,A4.W)          ;insert the parameter
+                   ADDQ.W   #1,D2                  ;increment parameter count
+                   RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=BP_CALL         CALL MACHINE CODE ROUTINE                                    ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³SYNTAX:          address : numeric_expression                                 ³
+³                 data := numeric_expression                                   ³
+³                                                                              ³
+³                 CALL address *[, data]* {13 parameters maximum}              ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     top of arithmetic stack                             ³
+³                 A3.L     first parameter in name table (relative)            ³
+³                 A5.L     last parameter in name table (relative)             ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:          ERR.BP   invalid number of parameters                        ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   This procedure executes machine code as a subroutine. The address given
+   must be even otherwise the RTS at the end will generate an address error
+   which merely re-executes the RTS which this time is OK. The command is
+   therefore ignored for odd addresses. The following parameters are then
+   stored in the registers in the order D1 to D7 and A0 to A5. The routine
+   will be executed in user mode.
+
+6024 BP_CALL       JSR      CA_GTLIN(PC)           ;get long integers,D3 = number found
+                   BNE.S    L0603E                 ;jump forward if any errors
+                   LSL.L    #2,D3                  ;form number of bytes used
+                   BEQ.S    L0603C                 ;jump forward if none given
+                   ADD.L    D3,BV.RIP(A6)          ;restore maths stack
+
+   The next two instructions were supposed to get the call address and the
+   register values from the arithmetic stack, but this will only work if
+   basic occupies less than around 20k because of the word accesses used.
+
+                   MOVE.L   TOS(A6,A1.W),-(A7)
+                   MOVEM.L  4(A6,A1.W),D1-7/A0-5
+
+603C L0603C        MOVEQ    #ERR.BP,D0             ;signal "bad parameter"
+603E L0603E        RTS                             ;"return" to required routine
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=                                                                             ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:                                                                        ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+6040 L06040        MOVEQ    #1,D1
+                   MOVE.L   A5,-(A7)
+                   CMPA.L   A3,A5                  ;any parameters in name table ?
+                   BLS.S    L06076                 ;jump forward if none
+                   BCLR     #7,1(A6,A3.L)          ;parameter preceded by "#" ?
+                   BEQ.S    L06076                 ;jump forward if so
+                   MOVE.L   A3,-(A7)
+                   LEA      8(A3),A5               ;A5 points at next parameter in name tab
+
+   Mask off but the variable type field in the name table type word entry.
+
+                   ANDI.B   #%00001111,1(A6,A3.L)
+                   JSR      L0593E(PC)
+                   BNE.S    L0609C
+                   MOVEQ    #3,D0
+                   JSR      L0540C(PC)
+                   BNE.S    L0609C
+                   MOVEA.L  (A7)+,A3
+                   ADDQ.W   #8,A3
+                   MOVE.W   TOS(A6,A1.L),D1
+                   ADDQ.L   #2,BV.RIP(A6)          ;restore maths stack
+6076 L06076        MOVEA.L  (A7)+,A5
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=GETCHID         GET SUPERBASIC CHANNEL INFORMATION FROM ID                   ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D1.L     SUPERBASIC channel ID                               ³
+³                 A6.L     SUPERBASIC system variables                         ³
+³                                                                              ³
+³EXIT:            A0.L     channel ID                                          ³
+³                 A2.L     pointer to channel table block                      ³
+³                                                                              ³
+³ERRORS:          ERR.NO   channel not found                                   ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   SUPERBASIC has it's own channel table containing extra information to
+   handle Turtle graphics and printers. There is one entry for each channel
+   open. Each entry is $28 bytes long and is laid out as follows:=
+
+   1.     $00      CH.ID    long     QDOS channel ID (-1 if closed)
+   2.     $04      CH.CCPY  f.p.     current graphics y co-ordinate
+   3.     $0A      CH.CCPX  f.p.     current graphics x co-ordinate
+   4.     $10      CH.ANGLE f.p.     Turtle angle
+   5.     $16      CH.PEN   byte     pen status: 0 = up , 1 = down
+   6.     $20      CH.CHPOS word     printer cursor position across line
+   7.     $22      CH.WIDTH word     printer width in characters
+   8.     $24      CH.SPARE long
+   9.     $28      CH.LENCH          end of channel block
+
+6078 GETCHID       MOVE.L   D1,D0                  ;copy channel number
+                   MOVEA.L  BV.CHBAS(A6),A0        ;A0 points at SUPERBASIC channel table
+                   MULU     #$28,D0                ;form  block offset
+                   ADDA.L   D0,A0                  ;A0 points at entry for this ID
+                   CMPA.L   BV.CHP(A6),A0          ;end of table ?
+                   BGE.S    L06098                 ;exit if so
+                   MOVE.L   CH.ID(A6,A0.L),D0
+                   BLT.S    L06098                 ;and exit if channel closed
+                   MOVEA.L  A0,A2                  ;copy pointer to block and channel ID
+                   MOVEA.L  D0,A0
+                   MOVEQ    #0,D0                  ;signal "no errors"
+                   RTS
+
+6098 L06098        MOVEQ    #ERR.NO,D0             ;signal "channel not open"
+                   RTS
+
+609C L0609C        ADDQ.W   #8,A7                  ;restore stack
+                   RTS
+
+60A0 L060A0        MOVE.L   A0,-(A7)
+                   BSR.S    GETCHID                ;get channel info from ID
+                   BEQ.S    L060F8                 ;exit if already exists
+                   CMPA.L   BV.CHP(A6),A0          ;end of table ?
+                   BLT.S    L060DA                 ;jump forward if not
+
+   There are not enough entries in the current SUPERBASIC channel table
+   so increase it's size to suit the new channel no.
+
+                   MOVE.L   D1,-(A7)
+                   MOVE.L   A0,D1                  ;D1 points at channel table block
+                   ADDI.L   #$28,D1                ;point at next block
+                   SUB.L    BV.CHP(A6),D1          ;make it relative
+                   JSR      CA_ALCHB(PC)           ;reserve space for new entry(s)
+                   MOVE.L   (A7)+,D1
+                   BSR.S    GETCHID                ;get channel info from ID
+60C2 L060C2        MOVEA.L  BV.CHP(A6),A2          ;A2 points at current channel table entr
+                   ADDI.L   #$28,BV.CHP(A6)        ;set pointer to end of table
+                   MOVE.L   #-1,CH.ID(A6,A2.L)     ;signal "closed"
+                   CMPA.L   A0,A2
+                   BLT.S    L060C2
+60DA L060DA        MOVEA.L  A0,A2
+
+   Now clear the channel table entry.
+
+                   MOVEQ    #10,D0                 ;11 long words to clear
+60DE L060DE        CLR.L    0(A6,A0.L)             ;clear one
+                   ADDQ.W   #4,A0                  ;and point at next one
+                   SUBQ.W   #1,D0                  ;any more ?
+                   BGT.S    L060DE                 ;clear next one if so
+
+   Then set up the channel ID and the default printer width.
+
+                   MOVEA.L  (A7)+,A0
+                   MOVE.L   A0,CH.ID(A6,A2.L)      ;copy channel ID to entry
+                   MOVE.W   #80,CH.WIDTH(A6,A2.L)
+                   MOVEQ    #0,D0                  ;signal "no errors"
+                   RTS
+
+60F8 L060F8        MOVEQ    #ERR.EX,D0             ;signal "already exists"
+                   RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=BP_CSIZE        SET A NEW CHARACTER SIZE                                     ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³SYNTAX:          width := numeric_expression {0 .. 3}                         ³
+³                 height := numeric_expression {0 .. 1}                        ³
+³                 channel := #numeric_expression                               ³
+³                                                                              ³
+³                 CSIZE [channel,] width, height                               ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     top of arithmetic stack                             ³
+³                 A3.L     first parameter in name table (relative)            ³
+³                 A5.L     last parameter in name table (relative)             ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+60FC BP_CSIZE      JSR      L078CA(PC)
+                   BNE.S    L0611E
+                   SUBQ.W   #1,D3
+                   JSR      L078BA(PC)
+                   BNE.S    L0611E
+                   MOVE.W   -2(A6,A1.L),D2
+                   EXG      D1,D2
+                   CMPI.W   #3,D1
+                   BHI.S    L0611C
+                   MOVEQ    #$2D,D4
+                   JMP      L07856(PC)
+
+611C L0611C        MOVEQ    #ERR.BP,D0             ;signal "bad parameter"
+611E L0611E        RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=BP_CURSO        POSITION CURSOR WITH GRAPHIC CO-ORDS                         ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³SYNTAX:          x := numeric_expression                                      ³
+³                 y := numeric_expression                                      ³
+³                                                                              ³
+³                 CURSOR [channel,] x, y [, x, y]                              ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     top of arithmetic stack                             ³
+³                 A3.L     first parameter in name table (relative)            ³
+³                 A5.L     last parameter in name table (relative)             ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+6120 BP_CURSO      MOVEQ    #-$20,D0
+                   ADD.L    A5,D0
+                   SUB.L    A3,D0
+                   BEQ      L06626
+                   MOVEQ    #$17,D4
+                   BRA.S    L06130
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=BP_AT           POSITION CURSOR at CHARACTER CO-ORDS                         ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³SYNTAX:          line := numeric_expression                                   ³
+³                 column := numeric-expression                                 ³
+³                                                                              ³
+³                 AT [channel,] line, column                                   ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     top of arithmetic stack                             ³
+³                 A3.L     first parameter in name table (relative)            ³
+³                 A5.L     last parameter in name table (relative)             ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+612E BP_AT         MOVEQ    #16,D4
+6130 L06130        JSR      L078CA(PC)
+                   BNE.S    L06152
+                   CMPI.W   #2,D3
+                   BNE.S    L06150
+                   MOVE.W   TOS(A6,A1.L),D2
+                   MOVE.W   -2(A6,A1.L),D1
+                   CMPI.B   #16,D4
+                   BNE.S    L0614C
+                   EXG      D1,D2
+614C L0614C        JMP      L07856(PC)
+
+6150 L06150        MOVEQ    #ERR.BP,D0             ;signal "bad parameter"
+6152 L06152        RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=                                                                             ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:                                                                        ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+6154 L06154        MOVE.L   BV.LINUM(A6),-(A7)
+                   MOVE.L   BV.INLIN(A6),-(A7)
+                   MOVE.W   BV.STMNT(A6),-(A7)
+                   MOVE.L   A4,-(A7)
+                   JSR      L08D70(PC)
+                   BNE.S    L061DE
+                   MOVE.W   BV.DALNO(A6),D4        ;get current DATA line number
+                   JSR      L09694(PC)
+                   JSR      L09F46(PC)
+                   BNE.S    L061DE
+                   MOVE.B   BV.DASTM(A6),D4        ;get current DATA statement number
+                   JSR      L096FC(PC)
+                   JSR      L09B92(PC)
+                   CMPI.W   #$8118,D1              ;keyword token,"DATA" ?
+                   BNE.S    L061A4
+                   MOVE.B   BV.DAITM(A6),D5        ;get DATA item count
+                   ADDQ.B   #1,BV.DAITM(A6)        ;and increment it for next time
+
+6190 L06190        ADDQ.W   #2,A4
+                   JSR      L09B92(PC)
+                   SUBQ.B   #1,D5
+                   BEQ.S    L061C8
+                   MOVE.W   #$8404,D4              ;symbol, ??
+                   JSR      L09C02(PC)
+                   BEQ.S    L06190
+
+   Scan through the program for the next DATA statement.
+
+61A4 L061A4        JSR      L09C30(PC)
+                   BNE.S    L061DE                 ;jump forward if none left
+                   JSR      L09B92(PC)
+                   CMPI.W   #$8118,D1              ;keyword token, "DATA" ?
+                   BNE.S    L061A4                 ;next statement if not
+
+   The next DATA statement has been found so update the variables.
+
+                   ADDQ.W   #2,A4
+                   MOVE.W   BV.LINUM(A6),BV.DALNO(A6)
+                   MOVE.B   BV.STMNT(A6),BV.DASTM(A6)
+                   MOVE.B   #2,BV.DAITM(A6)
+61C8 L061C8        MOVEA.L  A4,A0
+                   MOVEQ    #0,D0                  ;signal "no errors"
+61CC L061CC        MOVEA.L  (A7)+,A4
+                   MOVE.W   (A7)+,BV.STMNT(A6)
+                   MOVE.L   (A7)+,BV.INLIN(A6)
+                   MOVE.L   (A7)+,BV.LINUM(A6)
+                   TST.L    D0                     ;set flags for interpreter
+                   RTS
+
+61DE L061DE        MOVEQ    #ERR.EF,D0             ;signal "end of file"
+                   BRA.S    L061CC
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=SD_ADATE        ADJUST SYSTEM CLOCK                                          ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³SYNTAX:          seconds := numeric_expression                                ³
+³                                                                              ³
+³                 ADATE seconds                                                ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     top of arithmetic stack                             ³
+³                 A3.L     first parameter in name table (relative)            ³
+³                 A5.L     last parameter in name table (relative)             ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+61E2 BP_ADATE      JSR      L05C2C(PC)
+                   BNE.S    L06208                 ;exit if number parameters or wrong type
+                   ADDQ.L   #4,BV.RIP(A6)          ;restore maths stack
+                   MOVE.L   TOS(A6,A1.L),D1        ;get the adjustment required
+                   MOVEQ    #MT.ACLK,D0            ;TRAP to adjust clock
+                   TRAP     #1                     ;adjust it
+                   BRA.S    EXIT_CLK
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=BP_SDATE        RESET SYSTEM CLOCK                                           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³SYNTAX:          year,month,day,                                              ³
+³                 hours,minutes and seconds := numeric_expression              ³
+³                                                                              ³
+³                 SDATE year, month, day, hours, minutes, seconds              ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     top of arithmetic stack                             ³
+³                 A3.L     first parameter in name table (relative)            ³
+³                 A5.L     last parameter in name table (relative)             ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+61F6 BP_SDATE      JSR      CA_GTLIN(PC)           ;get long integers,D3 = number found
+                   BNE.S    CLK_END                ;exit if none given
+                   MOVEQ    #ERR.BP,D0             ;signal "bad parameter"
+                   LSL.L    #2,D3                  ;form amount of stack used
+                   ADD.L    D3,BV.RIP(A6)          ;and adjust the maths stack pointer
+                   LSR.L    #2,D3                  ;restore number of parameters
+                   SUBQ.W   #6,D3                  ;and check if six given
+6208 L06208        BNE.S    CLK_END                ;exit if wrong number of parameters
+                   MOVE.L   TOS(A6,A1.L),D0        ;get the year
+                   SUBI.L   #1961,D0               ;subtract base year
+                   MOVE.L   D0,D1
+                   MULU     #365,D1                ;form number of days
+                   MOVE.L   4(A6,A1.L),D2          ;get month
+                   DIVU     #4,D0                  ;check for a leap year
+                   SWAP     D0
+                   CMPI.W   #3,D0
+                   BNE.S    L06232
+                   CMPI.W   #2,D2                  ;after or including February ?
+                   BLE.S    L06232                 ;jump forward if not
+                   ADDQ.L   #1,D1                  ;otherwise add one for extra day
+6232 L06232        CLR.W    D0
+                   SWAP     D0
+                   ADD.L    D0,D1                  ;add correction for leap year if any
+                   SUBQ.L   #1,D2                  ;form offset into month table
+                   ASL.W    #1,D2
+                   LEA      MONTHTBL(PC,D2.W),A2
+                   CLR.L    D0                     ;prepare D0
+                   MOVE.W   (A2),D0                ;get the cummulative number of days
+                   ADD.L    D0,D1                  ;add to total so far
+                   ADD.L    8(A6,A1.L),D1          ;add day parameter
+                   SUBQ.W   #1,D1
+                   MOVEQ    #24,D0                 ;hours in a day
+                   BSR.S    L06284                 ;form number of hours
+                   ADD.L    12(A6,A1.L),D1         ;add hours parameter
+                   MOVEQ    #60,D0                 ;minutes/hour and seconds/minute
+                   BSR.S    L06284                 ;form number of minutes
+                   ADD.L    16(A6,A1.L),D1         ;add minutes parameter
+                   BSR.S    L06284                 ;form number of seconds
+                   ADD.L    20(A6,A1.L),D1         ;add seconds parameter
+                   MOVEQ    #MT.SCLK,D0            ;TRAP to set clock
+                   TRAP     #1                     ;set it
+6266 EXIT_CLK      MOVEQ    #0,D0                  ;signal "no errors"
+6268 CLK_END       TST.L    D0                     ;set flags for interpreter
+                   RTS
+
+   Table of cummulative days in each month.
+
+626C MONTHTBL      DC.W     0,31,59,90,120,151,181 ;jan,feb,mar,apr,may,jun,jul
+                   DC.W     212,243,273,304,334    ;aug,sep,oct,nov,dec
+
+6284 L06284        BSR.S    L062A8
+                   MOVE.L   D4,D3
+                   SWAP     D0
+                   SWAP     D1
+                   BSR.S    L062A8
+                   MOVE.L   D4,D2
+                   SWAP     D0
+                   SWAP     D3
+                   BSR.S    L062A8
+                   BSR.S    L062AE
+                   SWAP     D0
+                   SWAP     D1
+                   BSR.S    L062A8
+                   BSR.S    L062AE
+                   SWAP     D3
+                   SWAP     D0
+                   MOVE.L   D3,D1
+                   RTS
+
+62A8 L062A8        MOVE.L   D0,D4
+                   MULU     D1,D4
+                   RTS
+
+62AE L062AE        ADD.W    D4,D3
+                   CLR.W    D4
+                   SWAP     D4
+                   ADDX.L   D4,D2
+                   RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=BP_READ         ASSIGN DATA TO LIST OF VARIABLES                             ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³SYNTAX:          READ *[identifier,]* {see "concepts" in user guide}          ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     top of arithmetic stack                             ³
+³                 A3.L     first parameter in name table (relative)            ³
+³                 A5.L     last parameter in name table (relative)             ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+62B8 BP_READ       MOVE.L   A5,-(A7)
+62BA L062BA        CMPA.L   (A7),A3                ;end of name table ?
+                   BGE.S    L062E0                 ;exit if so
+                   JSR      L0737C(PC)
+                   BNE.S    L062E2
+                   JSR      L06154(PC)             ;get next DATA item
+                   BNE.S    L062E2                 ;exit if end of data statements
+                   MOVE.B   1(A6,A3.L),D0          ;get seperator type
+                   MOVE.L   A3,-(A7)
+                   JSR      L054FA(PC)             ;evaluate the identifier
+                   MOVEA.L  (A7)+,A3
+                   BNE.S    L062E2                 ;exit if wrong type
+                   JSR      BP_LET(PC)             ;assign the value to the variable
+                   ADDQ.W   #8,A3                  ;next entry in name table
+                   BRA.S    L062BA                 ;try next identifier
+
+62E0 L062E0        MOVEQ    #0,D0                  ;signal "no errors"
+62E2 L062E2        MOVEA.L  (A7)+,A5
+                   RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=BP_EXEC         LOAD A MACHINE CODE PROGRAM and RETURN                       ³
+³=BP_EXECW        LOAD A MACHINE CODE PROGRAM and WAIT                         ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³SYNTAX:          program := device {see "concepts" in user guide}             ³
+³                                                                              ³
+³                 EXEC   program                                               ³
+³                 EXEC_W program                                               ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     top of arithmetic stack                             ³
+³                 A3.L     first parameter in name table (relative)            ³
+³                 A5.L     last parameter in name table (relative)             ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:          ERR.BP   not an executable file                              ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   This procedure implements the standard way of loading executable files
+   from any specified device, normally a microdrive or floppy disc, that
+   can be loaded as multitasking jobs. The EXEC_W version will wait until
+   the job is finished before returning control to SUPERBASIC, the EXEC
+   version returns control immediately. An attempt to execute a file that
+   was not created using SEXEC will result in a bad parameter error.
+
+62E6 BP_EXEC       MOVEQ    #0,D5                  ;set timeout to return immediately
+                   BRA.S    L062EC
+
+62EA BP_EXECW      MOVEQ    #-1,D5                 ;set timeout to return when finished
+62EC L062EC        MOVEQ    #1,D4                  ;signal "old shared device"
+                   BSR      DOIOOPEN               ;open a channel
+                   BNE      BP_EXIT                ;and exit if any errors
+
+   First of all read the file header and allocate the required space for
+   the code and data areas according to the header contents then start the
+   job with a priority of 32.
+
+                   MOVEQ    #FS.HEADR,D0           ;TRAP to read file header
+                   MOVEQ    #14,D2                 ;length of header
+                   MOVEA.L  (A6),A1                ;A1 points at keyboard buffer base
+                   BSR      DOTRAP3                ;read the header into the buffer
+                   BNE      DO_CLOSE               ;and exit if any errors
+                   CMPI.B   #1,-9(A6,A1.L)         ;is it an executable file ?
+                   BNE      L063DE                 ;exit if not
+
+   Create space for the job in the transient program area using the data
+   from the file header.
+
+                   MOVEQ    #MT.CJOB,D0            ;TRAP to create a job
+                   MOVEQ    #-1,D1                 ;use an infinite timeout
+                   MOVE.L   -14(A6,A1.L),D2        ;get code space required
+                   MOVE.L   -8(A6,A1.L),D3         ;and get data space required
+                   SUBA.L   A1,A1                  ;signal "use jb_end as start"
+                   MOVEM.L  D2/A0/A3,-(A7)
+                   TRAP     #1                     ;create the job,A0 points at area on exi
+                   MOVEA.L  A0,A1
+                   MOVEM.L  (A7)+,D2/A0/A3
+                   TST.L    D0                     ;any errors ?
+                   BNE      DO_CLOSE               ;close the channel if so
+
+   Now load in the actual code of the job into the job arae.
+
+                   MOVE.L   D1,D6                  ;save the job ID
+                   MOVEQ    #FS.LOAD,D0            ;TRAP to load a file
+                   BSR      DO_TRAP3               ;load it
+                   BSR      DO_CLOSE               ;then close the channel
+                   BNE.S    BP_RJOB                ;and remove the job if any errors
+
+   The job is now in memory so activate it.
+
+                   MOVEQ    #MT.ACTIV,D0           ;TRAP to activate a job
+                   MOVE.L   D6,D1                  ;restore job ID
+                   MOVEQ    #32,D2                 ;job priority
+                   MOVE.L   D5,D3                  ;set timout according to exec type
+
+   Note that for EXEC, control will be returned to the current job but for
+   EXEC_W, the current job will wait until this one has finished. Hence an
+   EXEC_W command call will cause one job to be run at the expense of all
+   the others in the system including SUPERBASIC and therefore this job must
+   terminate for multitasking to be resumed again.
+
+                   TRAP     #1                     ;activate the job
+                   TST.L    D0                     ;any errors ?
+                   BEQ      BP_EXIT                ;exit if none
+
+   Remove the job from the transient program area as an error has occured.
+
+634C BP_RJOB       MOVE.L   D0,D4
+                   MOVEQ    #MT.RJOB,D0            ;TRAP to remove a job
+                   MOVE.L   D6,D1                  ;get the job's ID
+                   TRAP     #1                     ;remove it
+                   BRA      BP_END
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=BP_LBYTE        LOAD DATA FILE INTO MEMORY                                   ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³SYNTAX:          start_address := numeric_expression                          ³
+³                                                                              ³
+³                 LBYTES device, start_address                                 ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     top of arithmetic stack                             ³
+³                 A3.L     first parameter in name table (relative)            ³
+³                 A5.L     last parameter in name table (relative)             ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   This procedure is used to load machine code or data into memory at a
+   specific address.
+
+6358 BP_LBYTE      MOVEQ    #1,D4                  ;signal "old exclusive device"
+                   BSR      DOIOOPEN               ;open a channel
+                   BNE.S    BP_EXIT                ;and exit if any errors
+                   JSR      CA_GTLIN(PC)           ;get long integers,D3 = number found
+                   BNE.S    DO_CLOSE               ;and close the channel if wrong type
+                   SUBQ.W   #1,D3                  ;check for one integer
+                   BNE.S    L063DE                 ;exit if invalid number
+                   BTST     #0,3(A6,A1.L)          ;start address even ?
+                   BNE.S    L063DE                 ;exit if not
+                   MOVEA.L  TOS(A6,A1.L),A1        ;get the address
+                   ADDQ.L   #4,BV.RIP(A6)          ;restore maths stack
+                   MOVEQ    #FS.HEADR,D0           ;TRAP to read file header
+                   MOVEQ    #14,D2                 ;length of header
+                   MOVE.L   A1,-(A7)
+                   BSR.S    DO_TRAP3               ;read it
+                   MOVEA.L  (A7)+,A1
+                   BNE.S    DO_CLOSE               ;exit if any errors
+                   MOVE.L   (A1),D2
+                   MOVEQ    #FS.LOAD,D0            ;TRAP to load a file
+                   BSR.S    DO_TRAP3               ;load it
+                   BRA.S    DO_CLOSE               ;and close the channel
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=BP_SEXEC        SAVE AN EXECUTABLE PROGRAM FILE                              ³
+³=BP_SBYTE        SAVE AN AREA OF MEMORY TO A DEVICE                           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³SYNTAX:          start_address := numeric_expression                          ³
+³                 length := numeric_expression                                 ³
+³                 data_space := numeric_expression                             ³
+³                                                                              ³
+³                 SEXEC  device, start_address, length, data_space             ³
+³                 SBYTES device, start_address, length                         ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     top of arithmetic stack                             ³
+³                 A3.L     first parameter in name table (relative)            ³
+³                 A5.L     last parameter in name table (relative)             ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   The procedure SEXEC is used for generating executable program files that
+   can be run as multitasking jobs. The start address parameter is not in
+   fact saved along with the code since jobs are meant to always contain
+   relocatable code as there is number way of guaranteeing that the code will
+   be loaded at a particular location due to the way EXEC and EXEC_W work.
+   The data space parameter however is saved as this is needed when the job
+   is created prior to loading the code. SBYTE is actually only used when a
+   particular block of memory, such as a screen dump, is to be saved. Again
+   only the length parameter is saved with the data.
+
+638E BP_SEXEC      MOVEQ    #1,D5
+                   BRA.S    L06394
+
+6392 BP_SBYTE      MOVEQ    #0,D5
+6394 L06394        MOVEQ    #2,D4
+                   BSR.S    DOIOOPEN               ;open the channel
+                   BNE.S    BP_EXIT                ;and exit if there were any errors
+                   JSR      CA_GTLIN(PC)           ;get long integers,D3 = number found
+                   BNE.S    DO_CLOSE               ;close the channel if any errors
+                   SUBQ.W   #2,D3
+                   SUB.W    D5,D3
+                   BNE.S    L063DE
+                   MOVEA.L  TOS(A6,A1.L),A2
+                   ADDQ.W   #2,A1
+                   MOVE.L   2(A6,A1.L),TOS(A6,A1.L)
+                   MOVE.W   D5,4(A6,A1.L)
+                   MOVEQ    #FS.HEADS,D0           ;TRAP to set file header
+                   MOVE.L   A1,-(A7)
+                   BSR.S    DOTRAP3                ;set the header
+                   MOVEA.L  (A7)+,A1
+                   BNE.S    DO_CLOSE               ;close the channel
+                   MOVE.L   TOS(A6,A1.L),D2
+                   ADDQ.W   #6,A1
+                   LSL.W    #4,D5
+                   ADDA.W   D5,A1
+                   MOVE.L   A1,BV.RIP(A6)
+                   MOVEA.L  A2,A1
+                   MOVEQ    #FS.SAVE,D0            ;TRAP to save a file
+                   BSR.S    DO_TRAP3               ;save it
+
+63D4 DO_CLOSE      MOVE.L   D0,D4
+                   MOVEQ    #IO.CLOSE,D0           ;TRAP to close a file
+                   TRAP     #2                     ;close it
+63DA BP_END        MOVE.L   D4,D0
+63DC BP_EXIT       RTS
+
+63DE L063DE        MOVEQ    #ERR.BP,D0             ;signal "bad parameter"
+                   BRA.S    DO_CLOSE               ;and close the channel
+
+63E2 L063E2        ADDQ.W   #4,A7                  ;restore stack
+                   MOVEQ    #ERR.BP,D0             ;signal "bad parameter"
+                   RTS
+
+63E8 DOTRAP3       TRAP     #4                     ;convert to absolute addresses
+63EA DO_TRAP3      MOVEQ    #-1,D3                 ;use an infinite timeout
+                   TRAP     #3                     ;do the TRAP
+                   TST.L    D0                     ;set flags for interpreter
+                   RTS
+
+63F2 L063F2        CMPA.L   A5,A3                  ;end of name table ?
+                   BGE.S    L063E2
+                   MOVE.L   A5,-(A7)
+                   ADDQ.W   #8,A3                  ;next entry in name table
+                   MOVEA.L  A3,A5
+                   JSR      L05EFC(PC)             ;evaluate entry
+                   MOVEA.L  (A7)+,A5
+                   BEQ.S    BP_EXIT
+                   ADDQ.W   #4,A7
+                   RTS
+
+6408 DOIOOPEN      BSR.S    L063F2
+                   MOVEQ    #IO.OPEN,D0            ;TRAP to open a channel
+                   MOVEQ    #-1,D1                 ;use an infinite timeout
+                   MOVE.L   D4,D3
+6410 DOTRAP2       MOVEA.L  A1,A0
+                   MOVE.W   TOS(A6,A1.L),-(A7)
+                   TRAP     #4                     ;convert to absolute addresses
+                   TRAP     #2                     ;do the TRAP
+                   MOVEQ    #3,D3
+                   ADD.W    (A7)+,D3
+                   BCLR     #0,D3
+                   ADD.L    D3,BV.RIP(A6)          ;restore maths stack pointer
+                   TST.L    D0                     ;set flags for interpreter
+                   RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=BP_DLETE        REMOVE A FILE FROM DEVICE DIRECTORY                          ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³SYNTAX:          DELETE device                                                ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     top of arithmetic stack                             ³
+³                 A3.L     first parameter in name table (relative)            ³
+³                 A5.L     last parameter in name table (relative)             ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+642A BP_DLETE      BSR.S    L063F2
+                   MOVEQ    #IO.DELET,D0           ;TRAP to delete a file
+                   BRA.S    DOTRAP2                ;delete it
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=BP_DIR          DISPLAY DEVICE DIRECTORY                                     ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³SYNTAX:          DIR device                                                   ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     top of arithmetic stack                             ³
+³                 A3.L     first parameter in name table (relative)            ³
+³                 A5.L     last parameter in name table (relative)             ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+6430 BP_DIR        JSR      L06040(PC)
+                   BNE.S    BP_EXIT
+                   MOVEA.L  A0,A4
+                   MOVEQ    #4,D4                  ;signal "get directory"
+                   BSR.S    DOIOOPEN               ;open the channel
+                   BNE.S    BP_EXIT                ;exit if any errors
+                   MOVEA.L  A0,A5
+                   MOVEQ    #FS.MDINF,D0           ;TRAP to get information about medium
+                   MOVEA.L  (A6),A1
+                   MOVEA.L  A5,A0
+                   BSR.S    DOTRAP3                ;get the information
+                   BNE.S    DO_CLOSE               ;and close the channel if any errors
+                   MOVE.L   D1,-(A7)
+                   MOVEA.L  (A6),A1
+                   MOVEQ    #10,D2
+                   BSR.S    L064B0
+
+                   MOVEQ    #IO.SBYTE,D0           ;TRAP to send a byte
+                   MOVEQ    #10,D1
+                   TRAP     #3                     ;send it
+                   MOVEM.W  (A7)+,D1-2
+                   BSR.S    L06484
+
+645E L0645E        MOVEQ    #IO.FSTRG,D0           ;TRAP to fetch a string of bytes
+                   MOVEQ    #64,D2                 ;length of file header
+                   MOVEA.L  (A6),A1
+                   MOVEA.L  A5,A0
+                   MOVEQ    #0,D4
+                   BSR      DOTRAP3                ;get the header
+                   BNE      L063D6
+                   SUBA.W   #$30,A1
+                   MOVE.W   -2(A6,A1.L),D2
+                   BEQ.S    L0645E
+                   BSR.S    L064B0
+                   MOVEQ    #IO.SBYTE,D0           ;TRAP to send a byte
+                   MOVEQ    #10,D1                 ;length of medium name
+                   TRAP     #3                     ;print it
+                   BRA.S    L0645E
+
+6484 L06484        MOVE.W   D2,D4
+                   BSR.S    L064A0
+                   MOVEQ    #IO.SBYTE,D0           ;TRAP to send a byte
+                   MOVE.B   #$2F,D1
+                   TRAP     #3                     ;send it
+
+                   MOVE.W   D4,D1
+                   BSR.S    L064A0
+                   MOVEQ    #IO.SSTRG,D0           ;TRAP to send a string of bytes
+                   LEA      L065C4(PC),A1          ;A1 points at "sectors" message
+                   MOVEQ    #9,D2                  ;length of message
+                   TRAP     #3                     ;print it
+                   RTS
+
+64A0 L064A0        MOVEA.L  (A6),A1
+                   LEA      2(A1),A0
+                   MOVE.W   D1,TOS(A6,A1.L)
+                   JSR      L03EC4(PC)
+                   MOVE.W   D1,D2                  ;save number of bytes to send
+64B0 L064B0        MOVEQ    #IO.SSTRG,D0           ;TRAP to send a string of bytes
+                   MOVEA.L  A4,A0                  ;get channel ID
+                   MOVEQ    #-1,D3                 ;use an infinite timeout
+                   BRA      DOTRAP3                ;send them
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=BP_FORMT        FORMAT DEVICE MEDIUM                                         ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³SYNTAX:          FORMAT [channel,] device                                     ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     top of arithmetic stack                             ³
+³                 A3.L     first parameter in name table (relative)            ³
+³                 A5.L     last parameter in name table (relative)             ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+64BA BP_FORMT      JSR      L06040(PC)
+                   BNE      BP_EXIT
+                   MOVEA.L  A0,A4
+                   BSR      L063F2
+                   MOVEQ    #IO.FORMT,D0           ;TRAP to format a medium
+                   BSR      DOTRAP2                ;format it
+                   BNE      BP_EXIT                ;and exit if any errors
+                   BRA.S    L06484
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=BP_COPY         COPY FILE                                                    ³
+³=BP_COPYN        COPY FILE MINUS HEADER                                       ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³SYNTAX:          COPY   device TO device                                      ³
+³                 COPY_N device TO device                                      ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     top of arithmetic stack                             ³
+³                 A3.L     first parameter in name table (relative)            ³
+³                 A5.L     last parameter in name table (relative)             ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+64D4 BP_COPY       MOVEQ    #0,D5
+                   BRA.S    L064DA
+
+64D8 BP_COPYN      MOVEQ    #-1,D5
+64DA L064DA        MOVEQ    #IO.OPEN,D4            ;TRAP to open a channel
+                   BSR      DOIOOPEN               ;open it
+                   BNE      BP_EXIT                ;and exit if any errors
+                   MOVEA.L  A0,A4                  ;A4 points at channel definition block
+                   MOVEQ    #2,D4                  ;signal "new file"
+                   BSR      DOIOOPEN               ;open it
+                   BNE.S    L06566
+                   TST.B    D5
+                   BNE.S    L06510
+                   MOVEQ    #-1,D5
+                   MOVEA.L  (A6),A1
+
+                   MOVEQ    #FS.HEADR,D0           ;TRAP to read file header
+                   MOVEQ    #14,D2                 ;length of header
+                   EXG      A4,A0
+                   BSR      DOTRAP3                ;read it
+                   EXG      A4,A0
+                   BNE.S    L06510
+                   MOVEA.L  (A6),A1
+                   MOVE.L   TOS(A6,A1.L),D5
+                   MOVEQ    #FS.HEADS,D0           ;TRAP to set file header
+                   BSR      DOTRAP3                ;set it
+
+6510 L06510        MOVEA.L  (A6),A1
+                   MOVE.L   8(A6),D2
+                   SUB.L    A1,D2
+                   MOVEQ    #0,D3
+                   EXG      A4,A0
+                   TST.L    D5
+                   BLE.S    L06526
+                   CMP.L    D5,D2
+                   BLE.S    L06526
+                   MOVE.L   D5,D2
+6526 L06526        TAS      $8F(A6)
+                   BEQ.S    L06564
+                   MOVEQ    #IO.FSTRG,D0           ;TRAP to fetch a string of bytes
+                   TRAP     #4                     ;use absolute values
+                   TRAP     #3                     ;fetch them
+
+                   CMPI.L   #ERR.NC,D0             ;not complete ?
+                   BNE.S    L06540                 ;jump forward if not
+                   TST.W    D1
+                   BEQ.S    L06526                 ;keep trying if so
+                   BRA.S    L06552
+
+6540 L06540        CMPI.L   #ERR.EF,D0             ;end of file ?
+                   BNE.S    L0654E                 ;jump forward if not
+                   MOVEQ    #0,D0                  ;signal "no errors"
+                   TST.W    D1
+                   BEQ.S    L06564
+654E L0654E        TST.L    D0                     ;set flags for interpreter
+                   BNE.S    L06564
+
+6552 L06552        MOVEQ    #IO.SSTRG,D0           ;TRAP to send a string of bytes
+                   MOVE.W   D1,D2
+                   EXG      A4,A0
+                   SUBA.W   D1,A1
+                   BSR      DOTRAP3                ;send them
+
+                   BNE.S    L06564
+                   SUB.L    D2,D5
+                   BNE.S    L06510
+6564 L06564        BSR.S    L06568
+6566 L06566        EXG      A4,A0
+6568 L06568        BRA      DO_CLOSE               ;close it
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=BP_CLOSE        CLOSE A CHANNEL                                              ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³SYNTAX:          CLOSE channel                                                ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     top of arithmetic stack                             ³
+³                 A3.L     first parameter in name table (relative)            ³
+³                 A5.L     last parameter in name table (relative)             ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:          ERR.BP   bad paraameter                                      ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+656C BP_CLOSE      CMPA.L   A3,A5                  ;any parameters ?
+                   BLE.S    L0658A                 ;exit if not
+                   TST.B    1(A6,A3.L)             ;preceded by a hash ?
+                   BPL.S    L0658A                 ;exit if not
+                   JSR      L06040(PC)
+                   BNE.S    L06588
+                   MOVE.L   #-1,0(A6,A2.L)
+                   MOVEQ    #IO.CLOSE,D0           ;TRAP to close a channel
+                   TRAP     #2                     ;close it
+6588 L06588        RTS
+
+658A L0658A        MOVEQ    #ERR.BP,D0             ;signal "bad parameter"
+                   BRA.S    L06588
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=BP_OPEN         LINK CHANNEL WITH PHYSICAL DEVICE                            ³
+³=BP_OPENI        OPEN EXISTING MICRODRIVE FILE FOR I/P                        ³
+³=BP_OPENN        OPEN NEW MICRODRIVE FILE FOR O/P                             ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³SYNTAX:          OPEN     channel, device                                     ³
+³                 OPEN_IN  channel, device                                     ³
+³                 OPEN_NEW channel, device                                     ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     top of arithmetic stack                             ³
+³                 A3.L     first parameter in name table (relative)            ³
+³                 A5.L     last parameter in name table (relative)             ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+658E BP_OPEN       MOVEQ    #0,D4
+                   BRA.S    L06598
+
+6592 BP_OPENI      MOVEQ    #1,D4
+                   BRA.S    L06598
+
+6596 BP_OPENN      MOVEQ    #IO.CLOSE,D4           ;TRAP to close a channel
+6598 L06598        BSR.S    BP_CLOSE
+                   TST.L    D0
+                   BEQ.S    L065A4
+                   MOVEQ    #-6,D2
+                   CMP.L    D0,D2
+                   BNE.S    L06588
+65A4 L065A4        EXG      D1,D6
+                   BSR      DOIOOPEN
+                   EXG      D6,D1
+                   BNE.S    L06588
+                   JSR      L060A0(PC)
+                   RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=BP_SAVE         SAVE SUPERBASIC PROGRAM ON DEVICE                            ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³SYNTAX:          line :=  | numeric_expression TO numeric_exression           ³
+³                          | numeric_expression TO                             ³
+³                          | TO numeric_expression                             ³
+³                          | numeric_expression                                ³
+³                          |                                                   ³
+³                                                                              ³
+³                 SAVE device *[, line]*                                       ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     top of arithmetic stack                             ³
+³                 A3.L     first parameter in name table (relative)            ³
+³                 A5.L     last parameter in name table (relative)             ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+65B4 BP_SAVE       MOVEQ    #IO.CLOSE,D4           ;TRAP to close channel
+                   BSR      L00408                 ;!!!!!!!!!!!!!!!!
+                   BNE.S    L06588
+                   JSR      L06DD4(PC)
+                   BRA      DO_CLOSE               ;close it
+
+65C4 L065C4        DC.B     " sectors",10,0
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=BP_FILL         TURN GRAPHICS FILL ON OR OFF                                 ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³SYNTAX:          switch := numeric_expression {0 .. 1}                        ³
+³                                                                              ³
+³                 FILL [channel,] switch                                       ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     top of arithmetic stack                             ³
+³                 A3.L     first parameter in name table (relative)            ³
+³                 A5.L     last parameter in name table (relative)             ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+65CE BP_FILL       JSR      L06040(PC)
+                   BNE.S    L065EA
+                   JSR      L05C2C(PC)
+                   BNE.S    L065EA
+                   MOVE.L   TOS(A6,A1.L),D1        ;get required fill mode
+                   ADDQ.L   #4,A1                  ;restore maths stack
+                   MOVE.L   A1,BV.RIP(A6)          ;update top of maths stack pointer
+                   MOVEQ    #SD.FLOOD,D0           ;TRAP to set fill mode
+                   MOVEQ    #-1,D3                 ;use an infinite timeout
+                   TRAP     #3                     ;set it
+65EA L065EA        RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=BP_UNDER        TURN UNDERLINE STATE ON OR OFF                               ³
+³=BP_FLASH        TURN FLASH STATE ON OR OFF                                   ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³SYNTAX:          switch := numeric_expression {0 .. 1}                        ³
+³                                                                              ³
+³                 UNDER [channel,] switch                                      ³
+³                 FLASH [channel,] switch                                      ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     top of arithmetic stack                             ³
+³                 A3.L     first parameter in name table (relative)            ³
+³                 A5.L     last parameter in name table (relative)             ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+65EC BP_UNDER      MOVE.B   #SD.SETUL,D4           ;TRAP to set underline mode
+                   BRA.S    L065F6
+
+65F2 BP_FLASH      MOVE.B   #SD.SETFL,D4           ;TRAP to set flash mode
+65F6 L065F6        JSR      L078CA(PC)
+                   BNE.S    L06606
+                   JSR      L078BA(PC)
+                   BNE.S    L06606
+6602 L06602        JMP      L07856(PC)
+6606 L06606        RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=BP_OVER         SELECT OVER PRINTING TYPE                                    ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³SYNTAX:          switch := numeric_expression {-1 .. 1}                       ³
+³                                                                              ³
+³                 OVER [channel,] switch                                       ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     top of arithmetic stack                             ³
+³                 A3.L     first parameter in name table (relative)            ³
+³                 A5.L     last parameter in name table (relative)             ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:          ERR.BP   invalid "over" value                                ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+6608 BP_OVER       JSR      L078CA(PC)
+                   BNE.S    L06606
+                   MOVE.B   #SD.SETMD,D4           ;TRAP to set write mode
+                   MOVE.W   TOS(A6,A1.L),D1        ;get required mode
+                   CMPI.W   #1,D1                  ;valid value ?
+                   BGT.S    L06622                 ;exit if not
+                   CMPI.W   #-1,D1                 ;valid value ?
+                   BGE.S    L06602                 ;do TRAP if so otherwise
+6622 L06622        MOVEQ    #ERR.BP,D0             ;signal "bad parameter"
+                   RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=                                                                             ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:                                                                        ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+6626 L06626        BSR      L066FC
+                   JSR      L05C48(PC)
+                   BNE.S    L06638
+                   MOVEQ    #SD.GCUR,D0            ;TRAP to set text cursor
+                   MOVEQ    #-1,D3                 ;use an infinite timeout
+                   TRAP     #4                     ;and absolute values
+                   TRAP     #3                     ;set cursor
+6638 L06638        BRA      L066F4
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=BP_SCALE        ALTER GRAPHICS SCALE FACTOR and ORIGIN                       ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³SYNTAX:          scale := numeric_expression                                  ³
+³                 origin_x := numeric_expression                               ³
+³                 origin_y := numeric_expression                               ³
+³                                                                              ³
+³                 SCALE [channel,] scale, origin_x, origin_y                   ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     top of arithmetic stack                             ³
+³                 A3.L     first parameter in name table (relative)            ³
+³                 A5.L     last parameter in name table (relative)             ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+663C BP_SCALE      MOVEQ    #SD.SCALE,D4           ;TRAP to set graphic scale and origin
+                   BSR      L066FC
+                   BSR      L06788
+                   BSR      L0678C
+                   BRA      L066DC
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=BP_POINT        DRAW POINT RELATIVE TO GRAPHICS ORIGIN                       ³
+³=BP_RPOIN        DRAW POINT RELATIVE TO GRAPHICS CURSOR                       ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³SYNTAX:          x := numeric_expression                                      ³
+³                 y := numeric_expression                                      ³
+³                                                                              ³
+³                 POINT    [channel,] x, y *[, x, y]*                          ³
+³                 POINT_R  [channel,] x, y *[, x, y]*                          ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     top of arithmetic stack                             ³
+³                 A3.L     first parameter in name table (relative)            ³
+³                 A5.L     last parameter in name table (relative)             ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+664E BP_POINT      MOVEQ    #SD.POINT,D4           ;TRAP to plot point
+                   BRA.S    L06656
+
+6652 BP_RPOIN      MOVE.W   #SD.POINT + 128,D4     ;         " "
+6656 L06656        BSR      L066FC
+                   BSR      L06762
+                   BRA.S    L066DC
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=BP_LINE         DRAW LINE RELATIVE TO GRAPHICS ORIGIN                        ³
+³=BP_LINER        DRAW LINE RELATIVE TO GRAPHICS CURSOR                        ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³SYNTAX:          x := numeric_expression                                      ³
+³                 y := numeric_expression                                      ³
+³                 point := x,y                                                 ³
+³                 angle := numeric_expression {in radians}                     ³
+³                 parameter_1 :=    | TO point, angle                          ³
+³                                   | TO point                                 ³
+³                                   | point                                    ³
+³                 parameter_2 :=    | TO point                                 ³
+³                                   | , point TO point                         ³
+³                                                                              ³
+³                 LINE   [channel,] parameter_1 *[, parameter_2]*              ³
+³                 LINE_R [channel,] parameter_1 *[, parameter_2]*              ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     top of arithmetic stack                             ³
+³                 A3.L     first parameter in name table (relative)            ³
+³                 A5.L     last parameter in name table (relative)             ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+6660 BP_LINE       MOVEQ    #SD.LINE,D4            ;TRAP to draw line
+                   BRA.S    L06668
+
+6664 BP_LINER      MOVE.W   #SD.LINE + 128,D4      ;TRAP to draw line
+6668 L06668        BSR      L066FC
+                   BSR      L06750
+                   BNE.S    L066EA
+                   BSR      L06762
+                   BRA.S    L066DC
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=BP_ELLIP        DRAW ELLIPSE RELATIVE TO GRAPHICS ORIGIN                     ³
+³=BP_ELPSR        DRAW ELLIPSE RELATIVE TO GRAPHICS CURSOR                     ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³SYNTAX:          x := numeric_expression                                      ³
+³                 y := numeric_expression                                      ³
+³                 radius := numeric_expression                                 ³
+³                 eccentricity := numeric_expression                           ³
+³                 angle := numeric_expression {in radians}                     ³
+³                 parameters :=     | x, y,                                    ³
+³                                   | radius, eccentricity, angle              ³
+³                                                                              ³
+³                 CIRCLE   [channel,] parameters *[; parameters]*              ³
+³                 CIRCLE_R [channel,] parameters *[; parameters]*              ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     top of arithmetic stack                             ³
+³                 A3.L     first parameter in name table (relative)            ³
+³                 A5.L     last parameter in name table (relative)             ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+6678 BP_ELLIP      MOVEQ    #SD.ELIPS,D4           ;TRAP to draw circle/ellipse
+                   BRA.S    L06680
+
+667C BP_ELPSR      MOVE.W   #SD.ELIPS + 128,D4     ;         "        "
+6680 L06680        BSR.S    L066FC
+                   BSR      L06762
+                   BSR      L0678C
+                   CMPI.B   #1,D5
+                   BNE.S    L06696
+                   BSR      L06788
+                   BRA.S    L066AE
+
+6696 L06696        SUBQ.L   #8,A1
+                   SUBQ.L   #4,A1
+                   CLR.L    TOS(A6,A1.L)
+                   MOVE.L   #$801,4(A6,A1.L)
+                   MOVE.L   #$40000000,8(A6,A1.L)
+66AE L066AE        MOVEM.W  6(A6,A1.L),D0-2
+                   MOVE.W   12(A6,A1.L),6(A6,A1.L)
+                   MOVE.L   14(A6,A1.L),8(A6,A1.L)
+                   MOVEM.W  D0-2,12(A6,A1.L)
+                   BRA.S    L066DC
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=BP_ARC          DRAW ARC RELATIVE TO GRAPHICS ORIGIN                         ³
+³=BP_ARC_R        DRAW ARC RELATIVE TO GRAPHICS CURSOR                         ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³SYNTAX:          x := numeric_expression                                      ³
+³                 y := numeric_expression                                      ³
+³                 angle := numeric_expression {in radians}                     ³
+³                 point := x, y                                                ³
+³                 parameter_1 :=    | , point TO point, angle                  ³
+³                                   | TO point, angle                          ³
+³                 parameter_2 :=    | TO point, angle                          ³
+³                                   | , point TO point, angle                  ³
+³                                                                              ³
+³                 ARC   [channel,] parameter_1 *[, parameter_2]*               ³
+³                 ARC_R [channel,] parameter_1 *[, parameter_2]*               ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     top of arithmetic stack                             ³
+³                 A3.L     first parameter in name table (relative)            ³
+³                 A5.L     last parameter in name table (relative)             ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+66C8 BP_ARC        MOVEQ    #SD.ARC,D4             ;TRAP to plot arc
+                   BRA.S    L066D0
+
+66CC BP_ARC_R      MOVE.W   #SD.ARC + 128,D4       ;TRAP to plot arc
+66D0 L066D0        BSR.S    L066FC
+                   BSR.S    L06750
+                   BSR      L06762
+                   BSR      L0678C
+66DC L066DC        MOVE.L   D4,D0                  ;copy command
+                   SWAP     D0
+                   BCLR     #7,D0                  ;reset to SD.ARC if ARC_R required
+                   MOVEQ    #-1,D3                 ;use an infinite timeout
+                   TRAP     #4                     ;and absolute values
+                   TRAP     #3                     ;plot the arc
+
+66EA L066EA        CMPA.L   D6,A3
+                   BGE.S    L066F2
+                   MOVE.L   A4,-(A7)
+                   MOVE.W   D5,D4
+66F2 L066F2        MOVEQ    #0,D0                  ;signal "no errors"
+66F4 L066F4        MOVE.L   D7,BV.RIP(A6)          ;restore maths stack pointer
+                   MOVEA.L  D7,A1
+                   RTS
+
+66FC L066FC        SWAP     D4
+                   CLR.W    D4
+                   CLR.W    D5
+                   MOVE.L   BV.RIP(A6),D7          ;get top of maths stack
+                   MOVE.L   A5,D6                  ;D6 points at last entry in name table
+                   CMPA.L   D6,A3                  ;any parameters ?
+                   BLT.S    L06710                 ;jump forward if so otherwise
+                   MOVEQ    #ERR.BP,D0             ;signal "bad parameter"
+                   BRA.S    L0674C
+
+6710 L06710        MOVE.B   1(A6,A3.L),D0
+                   ANDI.B   #%00001111,D0
+                   BNE.S    L06722
+                   JSR      L06DA2(PC)
+                   MOVE.W   D5,D4
+                   BRA.S    L06734
+6722 L06722        BTST     #7,1(A6,A3.L)
+                   BEQ.S    L06734
+                   MOVE.B   1(A6,A3.L),D4
+                   BCLR     #7,D4
+                   LSR.B    #4,D4
+6734 L06734        JSR      L06040(PC)
+                   BNE.S    L0674C
+                   MOVE.W   #256,D1
+                   JSR      BV_CHRIX(PC)           ;reserve space on maths sack
+                   MOVE.L   BV.RIP(A6),D7
+                   MOVEA.L  D7,A1
+                   MOVEA.L  (A7),A4
+                   RTS
+
+674C L0674C        ADDQ.L   #4,A7
+                   BRA.S    L066F4
+
+6750 L06750        CMPI.B   #5,D4
+                   BNE.S    L06762
+                   BSR.S    L067B4
+                   BSR.S    L067C4
+                   MOVE.L   A1,BV.RIP(A6)
+                   MOVEQ    #0,D0
+                   RTS
+
+6762 L06762        BSR.S    L06792
+                   BNE.S    L0674C
+                   BTST     #$17,D4
+                   BEQ.S    L06772
+                   BSR.S    L067B4
+                   JSR      L048D2(PC)
+6772 L06772        BSR.S    L06792
+                   BNE.S    L0674C
+                   BTST     #$17,D4
+                   BEQ.S    L06782
+                   BSR.S    L067C4
+                   JSR      L048D2(PC)
+6782 L06782        BSR.S    L067D4
+                   MOVEQ    #1,D0
+                   RTS
+
+6788 L06788        BSR.S    L06792
+                   BNE.S    L0674C
+678C L0678C        BSR.S    L06792
+                   BNE.S    L0674C
+                   RTS
+
+6792 L06792        MOVE.L   A4,-(A7)
+                   CMPA.L   D6,A3
+                   BLT.S    L0679C
+                   MOVEQ    #ERR.BP,D0             ;signal "bad parameter"
+                   BRA.S    L067B0
+
+679C L0679C        MOVE.W   D5,D4
+                   JSR      L06DA2(PC)
+                   MOVEA.L  A3,A5
+                   JSR      L0593E(PC)
+                   BNE.S    L067B0
+                   MOVEQ    #2,D0
+                   JSR      L0540C(PC)
+67B0 L067B0        MOVEA.L  (A7)+,A4
+                   RTS
+
+67B4 L067B4        SUBQ.W   #6,A1
+                   MOVE.L   10(A6,A2.L),TOS(A6,A1.L)
+                   MOVE.W   14(A6,A2.L),4(A6,A1.L)
+                   RTS
+
+67C4 L067C4        SUBQ.W   #6,A1
+                   MOVE.L   4(A6,A2.L),TOS(A6,A1.L)
+                   MOVE.W   8(A6,A2.L),4(A6,A1.L)
+                   RTS
+
+67D4 L067D4        MOVE.L   TOS(A6,A1.L),4(A6,A2.L)
+                   MOVE.L   4(A6,A1.L),8(A6,A2.L)
+                   MOVE.L   8(A6,A1.L),12(A6,A2.L)
+                   RTS
+
+67E8 SB_INIT       LEA      PROCLIST(PC),A1        ;A1 points at procedure/function list
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=BP_INIT         ADD SUPER BASIC PROCEDURES          (VECTOR $110)            ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     start of procedure/function list                    ³
+³                 A6.L     SUPERBASIC system variables                         ³
+³                                                                              ³
+³EXIT:            D3 and A1  corrupted                                         ³
+³                 D1,D2,A0,A2 and A3 preserved                                 ³
+³                 A6.L     updated pointer if memory expanded                  ³
+³                                                                              ³
+³ERRORS:          none                                                         ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+67EC BP_INIT       MOVEM.L  D1-2/D5-7/A0/A2-3,-(A7)
+                   MOVEQ    #8,D5
+67F2 L067F2        MOVEQ    #0,D7
+                   MOVEQ    #0,D6
+                   MOVE.W   (A1)+,D6
+                   LSL.L    #3,D6
+                   MOVE.L   D6,D1
+                   MOVE.L   A1,-(A7)
+                   JSR      L04F5A(PC)
+                   MOVE.L   D6,D1
+                   JSR      L04F6C(PC)
+                   MOVEA.L  BV.NTP(A6),A0
+                   MOVEA.L  BV.NLP(A6),A2
+                   MOVEA.L  (A7)+,A1
+6812 L06812        MOVEA.L  A1,A3
+                   MOVE.W   (A1)+,D0
+                   BEQ.S    L0684E
+                   ADDA.W   D0,A3
+                   MOVE.B   (A1)+,D1
+                   MOVE.B   D5,0(A6,A0.L)
+                   MOVE.B   D7,1(A6,A0.L)
+                   MOVE.L   A2,D2
+                   SUB.L    BV.NLBAS(A6),D2
+                   MOVE.W   D2,2(A6,A0.L)
+                   MOVE.B   D1,0(A6,A2.L)
+                   ADDQ.W   #1,A2
+                   MOVE.B   D1,D2
+6836 L06836        MOVE.B   (A1)+,0(A6,A2.L)
+                   ADDQ.W   #1,A2
+                   SUBQ.B   #1,D1
+                   BGT.S    L06836
+                   BTST     D7,D2
+                   BNE.S    L06846
+                   ADDQ.W   #1,A1
+6846 L06846        MOVE.L   A3,4(A6,A0.L)
+                   ADDQ.W   #8,A0
+                   BRA.S    L06812
+
+684E L0684E        MOVE.L   A0,BV.NTP(A6)
+                   MOVE.L   A2,BV.NLP(A6)
+                   SUBQ.W   #8,D5
+                   BNE.S    L0685E
+                   MOVEQ    #9,D5
+                   BRA.S    L067F2
+685E L0685E        MOVEM.L  (A7)+,D1-2/D5-7/A0/A2-3
+                   RTS
+
+2.21 Procedures and functions list.
+
+6864 PROCLIST      DC.W     79                     ;number of procedures to follow
+                   DC.W     BP_PRINT - *           ;print character(s) to a channel
+                   DC.B     5,"PRINT"
+                   DC.W     BP_RUN - *             ;start program execution
+                   DC.B     3,"RUN"
+                   DC.W     BP_STOP - *            ;terminate program execution
+                   DC.B     4,"STOP",0
+                   DC.W     BP_INPUT - *           ;read character(s) from a channel
+                   DC.B     5,"INPUT"
+                   DC.W     BP_WINDO - *           ;redefine channel's window
+                   DC.B     6,"WINDOW",0
+                   DC.W     BP_BORDE - *           ;add a border to a window
+                   DC.B     6,"BORDER",0
+                   DC.W     BP_INK - *             ;set current ink colour
+                   DC.B     3,"INK"
+                   DC.W     BP_STRIP - *           ;set current strip colour
+                   DC.B     5,"STRIP"
+                   DC.W     BP_PAPER - *           ;set current paper colour
+                   DC.B     5,"PAPER"
+                   DC.W     BP_BLOCK - *           ;fill a block with colour
+                   DC.B     5,"BLOCK"
+                   DC.W     BP_PAN - *             ;pan part or all of screen
+                   DC.B     3,"PAN"
+                   DC.W     BP_SCROL - *           ;scroll part or all of screen
+                   DC.B     6,"SCROLL",0
+                   DC.W     BP_CSIZE - *           ;set a new character size
+                   DC.B     5,"CSIZE"
+                   DC.W     BP_FLASH - *           ;turn flash state on or off
+                   DC.B     5,"FLASH"
+                   DC.W     BP_UNDER - *           ;turn underline state on or off
+                   DC.B     5,"UNDER"
+                   DC.W     BP_OVER - *            ;select over printing type
+                   DC.B     4,"OVER",0
+                   DC.W     BP_CURSO - *           ;position cursor with graphic co-ords
+                   DC.B     6,"CURSOR",0
+                   DC.W     BP_AT - *              ;position cursor at character co-ords
+                   DC.B     2,"AT",0
+                   DC.W     BP_SCALE - *           ;alter graphics scale factor and origin
+                   DC.B     5,"SCALE"
+                   DC.W     BP_POINT - *           ;plot point relative to graph origin
+                   DC.B     5,"POINT"
+                   DC.W     BP_LINE - *            ;draw line relative to graph origin
+                   DC.B     4,"LINE",0
+                   DC.W     BP_ELLIP - *           ;draw ellipse relative to graph origin
+                   DC.B     7,"ELLIPSE"
+                   DC.W     BP_ELLIP - *           ;draw ellipse relative to graph origin
+                   DC.B     6,"CIRCLE",0
+                   DC.W     BP_ARC - *             ;draw arc relative to graph origin
+                   DC.B     3,"ARC"
+                   DC.W     BP_RPOIN - *           ;plot a point relative to graph cursor
+                   DC.B     7,"POINT_R"
+                   DC.W     BP_TURN - *            ;turn turtle by specified angle
+                   DC.B     4,"TURN",0
+                   DC.W     BP_TURNT - *           ;turn turtle to specified angle
+                   DC.B     6,"TURNTO",0
+                   DC.W     BP_PENUP - *           ;switch turtle graphics pen off
+                   DC.B     5,"PENUP"
+                   DC.W     BP_PENDO - *           ;switch turtle graphics pen on
+                   DC.B     7,"PENDOWN"
+                   DC.W     BP_MOVE - *            ;move turtle in current direction
+                   DC.B     4,"MOVE",0
+                   DC.W     BP_LIST - *            ;list part of program on channel
+                   DC.B     4,"LIST",0
+                   DC.W     BP_OPEN - *            ;link channel with physical device
+                   DC.B     4,"OPEN",0
+                   DC.W     BP_CLOSE - *           ;close a channel
+                   DC.B     5,"CLOSE"
+                   DC.W     BP_FORMT - *           ;format device medium
+                   DC.B     6,"FORMAT",0
+                   DC.W     BP_COPY - *            ;copy file
+                   DC.B     4,"COPY",0
+                   DC.W     BP_NCOPY - *           ;copy file minus header
+                   DC.B     6,"COPY_N",0
+                   DC.W     BP_DLETE - *           ;remove a file from device directory
+                   DC.B     6,"DELETE",0
+                   DC.W     BP_DIR - *             ;display device directory
+                   DC.B     3,"DIR"
+                   DC.W     BP_EXEC - *            ;execute a program and return to basic
+                   DC.B     4,"EXEC",0
+                   DC.W     BP_EXECW - *           ;execute a program and wait
+                   DC.B     6,"EXEC_W",0
+                   DC.W     BP_LBYTE - *           ;load data file into memory
+                   DC.B     6,"LBYTES",0
+                   DC.W     BP_SEXEC - *           ;save executable program
+                   DC.B     5,"SEXEC"
+                   DC.W     BP_SBYTE - *           ;save area of memory to device
+                   DC.B     6,"SBYTES",0
+                   DC.W     BP_SAVE - *            ;save a SUPERBASIC program on device
+                   DC.B     4,"SAVE",0
+                   DC.W     BP_MERGE - *           ;load and merge a SUPERBASIC program
+                   DC.B     5,"MERGE"
+                   DC.W     BP_MRUN - *            ;load,merge and run SUPERBASIC program
+                   DC.B     4,"MRUN",0
+                   DC.W     BP_LOAD - *            ;load a SUPERBASIC program
+                   DC.B     4,"LOAD",0
+                   DC.W     BP_LRUN - *            ;load and run a SUPERBASIC program
+                   DC.B     4,"LRUN",0
+                   DC.W     BP_NEW - *             ;clear SUPERBASIC program and variables
+                   DC.B     3,"NEW"
+                   DC.W     BP_CLEAR - *           ;clear SUPERBASIC variables
+                   DC.B     5,"CLEAR"
+                   DC.W     BP_OPENI - *           ;open existing microdrive file for I/P
+                   DC.B     7,"OPEN_IN"
+                   DC.W     BP_OPENN - *           ;open new microdrive file for O/P
+                   DC.B     8,"OPEN_NEW",0
+                   DC.W     BP_CLS - *             ;clear part or all of window
+                   DC.B     3,"CLS"
+                   DC.W     BP_CALL - *            ;call machine code routine
+                   DC.B     4,"CALL",0
+                   DC.W     BP_RECOL - *           ;recolour individul pixels in window
+                   DC.B     5,"RECOL"
+                   DC.W     BP_RNDMZ - *           ;reseed random number generator
+                   DC.B     9,"RANDOMISE"
+                   DC.W     BP_PAUSE - *           ;delay executing a superbasic program
+                   DC.B     5,"PAUSE"
+                   DC.W     BP_POKE - *            ;place byte in memory
+                   DC.B     4,"POKE",0
+                   DC.W     BP_POKEW - *           ;place word in memory
+                   DC.B     6,"POKE_W",0
+                   DC.W     BP_POKEL - *           ;place long word in memory
+                   DC.B     6,"POKE_L",0
+                   DC.W     BP_BAUD - *            ;set baud rate for serial channels
+                   DC.B     4,"BAUD",0
+                   DC.W     BP_BEEP - *            ;switch sound on or off
+                   DC.B     4,"BEEP",0
+                   DC.W     BP_CONTI - *           ;continue halted SUPERBASIC program
+                   DC.B     8,"CONTINUE",0
+                   DC.W     BP_RETRY - *           ;re-execute SUPERBASIC statement
+                   DC.B     5,"RETRY"
+                   DC.W     BP_READ - *            ;assign data to list of variables
+                   DC.B     4,"READ",0
+                   DC.W     BP_NET - *             ;set network station numer
+                   DC.B     3,"NET"
+                   DC.W     BP_MODE - *            ;set resolution of screen
+                   DC.B     4,"MODE",0
+                   DC.W     BP_RENUM - *           ;renumber SUPERBASIC program lines
+                   DC.B     5,"RENUM"
+                   DC.W     BP_DLINE - *           ;remove SUPERBASIC program lines
+                   DC.B     5,"DLINE"
+                   DC.W     BP_SDATE - *           ;reset system clock
+                   DC.B     5,"SDATE"
+                   DC.W     BP_ADATE - *           ;adjust system clock
+                   DC.B     5,"ADATE"
+                   DC.W     BP_LINER - *           ;draw line relative to graph cursor
+                   DC.B     6,"LINE_R",0
+                   DC.W     BP_ELPSR - *           ;draw ellipse relative to graph cursor
+                   DC.B     9,"ELLIPSE_R"
+                   DC.W     BP_ELPSR - *           ;draw ellipse relative to graph cursor
+                   DC.B     8,"CIRCLE_R",0
+                   DC.W     BP_ARC_R - *           ;draw arc relative to graph cursor
+                   DC.B     5,"ARC_R"
+                   DC.W     BP_AUTO - *            ;generate line numbers automatically
+                   DC.B     4,"AUTO",0
+                   DC.W     BP_EDIT - *            ;edit list of SUPERBASIC lines
+                   DC.B     4,"EDIT",0
+                   DC.W     BP_FILL - *            ;turn graphics fill on or off
+                   DC.B     4,"FILL" ,0
+                   DC.W     BP_WIDTH - *           ;set default width on device
+                   DC.B     5,"WIDTH"
+                   DC.W     0                      ;end of procedures
+
+   List of functions.
+
+     FNCTLIST      DC.W     35                     ;number of functions to follow
+                   DC.W     BF_ACOS - *            ;return arc cosine
+                   DC.B     4,"ACOS",0
+                   DC.W     BF_ACOT - *            ;return arc cotangent
+                   DC.B     4,"ACOT",0
+                   DC.W     BF_ASIN - *            ;return arc sine
+                   DC.B     4,"ASIN",0
+                   DC.W     BF_ATAN - *            ;return arc tangent
+                   DC.B     4,"ATAN",0
+                   DC.W     BF_COS - *             ;return cosine
+                   DC.B     3,"COS"
+                   DC.W     BF_COT - *             ;return cotangent
+                   DC.B     3,"COT"
+                   DC.W     BF_EXP - *             ;return e to power argument
+                   DC.B     3,"EXP"
+                   DC.W     BF_LN - *              ;return natural logarithm
+                   DC.B     2,"LN",0
+                   DC.W     BF_LOG10 - *           ;return logarithm to base 10
+                   DC.B     5,"LOG10"
+                   DC.W     BF_SIN - *             ;return sine
+                   DC.B     3,"SIN"
+                   DC.W     BF_SQRT - *            ;return square root
+                   DC.B     4,"SQRT",0
+                   DC.W     BF_TAN - *             ;return tangent
+                   DC.B     3,"TAN"
+                   DC.W     BF_DEG - *             ;return angle in degrees
+                   DC.B     3,"DEG"
+                   DC.W     BF_RAD - *             ;return angle in radians
+                   DC.B     3,"RAD"
+                   DC.W     BF_RND - *             ;return random number within limits
+                   DC.B     3,"RND"
+                   DC.W     BF_INT - *             ;return integer part of number
+                   DC.B     3,"INT"
+                   DC.W     BF_ABS - *             ;return absolute value of nuber
+                   DC.B     3,"ABS"
+                   DC.W     BF_PI - *              ;return the value 3.1415926
+                   DC.B     2,"PI",0
+                   DC.W     BF_PEEK - *            ;return value of byte in memory
+                   DC.B     4,"PEEK",0
+                   DC.W     BF_PEEKW - *           ;return signed value of word in memory
+                   DC.B     6,"PEEK_W",0
+                   DC.W     BF_PEEKL - *           ;return signed value of memory long
+                   DC.B     6,"PEEK_L",0
+                   DC.W     BF_RESPR - *           ;reserve resident procedure space
+                   DC.B     5,"RESPR"
+                   DC.W     BF_EOF - *             ;return file or data statement status
+                   DC.B     3,"EOF"
+                   DC.W     BF_INKEY - *           ;return character from channel
+                   DC.B     6,"INKEY$",0
+                   DC.W     BF_CHR$ - *            ;return ascii character
+                   DC.B     4,"CHR$",0
+                   DC.W     BF_CODE - *            ;return ascii value of character
+                   DC.B     4,"CODE",0
+                   DC.W     BF_KEYRW - *           ;return state of row of keyboard
+                   DC.B     6,"KEYROW",0
+                   DC.W     BF_BEEPI - *           ;return sound status
+                   DC.B     7,"BEEPING"
+                   DC.W     BF_LEN - *             ;return length of string
+                   DC.B     3,"LEN"
+                   DC.W     BF_DIMN - *            ;return maximum size of dimension
+                   DC.B     4,"DIMN",0
+                   DC.W     BF_DAY$ - *            ;return current day of the week
+                   DC.B     4,"DAY$",0
+                   DC.W     BF_DATE - *            ;return current date in seconds
+                   DC.B     4,"DATE",0
+                   DC.W     BF_DATE$ - *           ;return current date and time
+                   DC.B     5,"DATE$"
+                   DC.W     BF_FILL$ - *           ;return filled string
+                   DC.B     5,"FILL$"
+                   DC.W     BF_VER$ - *            ;return SUPERBASIC version number
+                   DC.B     4,"VER$",0
+                   DC.W     0                      ;end of functions
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=BP_LET          RETURN PARAMETER VALUES             (VECTOR $120)            ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A3.L     pointer to parameter (relative)                     ³
+³                                                                              ³
+³EXIT:            D1,D2,D3,A0,A1,A2 and A3 corrupted                           ³
+³                                                                              ³
+³ERRORS:          ERR.BP   bad parameter                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   BV_RIP should be set to point to the top of the arithmetic stack.
+
+6C12 BP_LET        MOVEM.L  D4/A0/A3-5,-(A7)
+                   MOVE.B   1(A6,A3.L),D0
+                   ANDI.B   #%00001111,D0
+                   SUBQ.B   #2,D0
+                   BGT.S    L06C3E
+                   BEQ.S    L06C48
+                   CMPI.B   #3,0(A6,A3.L)
+                   BEQ.S    L06C34
+                   ADDQ.B   #2,D0
+                   BGT.S    L06CA0
+                   BRA      L06CE6
+
+6C34 L06C34        ADDQ.B   #2,D0
+                   BGT      L06D04
+                   BRA      L06D0E
+
+6C3E L06C3E        MOVEQ    #2,D1
+                   BSR.S    L06C58
+                   ADD.L    D1,BV.RIP(A6)
+                   BRA.S    L06C80
+
+6C48 L06C48        MOVEQ    #6,D1
+                   BSR.S    L06C58
+                   MOVE.L   2(A6,A1.L),2(A6,A0.L)
+                   ADD.L    D1,BV.RIP(A6)
+                   BRA.S    L06C80
+
+6C58 L06C58        MOVE.L   4(A6,A3.L),D4
+                   BGE.S    L06C60
+                   BSR.S    L06C88
+6C60 L06C60        MOVEA.L  BV.VVBAS(A6),A0
+                   ADDA.L   D4,A0
+                   MOVEA.L  BV.RIP(A6),A1
+                   MOVE.W   TOS(A6,A1.L),0(A6,A0.L)
+6C70 L06C70        MOVEQ    #1,D0
+                   SUB.B    0(A6,A3.L),D0
+                   BLT.S    L06C84
+                   MOVE.B   #2,0(A6,A3.L)
+                   BRA.S    L06C84
+
+6C80 L06C80        MOVEM.L  (A7)+,D4/A0/A3-5
+6C84 L06C84        MOVEQ    #0,D0                  ;signal "no errors"
+                   RTS
+
+6C88 L06C88        MOVEM.L  A2-3,-(A7)
+                   JSR      L04EF0(PC)
+                   MOVEM.L  (A7)+,A2-3
+                   MOVE.L   A0,D4
+                   SUB.L    BV.VVBAS(A6),D4
+                   MOVE.L   D4,4(A6,A3.L)
+                   RTS
+
+6CA0 L06CA0        BSR.S    L06D16
+                   ANDI.L   #$FFFF,D1
+                   MOVE.L   4(A6,A3.L),D4
+                   BLT.S    L06CD2
+                   MOVEA.L  BV.VVBAS(A6),A0
+                   ADDA.L   D4,A0
+                   MOVEQ    #1,D2
+                   ADD.W    0(A6,A0.L),D2
+                   BCLR     #0,D2
+                   CMP.W    D1,D2
+                   BEQ.S    L06CD8
+                   ADDQ.L   #2,D2
+                   MOVEM.L  D1/A1/A3,-(A7)
+                   MOVE.L   D2,D1
+                   JSR      L050E2(PC)
+                   MOVEM.L  (A7)+,D1/A1/A3
+6CD2 L06CD2        ADDQ.L   #2,D1
+                   BSR.S    L06C88
+                   SUBQ.L   #2,D1
+6CD8 L06CD8        BSR.S    L06D2E
+                   BSR.S    L06D3C
+                   MOVEQ    #0,D0
+                   MOVEQ    #0,D2
+                   BSR.S    L06D50
+                   BSR.S    L06C70
+6CE4 L06CE4        BRA.S    L06C80
+
+6CE6 L06CE6        MOVE.B   #1,1(A6,A3.L)
+                   BSR.S    L06D16
+                   SUBQ.W   #1,D5
+                   ADDQ.W   #2,A2
+                   ADDA.W   D5,A2
+                   MOVEA.L  A2,A0
+                   SUB.W    D5,D6
+                   MOVE.W   D6,D2
+                   BSR      L06D8C
+                   ADDQ.W   #2,A1
+6D00 L06D00        BSR.S    L06D50
+                   BRA.S    L06CE4
+
+6D04 L06D04        BSR.S    L06D16
+                   BSR.S    L06D7C
+                   BSR.S    L06D2E
+                   BSR.S    L06D3C
+                   BRA.S    L06D00
+
+6D0E L06D0E        BSR.S    L06D16
+                   BSR.S    L06D7C
+                   BSR.S    L06D2E
+                   BRA.S    L06D00
+
+6D16 L06D16        MOVEA.L  BV.RIP(A6),A1
+                   MOVEQ    #0,D1
+                   MOVE.W   TOS(A6,A1.L),D1
+                   MOVE.W   D1,D0
+                   SWAP     D1
+                   MOVE.W   D0,D1
+                   ADDQ.W   #1,D1
+                   BCLR     #0,D1
+                   RTS
+
+6D2E L06D2E        MOVEA.L  BV.VVBAS(A6),A0
+                   ADDA.L   D4,A0
+                   MOVEA.L  BV.RIP(A6),A1
+                   ADDQ.W   #2,A1
+                   RTS
+
+6D3C L06D3C        MOVE.W   -2(A6,A1.L),0(A6,A0.L)
+                   CMP.W    0(A6,A0.L),D1
+                   BCC.S    L06D4C
+                   MOVE.W   D1,0(A6,A0.L)
+6D4C L06D4C        ADDQ.W   #2,A0
+                   RTS
+
+6D50 L06D50        TST.W    D1
+6D52 L06D52        BEQ.S    L06D62
+                   MOVE.B   TOS(A6,A1.L),0(A6,A0.L)
+                   ADDQ.W   #1,A0
+                   ADDQ.W   #1,A1
+                   SUBQ.W   #1,D1
+                   BRA.S    L06D52
+
+6D62 L06D62        TST.W    D2
+6D64 L06D64        BEQ.S    L06D72
+                   MOVE.B   #$20,0(A6,A0.L)
+                   ADDQ.W   #1,A0
+                   SUBQ.W   #1,D2
+                   BRA.S    L06D64
+
+6D72 L06D72        ADDA.W   D0,A1
+                   MOVE.L   A1,BV.RIP(A6)
+                   MOVEQ    #0,D0
+                   RTS
+
+6D7C L06D7C        MOVEA.L  4(A6,A3.L),A0
+                   ADDA.L   BV.VVBAS(A6),A0
+                   MOVE.W   6(A6,A0.L),D2
+                   MOVE.L   0(A6,A0.L),D4
+6D8C L06D8C        MOVE.W   D1,D0
+                   SWAP     D1
+                   CMP.W    D2,D1
+                   BHI.S    L06D9A
+                   SUB.W    D1,D2
+                   SUB.W    D1,D0
+                   RTS
+
+6D9A L06D9A        MOVE.W   D2,D1
+                   SUB.W    D2,D0
+                   MOVEQ    #0,D2
+                   RTS
+

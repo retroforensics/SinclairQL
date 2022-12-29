@@ -1,0 +1,2722 @@
+2.24 Interpreter
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=                                                                             ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³JOB:                                                                          ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³SYNTAX:                                                                       ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D7.L     relative pointer to end of buffer + 1               ³
+³                 A0.L     relative pointer to buffer containing argument      ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:          ERR.EX   error in expression                                 ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+7C56 L07C56        JSR      CA_RERIS(PC)           ;reserve 32 bytes on maths stack
+                   MOVEA.L  BV.RIP(A6),A1          ;point A1 at the top of the maths stack
+                   JSR      CN_DTOI(PC)            ;convert the ASCII argument to an intege
+                   BNE.S    L07C86                 ;and exit if any errors in expression
+                   TST.W    TOS(A6,A1.L)           ;valid argument ?
+                   BLE.S    L07C86                 ;exit if argument was negative or zero
+
+   A positive argument has been given so deal with the stack
+
+                   TST.B    BV.UNRVL(A6)           ;unravel stack ?
+                   BEQ.S    L07C78                 ;jump forward if there is number need to
+7C70 L07C70        ADDA.W   #12,A7                 ;otherwise unravel by reseting it
+                   MOVEQ    #1,D0
+                   RTS
+
+7C78 L07C78        MOVEQ    #4,D1
+                   MOVEQ    #-$73,D4
+                   MOVE.W   TOS(A6,A1.L),D5        ;set D5 to the argument
+                   JSR      L085F6(PC)
+                   ADDQ.L   #2,(A7)                ;take the second of the two return branc
+7C86 L07C86        RTS
+
+7C88 L07C88        DC.B     4,5,7,9,12,1,$2D,1,$2B,2,$7E,$7E,19,$4E,$4F,$54
+
+7C98 L07C98        LEA      L07C88(PC),A2
+                   JSR      L07F2A(PC)
+                   BRA.S    L07CAA
+                   MOVEQ    #-$7A,D4
+                   JSR      L085E6(PC)
+                   ADDQ.L   #2,(A7)
+7CAA L07CAA        RTS
+
+                   MOVEQ    #1,D3
+                   BRA.S    L07CB2
+                   MOVEQ    #0,D3
+7CB2 L07CB2        MOVEA.L  A0,A3
+                   JSR      L07EE8(PC)
+                   BRA.S    L07CDA
+                   MOVE.L   A0,D5
+                   SUB.L    A3,D5
+                   CMPI.W   #$FF,D5
+                   BGT.S    L07CDA
+                   MOVE.L   A0,-(A7)
+                   JSR      L07E06(PC)
+                   BRA.S    L07CD8
+                   MOVEA.L  (A7)+,A0
+                   MOVEQ    #-$78,D4
+                   JSR      L085F6(PC)
+                   ADDQ.L   #2,(A7)
+                   RTS
+
+7CD8 L07CD8        MOVEA.L  (A7)+,A0
+7CDA L07CDA        RTS
+
+   Operator table number 1
+
+7CDC L07CDC        DC.B     $16,$17,$19,$1B        ;offsets to the corresponding entries in
+                   DC.B     $1D,$1F,$22,$24        ;following table
+                   DC.B     $27,$29,$2C,$2F
+                   DC.B     $31,$34,$37,$3A
+                   DC.B     $3C,$3E,$41,$45
+                   DC.B     $49,$4D,$51
+
+7CF3 L07CF3        DC.B     1,'+'
+                   DC.B     1,'-'
+                   DC.B     1,'*'
+                   DC.B     1,'/'
+                   DC.B     2,'>='
+                   DC.B     1,'>'
+                   DC.B     2,'=='
+                   DC.B     1,'='
+                   DC.B     2,'<>'
+                   DC.B     2,'<='
+                   DC.B     1,'<'
+                   DC.B     2,'||'
+                   DC.B     2,'&&'
+                   DC.B     2,'^^'
+                   DC.B     1,'^'
+                   DC.B     1,'&'
+
+   Logical Operators
+
+7D1A L07D1A        DC.B     $12,'OR'
+                   DC.B     $13,'AND'
+                   DC.B     $13,'XOR'
+                   DC.B     $13,'MOD'
+                   DC.B     $13,'DIV'
+                   DC.B     $15,'INSTR'
+                   DC.B     0
+
+7D34 L07D34        LEA      L07CDC(PC),A2          ;point at operator table number one
+                   JSR      L07F2A(PC)
+                   BRA.S    L07D46
+                   MOVEQ    #-$7B,D4
+                   JSR      L085E6(PC)
+                   ADDQ.L   #2,(A7)
+7D46 L07D46        RTS
+
+   DATA FORM HERE
+
+7D48 L07D48        BTST     D2,D6
+                   BTST     #14,??
+                   BTST     D0,$013B(A4)
+                   BCHG     D0,(A4)+
+                   BTST     D0,-(A1)
+                   MOVE.B   (A4),??
+                   DC.W     $4F00
+
+   TO HERE
+
+                   LEA      L07D48(PC),A2
+                   JSR      L07F2A(PC)
+                   BRA.S    L07D6C
+                   MOVEQ    #-$72,D4
+                   JSR      L085E6(PC)
+                   ADDQ.L   #2,(A7)
+7D6C L07D6C        RTS
+
+7D6E L07D6E        MOVEQ    #0,D1
+                   MOVEQ    #0,D5
+7D72 L07D72        ADDQ.W   #1,D5
+                   MOVE.B   0(A6,A0.L),D1
+                   ADDQ.W   #1,A0
+                   CMPI.B   #$20,D1
+                   BEQ.S    L07D72
+                   SUBQ.W   #1,A0
+                   SUBQ.W   #1,D5
+                   BEQ.S    L07D8C
+                   MOVEQ    #-$80,D4
+                   JSR      L085E6(PC)
+7D8C L07D8C        RTS
+
+                   MOVE.B   0(A6,A0.L),D2
+                   CMPI.B   #$22,D2
+                   BEQ.S    L07D9E
+                   CMPI.B   #$27,D2
+                   BNE.S    L07DC0
+7D9E L07D9E        LEA      1(A0),A2
+                   MOVEQ    #-1,D5
+                   MOVEQ    #10,D3
+7DA6 L07DA6        ADDQ.W   #1,A0
+                   ADDQ.W   #1,D5
+                   MOVE.B   0(A6,A0.L),D1
+                   CMP.B    D3,D1
+                   BEQ.S    L07DC0
+                   CMP.B    D2,D1
+                   BNE.S    L07DA6
+                   ADDQ.W   #1,A0
+                   MOVEQ    #-$75,D4
+                   JSR      L08624(PC)
+                   ADDQ.L   #2,(A7)
+7DC0 L07DC0        RTS
+
+7DC2 L07DC2        RTS
+
+7DC4 L07DC4        JSR      L07F0E(PC)
+                   BNE.S    L07DD6
+                   MOVEA.L  BV.TKP(A6),A3
+                   CMPI.B   #$80,-2(A6,A3.L)
+                   BNE.S    L07DEE
+7DD6 L07DD6        MOVEA.L  A0,A2
+                   MOVE.L   BV.BFP(A6),D5          ;get buffer running pointer
+                   SUBQ.L   #1,D5
+                   MOVEA.L  D5,A0
+                   SUB.L    A2,D5
+                   BEQ.S    L07DEC
+                   MOVEQ    #-$74,D4
+                   MOVEQ    #0,D2
+                   JSR      L08624(PC)
+7DEC L07DEC        ADDQ.L   #2,(A7)
+7DEE L07DEE        RTS
+
+                   JSR      $4F46(PC)
+                   MOVEA.L  BV.RIP(A6),A1          ;point A1 at the top of the maths stack
+                   JSR      $3D84(PC)
+                   BNE.S    L07E04
+                   JSR      L085FE(PC)
+                   ADDQ.L   #2,(A7)
+7E04 L07E04        RTS
+
+7E06 L07E06        MOVE.L   A2,-(A7)
+                   MOVE.B   D5,D2
+                   MOVE.B   D2,D1
+                   MOVEQ    #5,D3
+                   MOVEA.L  BV.NTBAS(A6),A2
+                   MOVEA.L  A3,A1
+7E14 L07E14        CMPA.L   BV.NTP(A6),A2
+                   BGE.S    L07E68
+                   TST.L    0(A6,A2.L)
+                   BEQ.S    L07E30
+                   MOVEA.L  BV.NLBAS(A6),A4
+                   ADDA.W   2(A6,A2.L),A4
+                   MOVE.B   0(A6,A4.L),D5
+                   CMP.B    D2,D5
+                   BEQ.S    L07E34
+7E30 L07E30        ADDQ.W   #8,A2
+                   BRA.S    L07E14
+7E34 L07E34        TST.B    D2
+                   BEQ.S    L07E56
+                   MOVE.B   0(A6,A3.L),D4
+                   ADDQ.W   #1,A3
+                   BCLR     D3,D4
+                   TST.B    D5
+                   BEQ.S    L07E60
+                   ADDQ.W   #1,A4
+                   MOVE.B   0(A6,A4.L),D6
+                   BCLR     D3,D6
+                   CMP.B    D4,D6
+                   BNE.S    L07E60
+                   SUBQ.B   #1,D2
+                   SUBQ.B   #1,D5
+                   BRA.S    L07E34
+7E56 L07E56        TST.B    D5
+                   BNE.S    L07E60
+                   MOVE.L   A2,D5
+                   ADDQ.W   #4,A7
+                   BRA.S    L07EDE
+7E60 L07E60        MOVEA.L  A1,A3
+                   MOVE.B   D1,D2
+                   ADDQ.W   #8,A2
+                   BRA.S    L07E14
+7E68 L07E68        MOVEQ    #0,D6
+                   MOVEA.L  A3,A0
+                   MOVEA.L  (A7)+,A2
+                   JSR      L08148(PC)
+                   BRA.S    L07E76
+                   BRA.S    L07EE6
+
+7E76 L07E76        TST.B    BV.UNRVL(A6)
+                   BEQ.S    L07E82
+                   ADDQ.W   #8,A7
+                   JMP      L07C70(PC)
+
+7E82 L07E82        MOVEQ    #0,D4
+                   MOVE.B   D2,D4
+                   JSR      $4EE2(PC)
+                   MOVE.L   D4,D2
+                   MOVE.L   #-1,4(A6,A2.L)
+                   MOVEA.L  BV.NLP(A6),A4
+                   MOVE.L   A4,D3
+                   SUB.L    BV.NLBAS(A6),D3
+                   MOVE.W   D3,2(A6,A2.L)
+                   ADD.L    A3,D2
+                   MOVE.B   -1(A6,D2.L),D3
+                   MOVEQ    #0,D1
+                   SUBI.B   #$25,D3
+                   BLT.S    L07EB6
+                   BGT.S    L07EB4
+                   ADDQ.W   #1,D1
+7EB4 L07EB4        ADDQ.W   #1,D1
+7EB6 L07EB6        ADDQ.W   #1,D1
+                   MOVE.W   D1,0(A6,A2.L)
+                   MOVE.L   A2,D5
+                   MOVEQ    #1,D1
+                   ADD.W    D4,D1
+                   JSR      $4F6C(PC)
+                   MOVE.B   D4,0(A6,A4.L)
+7ECA L07ECA        ADDQ.W   #1,A4
+                   MOVE.B   0(A6,A3.L),0(A6,A4.L)
+                   ADDQ.W   #1,A3
+                   SUBQ.B   #1,D4
+                   BNE.S    L07ECA
+                   ADDQ.W   #1,A4
+                   MOVE.L   A4,BV.NLP(A6)
+7EDE L07EDE        SUB.L    BV.NTBAS(A6),D5
+                   LSR.L    #3,D5
+                   ADDQ.L   #2,(A7)
+7EE6 L07EE6        RTS
+
+7EE8 L07EE8        BSR.S    L07F0E
+                   BNE.S    L07F0C
+                   CMPI.B   #1,D2
+                   BNE.S    L07F0C
+7EF2 L07EF2        ADDQ.W   #1,A0
+                   BSR.S    L07F0E
+                   BEQ.S    L07EF2
+                   CMPI.B   #$24,D2
+                   BEQ.S    L07F04
+                   CMPI.B   #$25,D2
+                   BNE.S    L07F0A
+7F04 L07F04        TST.B    D3
+                   BNE.S    L07F0C
+                   ADDQ.W   #1,A0
+7F0A L07F0A        ADDQ.L   #2,(A7)
+7F0C L07F0C        RTS
+
+7F0E L07F0E        MOVEQ    #0,D1
+                   MOVE.B   0(A6,A0.L),D1
+                   BLT.S    L07F28
+                   LEA      $3C96(PC),A1
+                   MOVE.B   0(A1,D1.W),D2
+                   CMPI.B   #1,D2
+                   BEQ.S    L07F28
+                   CMPI.B   #2,D2
+7F28 L07F28        RTS
+
+   A2 points at operator table on entry.
+
+7F2A L07F2A        MOVE.L   A0,-(A7)               ;save A0
+                   MOVEQ    #0,D5                  ;and clear D5
+7F2E L07F2E        MOVEA.L  (A7),A0
+                   BSR.S    L07F76
+7F32 L07F32        ADDQ.W   #1,D5
+                   MOVEA.L  A2,A1                  ;point A1 at table
+                   CMP.B    (A1),D5
+                   BGT.S    L07F72
+                   MOVEQ    #0,D1
+                   MOVE.B   0(A1,D5.W),D1
+                   ADDA.W   D1,A1
+                   MOVE.B   (A1)+,D1
+                   CMP.B    (A1)+,D0
+                   BNE.S    L07F32
+                   MOVE.B   D1,D0
+                   SWAP     D1
+                   MOVE.B   D0,D1
+                   ANDI.B   #$0F,D1
+7F52 L07F52        SUBQ.B   #1,D1
+                   BLE.S    L07F60
+                   ADDQ.W   #1,A0
+                   BSR.S    L07F76
+                   CMP.B    (A1)+,D0
+                   BEQ.S    L07F52
+                   BRA.S    L07F2E
+7F60 L07F60        SWAP     D1
+                   LSR.B    #4,D1
+                   ADDQ.W   #1,A0
+                   BEQ.S    L07F6E
+                   JSR      L07F0E(PC)
+                   BEQ.S    L07F2E
+7F6E L07F6E        ADDQ.L   #2,4(A7)
+7F72 L07F72        ADDQ.W   #4,A7
+                   RTS
+
+7F76 L07F76        MOVEQ    #0,D0
+                   MOVE.B   0(A6,A0.L),D0
+                   BLT.S    L07F8E
+                   LEA      $3C96(PC),A3
+                   CMPI.B   #1,0(A3,D0.W)
+                   BNE.S    L07F8E
+                   BCLR     #5,D0
+7F8E L07F8E        RTS
+
+7F90 L07F90        DC.W     $FD0A 7c60
+                   DC.W     $FE4A 7df0
+                   DC.W     $FE4A 7df0
+                   DC.W     $FE1C 7dc2
+                   DC.W     $FD8E 7d34
+                   DC.W     $FCF2 7c98
+                   DC.W     $FDB4 7d5a
+                   DC.W     $FDE8 7d8e
+                   DC.W     $FE1E 7dc4
+                   DC.W     $FCB0 7c56
+                   DC.W     $FD06 7cac
+
+7FA6 L07FA6        LSR.B    #1,D6
+7FA8 L07FA8        JSR      L07D6E(PC)
+                   ADD.B    D6,D6                  ; form word offset into table
+                   MOVE.W   L07F8E(PC,D6.W),D6
+                   JMP      L07FA6(PC,D6.W)
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=SB_SNTX         Basic syntax analyser                                        ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³JOB:                                                                          ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:                                                                        ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+7FB6 SB_SNTX       MOVEQ    #0,D7
+                   MOVEQ    #0,D6
+                   MOVE.L   (A2)+,-(A7)
+                   MOVE.L   (A2),-(A7)
+                   MOVEA.L  (A7),A5
+                   MOVE.W   (A5),D6
+                   ADDA.W   D6,A5
+                   MOVEQ    #0,D4
+                   JSR      L08282(PC)
+                   MOVEA.L  (A6),A0
+                   BRA.S    L07FF0
+
+7FCE L07FCE        SUBI.B   #$80,D6
+                   LSR.B    #1,D6
+                   BNE.S    L07FE0
+                   SUBQ.W   #1,A5
+                   JSR      L0825C(PC)
+                   BRA      L080B0
+
+7FE0 L07FE0        MOVE.L   A5,D4
+                   JSR      L08282(PC)
+                   ADD.B    D6,D6
+                   MOVEA.L  (A7),A5
+                   MOVE.W   -2(A5,D6.W),D6
+                   ADDA.W   D6,A5
+7FF0 L07FF0        JSR      L08260(PC)
+7FF4 L07FF4        MOVEQ    #0,D6
+                   MOVE.B   (A5)+,D6
+                   BEQ.S    L0805C
+                   BMI.S    L07FCE
+                   BCLR     #6,D6
+                   BEQ.S    L0800E
+                   MOVEA.L  4(A7),A2
+                   JSR      L08148(PC)
+                   BRA.S    L08028
+                   BRA.S    L08046
+
+800E L0800E        BCLR     #5,D6
+                   BEQ.S    L0801C
+                   JSR      L08316(PC)
+                   BRA.S    L08028
+                   BRA.S    L08046
+
+801C L0801C        MOVEA.L  4(A7),A2
+                   JSR      L07FA6(PC)
+                   BRA.S    L08028
+                   BRA.S    L08046
+
+8028 L08028        MOVEA.L  BV.BTP(A6),A2
+802C L0802C        MOVEA.L  0(A6,A2.L),A3
+                   MOVEA.L  4(A6,A2.L),A0
+                   MOVE.L   8(A6,A2.L),D3
+                   ADDA.W   #12,A2
+                   BLT.S    L0802C
+                   ADDQ.W   #1,A5
+                   MOVE.L   A3,BV.TKP(A6)
+                   BRA.S    L07FF4
+
+8046 L08046        JSR      L0825C(PC)
+804A L0804A        MOVEQ    #0,D6
+                   MOVE.B   (A5),D6
+                   BEQ.S    L080B0
+                   BMI.S    L08056
+                   ADDA.W   D6,A5
+                   BRA.S    L07FF4
+
+8056 L08056        NEG.B    D6
+                   SUBA.W   D6,A5
+                   BRA.S    L07FF4
+
+805C L0805C        MOVEA.L  BV.BTP(A6),A4
+                   CMPA.L   BV.BTBAS(A6),A4
+                   BGT.S    L08094
+                   MOVEA.L  0(A6,A4.L),A3
+                   MOVEA.L  4(A6,A4.L),A0
+                   MOVEA.L  8(A6,A4.L),A5
+                   ADDA.W   #12,A4
+                   MOVE.L   A4,BV.BTP(A6)
+                   MOVE.L   A5,D3
+                   BGT.S    L08088
+                   BEQ.S    L0809A
+                   MOVE.L   A0,D4
+                   JSR      L08282(PC)
+                   BRA.S    L0805C
+
+8088 L08088        BTST     D7,-1(A5)
+                   BEQ.S    L08028
+                   MOVE.L   -16(A6,A4.L),D3
+                   BMI.S    L08028
+8094 L08094        ADDQ.W   #8,A7
+                   MOVEQ    #ERR.NC,D0             ;signal "not complete"
+                   RTS
+
+809A L0809A        MOVEA.L  BV.TGP(A6),A4
+                   MOVEA.L  0(A6,A4.L),A5
+                   ADDQ.W   #4,A4
+                   MOVE.L   A4,BV.TGP(A6)
+                   MOVE.L   A5,D3
+                   BEQ.S    L08094
+                   BRA      L08028
+
+80B0 L080B0        JSR      $4F4C(PC)
+                   MOVEA.L  BV.BTP(A6),A4
+                   MOVEA.L  BV.TGP(A6),A2
+                   SUBQ.W   #8,A4
+                   MOVE.L   #$FFFFFFFF,4(A6,A4.L)
+                   MOVE.L   0(A6,A2.L),0(A6,A4.L)
+                   MOVEA.L  0(A6,A4.L),A5
+                   SUBQ.W   #4,A4
+                   MOVE.L   BV.TKP(A6),0(A6,A4.L)
+                   ADDQ.W   #4,A2
+                   MOVE.L   A2,BV.TGP(A6)
+                   MOVE.L   A4,BV.BTP(A6)
+                   MOVE.L   A5,D3
+                   BNE      L0804A
+                   ADDQ.W   #8,A7
+                   MOVEQ    #0,D0
+                   RTS
+
+     L?????        MOVE.L   BV.BTBAS(A6),BV.BTP(A6)
+                   MOVE.L   BV.TGBAS(A6),BV.TGP(A6)
+                   MOVE.L   BV.TKBAS(A6),BV.TKP(A6)
+                   MOVEQ    #$7E,D1
+                   JSR      $4F68(PC)
+                   MOVEQ    #32,D1                 ;reserve space for 32 bytes on the maths
+                   JSR      BV_CHRIX(PC)           ;stack
+
+   now set the top of the parsing temporary graph stack to the top of the maths
+   stack.
+
+                   MOVE.L   BV.RIP(A6),BV.TGBAS(A6)
+                   SUBI.L   #$20,BV.TGBAS(A6)
+                   MOVE.L   BV.TGBAS(A6),BV.TGP(A6)
+                   MOVEQ    #$50,D1
+                   JSR      $4F54(PC)
+                   MOVE.L   BV.TGP(A6),BV.BTBAS(A6)
+                   SUBI.L   #$50,BV.BTBAS(A6)
+                   MOVE.L   BV.BTBAS(A6),BV.BTP(A6)
+                   MOVEQ    #0,D0
+                   JSR      $4F2C(PC)
+                   MOVE.W   #$0200,D1
+                   JMP      $4F4E(PC)
+
+8148 L08148        MOVEM.L  D0-5/A1-5,-(A7)
+                   MOVEA.L  A2,A3
+                   MOVEA.L  A0,A1
+                   MOVEQ    #0,D3
+                   MOVEQ    #0,D4
+                   MOVEQ    #0,D5
+                   MOVEQ    #0,D0
+                   LSR.B    #1,D6
+                   BEQ.S    L08162
+                   JSR      L07D6E(PC)
+                   BRA.S    L08168
+
+8162 L08162        ST       D0
+                   SWAP     D0
+                   MOVEQ    #1,D6
+8168 L08168        MOVEQ    #0,D1
+                   CMP.B    (A2),D6
+                   BGT      L0822A
+                   MOVE.B   0(A2,D6.W),D1
+                   ADDA.L   D1,A2
+                   MOVE.B   (A2)+,D1
+                   ROR.L    #4,D1
+                   MOVE.B   D1,D4
+                   SWAP     D1
+                   ROL.W    #4,D1
+                   MOVE.B   D1,D3
+8182 L08182        SUBQ.B   #1,D4
+                   BLT.S    L081DE
+                   MOVE.B   (A2)+,D2
+                   CMPI.B   #$60,D2
+                   BGT.S    L08194
+                   ST       D0
+                   SF       D5
+                   BRA.S    L0819E
+
+8194 L08194        SF       D0
+                   TST.B    D5
+                   BNE.S    L08182
+                   SUBI.B   #$20,D2
+819E L0819E        MOVE.B   0(A6,A0.L),D1
+                   ADDQ.W   #1,A0
+                   CMPI.B   #$60,D1
+                   BLE.S    L081AE
+                   SUBI.B   #$20,D1
+81AE L081AE        CMP.B    D2,D1
+                   BEQ.S    L08182
+                   TST.B    D0
+                   BNE.S    L081BC
+                   ST       D5
+                   SUBQ.W   #1,A0
+                   BRA.S    L08182
+
+81BC L081BC        SWAP     D0
+                   TST.B    D0
+                   BEQ.S    L0822A
+                   SWAP     D5
+                   TST.B    D5
+                   SWAP     D5
+                   BEQ.S    L081CE
+                   TST.B    D3
+                   BNE.S    L081D6
+81CE L081CE        ADDQ.W   #1,D6
+                   MOVEA.L  A1,A0
+                   MOVEA.L  A3,A2
+                   BRA.S    L08168
+
+81D6 L081D6        MOVEA.L  A4,A0
+                   SUBQ.B   #1,D3
+                   ADDA.L   D4,A2
+                   BRA.S    L08212
+
+81DE L081DE        SWAP     D0
+                   TST.B    D0
+                   BEQ.S    L0821A
+                   MOVE.B   0(A6,A0.L),D1
+                   BLT.S    L0822A
+                   LEA      $3C96(PC),A5
+                   CMPI.B   #1,0(A5,D1.W)
+                   BEQ.S    L08200
+                   CMPI.B   #2,0(A5,D1.W)
+                   BEQ.S    L0822A
+                   BRA.S    L08222
+
+8200 L08200        SWAP     D5
+                   TST.B    D5
+                   BNE.S    L0822A
+                   TST.B    D3
+                   BEQ.S    L0822A
+                   ST       D5
+                   SWAP     D5
+                   SUBQ.B   #1,D3
+                   MOVEA.L  A0,A4
+8212 L08212        MOVE.B   (A2)+,D4
+                   LSR.B    #4,D4
+                   BRA      L08182
+
+821A L0821A        MOVEQ    #-$7F,D4
+                   MOVE.B   D6,D5
+                   JSR      L085E6(PC)
+8222 L08222        MOVEM.L  (A7)+,D0-5/A1-5
+                   ADDQ.L   #2,(A7)
+                   RTS
+
+822A L0822A        MOVEM.L  (A7)+,D0-5/A1-5
+                   RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=SB_CMPER        Error when compiling                                         ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³JOB:                                                                          ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:                                                                        ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+8230 SB_CMPER      MOVE.L   8(A6),BV.TKP(A6)
+                   MOVEA.L  (A6),A0
+                   JSR      L07C56(PC)
+                   BRA.S    L08258
+
+823E L0823E        MOVEQ    #-$7F,D4
+                   MOVEQ    #$1F,D5
+                   JSR      L085E6(PC)
+                   JSR      L07DD6(PC)
+                   BRA.S    L08258
+
+                   MOVEQ    #-$7C,D4
+                   MOVEQ    #10,D5
+                   JSR      L085E6(PC)
+                   MOVEQ    #0,D0                  ;signal "no errors"
+                   RTS
+
+8258 L08258        MOVEQ    #ERR.BL,D0             ;signal "bad line"
+                   RTS
+
+825C L0825C        MOVE.L   A5,D4
+                   BRA.S    L08262
+
+8260 L08260        MOVEQ    #0,D4
+8262 L08262        JSR      $4F4C(PC)
+                   MOVEA.L  BV.BTP(A6),A4
+                   SUBA.W   #12,A4
+                   MOVE.L   D4,8(A6,A4.L)
+                   MOVE.L   A0,4(A6,A4.L)
+                   MOVE.L   BV.TKP(A6),0(A6,A4.L)
+                   MOVE.L   A4,BV.BTP(A6)
+                   RTS
+
+8282 L08282        JSR      $4F52(PC)
+                   MOVEA.L  BV.TGP(A6),A4
+                   SUBQ.W   #4,A4
+                   MOVE.L   D4,0(A6,A4.L)
+                   MOVE.L   A4,BV.TGP(A6)
+                   RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=SB_FPCBL        FORMAT PRE-COMPILED BASIC LINE                               ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³JOB:                                                                          ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:                                                                        ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+8296 SB_FPCBL      MOVEA.L  BV.TKBAS(A6),A0
+829A L0829A        CMPA.L   BV.TKP(A6),A0
+                   BGE.S    L082BC
+                   CMPI.B   #KEY.B,0(A6,A0.L)      ;keyword ?
+                   BNE.S    L082AE
+                   ADDQ.W   #2,A0
+                   BSR.S    L082D6
+                   BRA.S    L0829A
+
+82AE L082AE        CMPI.W   #SYM.FSPC,0(A6,A0.L)   ;forced space ?
+                   ADDQ.W   #2,A0
+                   BNE.S    L0829A
+                   BSR.S    L082F2
+                   BRA.S    L0829A
+
+82BC L082BC        MOVEA.L  BV.TKBAS(A6),A0
+                   CMPI.B   #SPC.B,0(A6,A0.L)      ;space ?
+                   BNE.S    L082CC
+                   ADDQ.W   #2,A0
+                   BSR.S    L082F2
+82CC L082CC        CMPI.W   #LNO.W,0(A6,A0.L)      ;line number ?
+                   BNE.S    L082F0
+                   ADDQ.W   #4,A0
+82D6 L082D6        CMPI.B   #SPC.B,0(A6,A0.L)      ;space ?
+                   BNE.S    L082F0
+                   MOVE.B   1(A6,A0.L),D1
+                   ADDQ.W   #2,A0
+                   SUBQ.B   #1,D1
+                   BGT.S    L082EC
+                   BSR.S    L082F2
+                   BRA.S    L082F0
+
+82EC L082EC        MOVE.B   D1,-1(A6,A0.L)
+82F0 L082F0        RTS
+
+82F2 L082F2        LEA      -2(A0),A2
+82F6 L082F6        MOVE.W   0(A6,A0.L),-2(A6,A0.L)
+                   ADDQ.W   #2,A0
+                   CMPA.L   BV.TKP(A6),A0
+                   BLT.S    L082F6
+                   SUBQ.L   #2,BV.TKP(A6)
+                   MOVEA.L  A2,A0
+                   RTS
+
+                   MOVE.W   $A63A(PC),-(A6)
+                   MOVE.L   $7B7D(A1),D4
+                   MOVE.L   A2,D0
+8316 L08316        LSR.B    #1,D6
+8318 L08318        MOVE.B   0(A6,A0.L),D1
+                   CMP.B    $830B(PC,D6.W),D1
+                   BEQ.S    L0832E
+                   CMPI.B   #$20,D1
+                   BNE.S    L0833A
+                   JSR      L07D6E(PC)
+                   BRA.S    L08318
+
+832E L0832E        ADDQ.W   #1,A0
+                   MOVEQ    #-$7C,D4
+                   MOVE.B   D6,D5
+                   JSR      L085E6(PC)
+                   ADDQ.L   #2,(A7)
+833A L0833A        RTS
+
+   first syntax table for commands
+
+833C SB_FSTFC      DC.B     $00,$00,$85,$18
+                   DC.B     $00,$00,$83,'D'
+                   DC.B     $00,'"',$00,'N'
+                   DC.B     $00,$B9,$00,'`'
+                   DC.B     $00,'f',$00,$C7
+                   DC.B     $00,$CF,$00,$EE
+                   DC.B     $01,$05,$01,'n'
+                   DC.B     $01,$83,$01,$90
+                   DC.B     $01,$A4,$01,$AD
+                   DC.B     $01,$BB,$01,$C8
+                   DC.B     $01,$C9,$14,$01
+                   DC.B     $84,$0F,$8A,$12
+                   DC.B     $86,$1E,$88,$09
+                   DC.B     'h',$F9,$8C,$05
+                   DC.B     $90,$03,$92,$01
+                   DC.B     '%',$F1,'5',$00
+                   DC.B     $00,'x',$06,'%'
+                   DC.B     $EA,'5',$00,$00
+                   DC.B     '3',$E5,'%',$E3
+                   DC.B     '5',$00,$00,'5'
+                   DC.B     $00,'%',$01,$8E
+                   DC.B     $DA,$00,'N',$02
+                   DC.B     $00,'P',$04,'R'
+                   DC.B     $02,$00,'2',$02
+                   DC.B     $00,$02,$02,$00
+                   DC.B     $80,$94,$00,$00
+                   DC.B     'D',$08,'H',$12
+                   DC.B     'L',$16,'F',$08
+                   DC.B     $00,'2',$02,$00
+                   DC.B     $17,$1A,$00,'3'
+                   DC.B     $02,$00,$98,$00
+                   DC.B     $00,'2',$02,$00
+                   DC.B     $02,$00,$00,'\'
+                   DC.B     $0E,'^',$13,'`'
+                   DC.B     $15,'2',$02,$00
+                   DC.B     $9F,'!',$00,'#'
+                   DC.B     $11,$00,$80,'3'
+                   DC.B     $02,$00,$98,$0D
+                   DC.B     $00,$80,''',$0D
+                   DC.B     $00,$80,''',$0C
+                   DC.B     $00,$96,$0F,$00
+                   DC.B     $80,'(',$F0,$00
+                   DC.B     $98,$0E,$00,$98
+                   DC.B     $00,$00,$9A,$00
+                   DC.B     $00,'z',$09,$80
+                   DC.B     '(',$EC,$00,$80
+                   DC.B     '(',$E1,$00,'3'
+                   DC.B     $02,$00,$98,$F4
+                   DC.B     $00,'J',$02,$00
+                   DC.B     '2',$02,$00,'j'
+                   DC.B     $04,$02,$00,$00
+                   DC.B     '3',$FC,$00,'f'
+                   DC.B     $0A,'d',$08,'l'
+                   DC.B     $0C,'j',$11,'"'
+                   DC.B     $15,$00,'2',$02
+                   DC.B     $00,$02,$00,$00
+                   DC.B     $80,'2',$02,$00
+                   DC.B     $98,$00,$00,'2'
+                   DC.B     $02,$00,$02,$EC
+                   DC.B     $00,'n',$00,$96
+                   DC.B     $02,$00,'(',$FC
+                   DC.B     $80,$00,'B',$02
+                   DC.B     $00,'H',$0D,'D'
+                   DC.B     $0B,'F',$00,'J'
+                   DC.B     $00,'L',$00,'N'
+                   DC.B     $02,$00,$80,'2'
+                   DC.B     $02,$00,$02,$00
+                   DC.B     $00,'b',$16,'p'
+                   DC.B     'M','r',$19,'t'
+                   DC.B     '!','|','+','~'
+                   DC.B     ')','T','*','j'
+                   DC.B     '3','v','I',$9E
+                   DC.B     'M',$02,'Q',$00
+                   DC.B     $80,'2',$02,$00
+                   DC.B     $98,$00,$00,'2'
+                   DC.B     $02,$00,$9C,$02
+                   DC.B     $00,'(',$FC,$80
+                   DC.B     $00,'2',$02,$00
+                   DC.B     $02,$04,$9C,$02
+                   DC.B     $00,'(',$FA,$80
+                   DC.B     $00,$12,$00,$00
+                   DC.B     'V',$04,'X',$02
+                   DC.B     $00,'2',$02,$00
+                   DC.B     $98,$00,$00,'2'
+                   DC.B     $02,$00,$98,$02
+                   DC.B     $00,'T',$02,$00
+                   DC.B     'V',$04,'X',$02
+                   DC.B     $00,'3',$02,$00
+                   DC.B     $98,$02,$00,'('
+                   DC.B     $FC,$80,$00,'2'
+                   DC.B     $02,$00,$9E,$02
+                   DC.B     $00,'"',$02,$00
+                   DC.B     $98,$00,$00,$A0
+                   DC.B     $00,$00,'+',$02
+                   DC.B     $00,$02,$04,'+'
+                   DC.B     $07,$00,'(',$FA
+                   DC.B     '-',$00,$00,$02
+                   DC.B     $02,$00,'(',$FC
+                   DC.B     '-',$F7,$00,$98
+                   DC.B     $02,$00,'V',$03
+                   DC.B     $80,$00,'2',$02
+                   DC.B     $00,$98,$00,$00
+
+   Second syntax table for expressions
+
+84D4 SB_SSTFE      DC.B     $0C,$01,'*',$08
+                   DC.B     $10,$0C,$04,$0C
+                   DC.B     $02,$08,$00,$98
+                   DC.B     $02,$00,',',$04
+                   DC.B     $00,'*',$05,$80
+                   DC.B     $0A,$EB,$00,$A2
+                   DC.B     $02,$00,',',$F6
+                   DC.B     $00,$02,$02,$00
+                   DC.B     '*',$02,$00,$98
+                   DC.B     $02,$00,'(',$FC
+                   DC.B     ',',$00,$00,$02
+                   DC.B     $02,$00,$80,'*'
+                   DC.B     $02,$00,$A2,$02
+                   DC.B     $00,',',$F8,$00
+                   DC.B     $80,$0E,$FE,'&'
+                   DC.B     $01,$98,$02,$00
+                   DC.B     $0E,$F7,$80,$00
+                   DC.B     $1F,' ','$','('
+                   DC.B     '+','2','9','>'
+                   DC.B     'E','O','X','['
+                   DC.B     '^','b','g','m'
+                   DC.B     'q','w','',$84
+                   DC.B     $89,$8E,$91,$98
+                   DC.B     $A2,$A7,$AB,$B1
+                   DC.B     $B5,$BA,$BF,$C6
+
+   The keyword token table.
+
+     In the following table, the first byte consists of two parts. The top nibbl
+     the number of bytes to follow and the bottom nibble signifies how many of t
+     following keywords are matched with this one. e.g.
+
+  END matches with FOR              giving ENDFOR
+                   IF                      ENDIF
+                   REPEAT                  ENDREPEAT
+                   SELECT                  ENDSELECT
+                   WHEN                    ENDWHEN
+                   DEFINE                  ENDDEFINE
+
+  DEFINE matches with PROCEDURE     giving DEFINE PROCEDURE
+                      FUNCTION             DEFINE FUNCTION
+
+  GO matches with TO                giving GOTO
+                  SUB                      GOSUB
+
+  WHEN matches with ERROR           giving WHEN ERROR
+                    EOF                    WHEN EOF
+                    INPUT                  WHEN INPUT
+
+   This shows that even in "JM" Superbasic, it was intended that there be an error
+   Trapping facility. Unfortunately this does not work properly.
+
+8538 L08538        DC.B     $36,"END"              ;token 1
+                   DC.B     $30,"FOR"              ;      2
+                   DC.B     $20,"IF"               ;      3
+                   DC.B     $60,"REPeat"           ;      4
+                   DC.B     $60,"Select"           ;      5
+                   DC.B     $40,"When"             ;      6
+                   DC.B     $62,"Define"           ;      7
+                   DC.B     $90,"Procedure"        ;      8
+                   DC.B     $80,"Function"         ;      9
+                   DC.B     $22,"GO"               ;      10
+                   DC.B     $20,"TO"               ;      11
+                   DC.B     $30,"SUB"              ;      12
+                   DC.B     $43,"When"             ;      13
+                   DC.B     $50,"Error"            ;      14
+                   DC.B     $30,"EOF"              ;      15
+                   DC.B     $50,"Input"            ;      16
+                   DC.B     $70,"Restore"          ;      17
+                   DC.B     $40,"NEXT"             ;      18
+                   DC.B     $40,"EXIT"             ;      19
+                   DC.B     $40,"ELSE"             ;      20
+                   DC.B     $20,"ON"               ;      21
+                   DC.B     $60,"Return"           ;      22
+                   DC.B     $90,"Remainder"        ;      23
+                   DC.B     $40,"DATA"             ;      24
+                   DC.B     $30,"DIM"              ;      25
+                   DC.B     $50,"LOCal"            ;      26
+                   DC.B     $30,"LET"              ;      27
+                   DC.B     $40,"THEN"             ;      28
+                   DC.B     $40,"STEP"             ;      29
+                   DC.B     $60,"Remark"           ;      30
+                   DC.B     $70,"MISTake"          ;      31
+
+85E6 L085E6        MOVEQ    #2,D1
+                   BSR.S    L08654
+                   MOVE.B   D4,0(A6,A3.L)
+                   MOVE.B   D5,1(A6,A3.L)
+                   ADDQ.W   #2,A3
+                   BRA.S    L0864A
+
+85F6 L085F6        MOVEQ    #4,D1
+                   MOVEQ    #0,D2
+85FA L085FA        BSR.S    L08662
+                   BRA.S    L0864A
+85FE L085FE        MOVEQ    #6,D1
+                   MOVE.L   A1,BV.RIP(A6)          ;update pointer to top of the maths stac
+                   BSR.S    L08654
+                   MOVEA.L  BV.RIP(A6),A1          ;point A1 at the top of the maths stack
+                   ADDQ.L   #6,BV.RIP(A6)          ;and make room for one floating point nu
+                   MOVE.W   0(A6,A1.L),D2
+                   ADDI.W   #$F000,D2
+                   MOVE.W   D2,0(A6,A3.L)
+                   MOVE.L   2(A6,A1.L),2(A6,A3.L)
+                   ADDQ.W   #6,A3
+                   BRA.S    L0864A
+
+8624 L08624        MOVEQ    #1,D1
+                   ADD.W    D5,D1
+                   BVS.S    L08650
+                   ADDQ.W   #4,D1
+                   BSR.S    L08662
+                   BEQ.S    L0864A
+                   MOVE.W   D5,D1
+8632 L08632        MOVE.B   0(A6,A2.L),0(A6,A3.L)
+                   ADDQ.W   #1,A3
+                   ADDQ.W   #1,A2
+                   SUBQ.W   #1,D1
+                   BNE.S    L08632
+                   BTST     D7,D5
+                   BEQ.S    L0864A
+                   MOVE.B   D7,0(A6,A3.L)
+                   ADDQ.W   #1,A3
+864A L0864A        MOVE.L   A3,BV.TKP(A6)
+                   RTS
+
+8650 L08650        ADDQ.W   #4,A7
+                   RTS
+
+8654 L08654        MOVE.B   D2,-(A7)
+                   JSR      $4F68(PC)
+                   MOVE.B   (A7)+,D2
+                   MOVEA.L  BV.TKP(A6),A3
+                   RTS
+
+8662 L08662        BSR.S    L08654
+                   MOVE.B   D4,0(A6,A3.L)
+                   MOVE.B   D2,1(A6,A3.L)
+                   MOVE.W   D5,2(A6,A3.L)
+                   ADDQ.W   #4,A3
+                   RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=SB_SPFBL        STORE PRE-FORMATTED BASIC LINE                               ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³JOB:                                                                          ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:                                                                        ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+8674 SB_SPFBL      MOVEA.L  BV.TKBAS(A6),A1
+                   CMPI.B   #$8D,0(A6,A1.L)        ;start of a line number token ?
+                   BNE      L0876E
+                   MOVE.W   2(A6,A1.L),D2
+                   MOVE.L   BV.TKP(A6),D1
+                   SUB.L    A1,D1
+                   SUBQ.W   #6,D1
+                   SEQ      D0
+                   ADDQ.W   #6,D1
+                   MOVEQ    #0,D6
+                   MOVEQ    #0,D5
+                   MOVEA.L  BV.PFBAS(A6),A0
+                   MOVEQ    #0,D3
+                   BRA.S    L086A2
+
+869E L0869E        MOVE.W   2(A6,A0.L),D3
+86A2 L086A2        ADD.W    D5,D6
+                   ADDA.L   D6,A0
+                   MOVE.W   0(A6,A0.L),D5
+                   ADDQ.W   #2,A0
+                   CMPA.L   BV.PFP(A6),A0
+                   BLT.S    L086BA
+                   ADDQ.B   #1,D0
+                   BGT.S    L08730
+                   SUBQ.W   #2,A0
+                   BRA.S    L086EA
+
+86BA L086BA        CMP.W    2(A6,A0.L),D2
+                   BGT.S    L0869E
+                   BEQ.S    L086EC
+                   SUBQ.W   #2,A0
+                   TST.B    D0
+                   BNE.S    L086EA
+                   ADDQ.W   #2,D1
+                   BSR      L08770
+                   BSR.S    L08726
+                   SUBQ.W   #2,D1
+                   MOVE.W   D1,D5
+                   SUB.W    D6,D5
+                   MOVE.W   D5,0(A6,A0.L)
+                   MOVEQ    #1,D0
+86DC L086DC        BSR      L0877E
+                   ADD.W    0(A6,A0.L),D6
+                   SUB.W    D1,D6
+                   MOVE.W   D6,0(A6,A0.L)
+86EA L086EA        BRA.S    L08748
+
+86EC L086EC        TST.B    D0
+                   BEQ.S    L086F2
+                   MOVEQ    #-2,D1
+86F2 L086F2        ADD.W    D6,D5
+                   LEA      -2(A0),A3
+                   ADDA.L   D5,A0
+                   CMPA.L   BV.PFP(A6),A0
+                   BGE.S    L08728
+                   SUB.W    D5,D1
+                   BLT.S    L08706
+                   BSR.S    L08770
+8706 L08706        BSR.S    L08726
+                   MOVEA.L  A3,A0
+                   ADD.W    D5,D1
+                   BGT.S    L0871A
+                   ADD.W    0(A6,A0.L),D5
+                   SUB.W    D6,D5
+                   MOVE.W   D5,0(A6,A0.L)
+                   BRA.S    L08748
+
+871A L0871A        MOVE.W   D1,D4
+                   SUB.W    D6,D4
+                   MOVE.W   D4,0(A6,A0.L)
+                   MOVE.W   D5,D6
+                   BRA.S    L086DC
+
+8726 L08726        BRA.S    L08792
+
+8728 L08728        LEA      2(A3),A0
+                   MOVE.L   A3,BV.PFP(A6)
+8730 L08730        SUBQ.W   #2,A0
+                   TST.B    D0
+                   BLT.S    L08748
+                   ADDQ.W   #2,D1
+                   BSR.S    L08770
+                   SUBQ.W   #2,D1
+                   SUB.W    D6,D1
+                   MOVE.W   D1,0(A6,A0.L)
+                   BSR.S    L0877E
+                   MOVE.L   A0,BV.PFP(A6)
+8748 L08748        TST.B    BV.ARROW(A6)           ;test arrow status
+                   BEQ.S    L0876C                 ;jump forward if number status
+
+   The status was either 1 = up or -1 = down
+
+                   SF       BV.AUTO(A6)            ;turn AUTO MODE on
+                   BGT.S    L0875C
+                   MOVE.W   D3,BV.EDLIN(A6)
+                   BNE.S    L08768
+                   BRA.S    L0876C
+
+875C L0875C        CMPA.L   BV.PFP(A6),A0
+                   BGE.S    L08768
+                   MOVE.W   4(A6,A0.L),BV.EDLIN(A6)
+8768 L08768        ST       BV.AUTO(A6)
+876C L0876C        ADDQ.L   #2,(A7)
+876E L0876E        RTS
+
+8770 L08770        MOVEM.L  D0-3/A0-3,-(A7)
+                   JSR      $4F7C(PC)
+                   MOVEM.L  (A7)+,D0-3/A0-3
+                   RTS
+
+877E L0877E        ADDQ.W   #2,A0
+                   MOVE.W   0(A6,A1.L),0(A6,A0.L)
+                   ADDQ.W   #2,A1
+                   CMPA.L   BV.TKP(A6),A1
+                   BLT.S    L0877E
+                   ADDQ.W   #2,A0
+                   RTS
+
+8792 L08792        MOVEM.L  D0-3/A0-3,-(A7)
+                   EXT.L    D1
+                   TST.L    D1
+                   BEQ.S    L087CC
+                   MOVEA.L  BV.PFP(A6),A1
+                   BLT.S    L087B6
+                   LEA      0(A1,D1.W),A2
+87A6 L087A6        SUBQ.W   #2,A1
+                   SUBQ.W   #2,A2
+                   MOVE.W   0(A6,A1.L),0(A6,A2.L)
+                   CMPA.L   A0,A1
+                   BGT.S    L087A6
+                   BRA.S    L087C8
+
+87B6 L087B6        LEA      0(A0,D1.W),A2
+87BA L087BA        MOVE.W   0(A6,A0.L),0(A6,A2.L)
+                   ADDQ.W   #2,A0
+                   ADDQ.W   #2,A2
+                   CMPA.L   A1,A0
+                   BLT.S    L087BA
+87C8 L087C8        ADD.L    D1,BV.PFP(A6)
+87CC L087CC        MOVEM.L  (A7)+,D0-3/A0-3
+                   RTS
+
+                   ST       BV.PRINT(A6)
+                   MOVEA.L  BV.LNBAS(A6),A1
+                   MOVE.L   BV.LNP(A6),D0
+                   SUB.L    A1,D0
+                   BNE.S    L087EC
+                   MOVE.W   D2,D4
+                   BEQ.S    L0884C
+                   MOVE.W   D2,D6
+                   BRA.S    L08830
+
+87EA L087EA        MOVE.W   D4,D2
+87EC L087EC        MOVE.W   0(A6,A1.L),D4
+                   TST.W    D2
+                   BEQ.S    L087EA
+                   MOVE.W   BV.LSBAS(A6),D6
+                   CMP.W    BV.LSBEF(A6),D2
+                   BLT.S    L0884C
+                   CMP.W    D4,D2
+                   BLT.S    L0881E
+                   CMP.W    BV.LSAFT(A6),D2
+                   BGT.S    L0884C
+                   CMP.W    D6,D2
+                   BGT.S    L08816
+                   TST.B    D5
+                   BGE.S    L08830
+                   MOVE.W   BV.LSAFT(A6),D6
+                   BRA.S    L08830
+
+8816 L08816        TST.B    D5
+                   BLT.S    L0884C
+                   MOVE.W   D2,D6
+                   BRA.S    L08830
+
+881E L0881E        TST.B    D5
+                   BLT.S    L0884C
+                   MOVE.W   D2,D4
+                   MOVE.W   BV.MAXLN(A6),D0
+                   SUB.W    BV.TOTLN(A6),D0
+                   BGT.S    L08830
+                   SUBQ.W   #1,D6
+8830 L08830        MOVE.W   D2,BV.LSFIL(A6)
+                   MOVEQ    #$10,D0
+                   MOVEQ    #0,D2
+                   MOVEQ    #0,D1
+                   BSR.S    L08848
+                   MOVEQ    #0,D7
+                   JSR      $6E68(PC)
+                   MOVEQ    #SD.CLRRT,D0           ;TRAP to clear line to right of cursor
+                   BSR.S    L08848
+                   MOVEQ    #SD.CLRBT,D0           ;TRAP to clear bottom of window
+8848 L08848        MOVEQ    #-1,D3                 ;use an infinite timeout
+                   TRAP     #3
+884C L0884C        RTS
+
+     L?????        ANDI.B   #4,D2
+                   ANDI.B   #4,D2
+                   SUBI.B   #$FB,D2
+                   DC.W     $FB04
+                   ANDI.B   #0,D0
+                   MOVEQ    #$06,D1
+                   MOVE.B   0(A6,A4.L),D0
+                   BEQ.S    L08884
+                   SUBI.B   #$80,D0
+                   CMPI.B   #$70,D0
+                   BGE.S    L08882
+                   MOVE.B   $884E(PC,D0.W),D1
+                   BGE.S    L08882
+                   NEG.B    D1
+                   ADD.W    2(A6,A4.L),D1
+                   BCLR     #0,D1
+8882 L08882        ADDA.L   D1,A4
+8884 L08884        MOVE.B   0(A6,A4.L),D0
+                   MOVE.W   0(A6,A4.L),D1
+                   RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=SB_GQLCI      GET QDOS LIST CHANNEL ID                                       ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³JOB:                                                                          ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:                                                                        ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+888E SB_GQLCI      MOVE.L   A1,-(A7)               ;save A1
+                   MOVEA.L  BV.CHBAS(A6),A1        ;A1 points at start of SuperBASIC channel
+                   ADDA.W   #2*CH.LENCH,A1         ;A1 points at entry in table for #2, then
+                   MOVE.L   CH.ID(A6,A1.L),D0      ;get the QDOS channel ID for #2
+                   MOVEA.L  (A7)+,A1               ;restore A1
+                   RTS
+
+88A2 L088A2        MOVE.L   A5,-(A7)               ;save A5
+                   MOVEA.L  A0,A5
+                   BSR.S    SB_GQLCI               ;get QDOS channel ID for list channel
+                   SEQ      BV.LSANY(A6)           ;checking list status ?
+                   BNE.S    L088F4                 ;jump forward if we are
+                   MOVEQ    #SD.CHENQ,D0           ;TRAP to read window size or cursor posi
+                   LEA      BV.LENLN(A6),A1        ;A1 points at variable for results
+                   MOVEQ    #-1,D3                 ;use an infinite timeout
+                   TRAP     #3                     ;read size
+
+   the variables from BV.LENLN are set by the above TRAP as follows:-
+
+   BV.LENLN length of window line = window width in characters             0(A1)
+   BV.MAXLN maximum number of lines in window = window depth in characters 2(A1)
+   BV.TOTLN number of window lines so far = cursor column                  4(A1)
+
+   BV.AUTO and BV.PRINT are at 6(A1) and 7(A1) and are set to the cursor row word
+   but this value is overwritten later.
+
+   set the line number table running pointer to the start of the table.
+
+                   MOVE.L   BV.LNBAS(A6),BV.LNP(A6)
+                   CLR.W    BV.TOTLN(A6)           ;and set the number of window lines so far
+                   MOVEQ    #100,D1
+                   JSR      $4F78(PC)
+
+   set the invisible top line number equal to the current line number.
+
+                   MOVE.W   $BV.LINUM(A6),BV.LSBEF(A6)
+
+   set the invisible bottom line number to be the maximum possible line number so
+   that the listing will not stop until the last line is reached.
+
+                   MOVE.W   #32767,BV.LSAFT(A6)
+                   BRA.S    L088F4
+
+   token expansion handler address table
+
+88D6 TEHA_TBL      DC.W     SB_ESPCT-TEHA_TBL      ;expand space token
+                   DC.W     SB_EKEYT-TEHA_TBL      ;expand keyword token
+                   DC.W     SB_ENMTE-TEHA_TBL      ;expand name table entry (built in proce
+                   DC.W     SB_ENMTE-TEHA_TBL      ;expand name table entry (built in funct
+                   DC.W     SB_ESYMT-TEHA_TBL      ;expand symbol token
+                   DC.W     SB_EOPST-TEHA_TBL      ;expand operation symbol token
+                   DC.W     SB_EMONT-TEHA_TBL      ;expand mono_operation symbol token
+                   DC.W     SB_ENMTE-TEHA_TBL      ;expand name table entry (system variabl
+                   DC.W     SB_ENAMT-TEHA_TBL      ;expand name token
+                   DC.W     SB_ENMTE-TEHA_TBL      ;expand name table entry (short integer)
+                   DC.W     SB_ENMTE-TEHA_TBL      ;expand name table entry (long integer)
+                   DC.W     SB_ESTRT-TEHA_TBL      ;expand string token
+                   DC.W     SB_ETXTT-TEHA_TBL      ;expand text token
+                   DC.W     SB_ELNOT-TEHA_TBL      ;expand line number token
+                   DC.W     SB_ESEPT-TEHA_TBL      ;expand seperator token
+
+   was checking list status
+
+88F4 L088F4        MOVE.L   (A2),-(A7)
+                   ADDQ.W   #2,A4
+                   MOVEQ    #0,D4
+                   MOVE.B   #$8D,D4                ;start of line number indicator
+
+88FE L088FE        MOVE.L   (A6),BV.BFP(A6)        ;set buffer running pointer to start of
+8902 L08902        CMPA.L   BV.PFP(A6),A4          ;program file running pointer = A4 ?
+                   BLT.S    L0891C                 ;jump forward if ???
+                   TST.B    BV.PRINT(A6)           ;leave token in buffer ?
+                   BNE      L089EE                 ;jump forward if not
+                   TST.B    BV.AUTO(A6)            ;AUTO or EDIT mode on ?
+                   BEQ      L089EE                 ;jump forward if off
+                   BSR      L08A3C
+891C L0891C        MOVEQ    #$10,D1
+                   BSR      L08AAC
+                   MOVEA.L  (A7),A1
+                   SUBI.B   #SPC.B,D4              ;change to range 0 to 15
+                   CMPI.B   #FP.B-SPC.B,D4         ;is it a floating point number ?
+                   BGE      L089DE                 ;jump forward if it is
+                   ADD.B    D4,D4                  ;double it to form word offset into tabl
+
+   first pick up the offset to the required token expansion handler routine from
+   the table and then call the handler.
+
+                   MOVE.W   TEHA_TBL(PC,D4.W),D4
+                   JSR      TEHA_TBL(PC,D4.W)
+
+                   CMPI.B   #$8D,D4                ;start of line number ?
+                   BNE      L089E0                 ;jump forward if not
+                   TST.B    BV.PRINT(A6)           ;print token or leave in buffer ?
+                   BEQ      L089EA                 ;jump forward if to leave in buffer
+                   TST.B    BV.LSANY(A6)           ;checking list status ?
+                   BEQ.S    L089A4                 ;jump forward if not
+                   MOVEA.L  (A6),A1                ;A1 points at start of buffer (start of
+                   MOVE.L   BV.BFP(A6),D2          ;D2 = buffer running pointer (end of lin
+                   SUB.L    A1,D2                  ;find length of line in buffer
+                   MOVEA.L  BV.LNP(A6),A2          ;A2 = line number table running pointer
+
+   set the current entry in the line number table to the line number of the bott
+   of the list window.
+
+                   MOVE.W   BV.LSBAS(A6),0(A6,A2.L)
+
+   ignore the line number word by reducing the length of the line by two as the
+   line number word itself isn't printed.
+
+                   SUBQ.W   #2,D2
+
+   and find out how many window lines will be taken up when this line is printed
+   out, by dividing its length by the window character width and then rounding t
+   result up.
+
+                   DIVU     BV.LENLN(A6),D2
+                   ADDQ.W   #1,D2
+
+   and store the number of screen lines for this basic line in the line number
+   table entry.
+
+                   MOVE.W   D2,2(A6,A2.L)
+
+                   ADD.W    BV.TOTLN(A6),D2        ;add to number of window lines used so f
+8972 L08972        CMP.W    BV.MAXLN(A6),D2        ;more than maximum number allowed in win
+                   BLE.S    L08998                 ;jump forward if ???
+                   MOVE.W   BV.LSFIL(A6),D0        ;D0 = line to fill window to when re-lis
+                   BEQ.S    L08984                 ;and jump forward if this is zero
+                   CMP.W    BV.LSBAS(A6),D0        ;more than bottom line number in window
+                   BLT.S    L089D0
+8984 L08984        MOVEA.L  BV.LNBAS(A6),A2        ;A2 points at first entry in line number
+                   SUB.W    2(A6,A2.L),D2
+
+   set the invisible top line number in the window to the first entry in the lin
+   number table.
+
+                   MOVE.W   0(A6,A2.L),BV.LSBEF(A6)
+                   ADDQ.L   #4,BV.LNBAS(A6)        ;move line number table base by one entr
+                   BRA.S    L08972                 ;and recheck
+
+8998 L08998        MOVE.W   D2,BV.TOTLN(A6)
+
+   increment the line number table running pointer by one entries worth.
+
+                   ADDQ.L   #4,BV.LNP(A6)
+                   JSR      $5098(PC)
+89A4 L089A4        MOVEQ    #IO.SSTRG,D0           ;TRAP to send a string of bytes
+                   MOVEA.L  (A6),A1                ;A1 points at start of line in buffer
+                   MOVE.L   BV.BFP(A6),D2          ;D2 points at end of line in buffer
+                   SUB.L    A1,D2                  ;form length of line in buffer
+
+   and set A0 to the QDOS channel ID of the list channel.
+
+                   MOVEA.L  A5,A0
+                   MOVEQ    #-1,D3                 ;use an infinite timeout
+                   TRAP     #4                     ;make every location absolute
+                   TRAP     #3                     ;and print the line
+                   TST.L    D0                     ;any errors ?
+                   BNE.S    L089F0                 ;jump forward if so
+                   MOVE.L   D1,D2
+                   MOVEQ    #SD.CLRRT,D0           ;TRAP to clear line to the right of the
+                   TRAP     #3                     ;clear the remainder of the printed line
+                   TAS      BV.BRK(A6)             ;Break key pressed during printing ?
+                   BNE      L088FE                 ;process next line of not
+
+   set the invisible bottom line number to be equal to the bottom line number in
+   the list window.
+
+                   MOVE.W   BV.LSBAS(A6),BV.LSAFT(A6)
+                   BRA.S    L089EE
+
+   set the invisible bottom line number to be equal to the bottom line number in
+   the list window.
+
+89D0 L089D0        MOVE.W   BV.LSBAS(A6),BV.LSAFT(A6)
+                   MOVE.W   -4(A6,A2.L),BV.LSBAS(A6)
+                   BRA.S    L089EE
+89DE L089DE        BSR.S    L08A02
+89E0 L089E0        JSR      L0885E(PC)
+                   MOVE.W   D0,D4
+                   BRA      L08902
+
+89EA L089EA        SUBQ.L   #1,4(A6)
+89EE L089EE        MOVEQ    #0,D0
+89F0 L089F0        ADDQ.W   #4,A7
+                   MOVEA.L  A5,A0
+                   MOVEA.L  (A7)+,A5
+                   RTS
+
+89F8 L089F8        JSR      $4F46(PC)
+                   MOVEA.L  BV.RIP(A6),A1          ;point A1 at the top of the maths stack
+                   RTS
+
+8A02 L08A02        BSR.S    L089F8
+                   MOVE.W   0(A6,A4.L),D2
+                   SUBI.W   #$F000,D2
+                   SUBQ.W   #6,A1
+                   MOVE.W   D2,0(A6,A1.L)
+                   MOVE.L   2(A6,A4.L),2(A6,A1.L)
+                   MOVEA.L  4(A6),A0
+                   JSR      $3F66(PC)
+                   BRA      L08B50
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=SB_ELNOT        EXPAND LINE NUMBER TOKEN                                     ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³JOB:                                                                          ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:                                                                        ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+8A24 SB_ELNOT      BSR.S    L089F8
+                   MOVE.W   2(A6,A4.L),D1
+                   TST.B    BV.PRINT(A6)
+                   BNE.S    L08A48
+                   TST.B    BV.AUTO(A6)
+                   BEQ.S    L08A48
+                   CMP.W    BV.EDLIN(A6),D1
+                   BEQ.S    L08A48
+8A3C L08A3C        BSR.S    L089F8
+                   MOVE.W   BV.EDLIN(A6),D1
+                   BSR.S    L08A62
+8A44 L08A44        ADDQ.W   #4,A7
+                   BRA.S    L089EE
+
+8A48 L08A48        TST.B    BV.LSANY(A6)
+                   BEQ.S    L08A74
+                   CMP.W    D6,D1
+                   BLE.S    L08A5E
+                   TST.W    BV.LSFIL(A6)
+                   BNE.S    L08A5E
+                   MOVE.W   D1,BV.LSAFT(A6)
+                   BRA.S    L08A44
+8A5E L08A5E        MOVE.W   D1,BV.LSBAS(A6)
+8A62 L08A62        SUBQ.W   #2,A1
+                   MOVE.W   D1,0(A6,A1.L)
+                   MOVEA.L  BV.BFP(A6),A0
+                   JSR      $3EC4(PC)
+                   BRA      L08B02
+8A74 L08A74        CMP.W    D6,D1
+                   BGT.S    L08A44
+                   BRA.S    L08A62
+
+8A7A L08A7A        DC.B     $3F,$3F,$3F,$3F
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=SB_ENMTE        EXPAND NAME TABLE ENTRY                                      ³
+³=SB_ENAMT        EXPAND NAME TOKEN                                            ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³JOB:                                                                          ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:                                                                        ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+8A7E SB_ENMTE      MOVEQ    #4,D1
+                   LEA      L08A7A(PC),A1
+                   BRA      L08B46
+
+8A88 SB_ENAMT      MOVE.W   2(A6,A4.L),D2
+                   LSL.L    #3,D2
+                   MOVEA.L  BV.NTBAS(A6),A1
+                   ADDA.W   D2,A1
+                   MOVE.W   2(A6,A1.L),D2
+                   BLT.S    L08A7E
+                   MOVEA.L  BV.NLBAS(A6),A1
+                   ADDA.W   D2,A1
+                   MOVEQ    #0,D1
+                   MOVE.B   0(A6,A1.L),D1
+                   ADDQ.W   #1,A1
+                   BRA      L08B40
+
+8AAC L08AAC        SUBA.L   BV.PFBAS(A6),A4
+                   SUBA.L   BV.PFBAS(A6),A1
+                   MOVEM.L  D1/A1/A4,-(A7)
+                   JSR      $4F64(PC)
+                   MOVEA.L  4(A6),A0
+                   MOVEM.L  (A7)+,D1/A1/A4
+                   ADDA.L   BV.PFBAS(A6),A1
+                   ADDA.L   BV.PFBAS(A6),A4
+                   RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=SB_ESTRT        EXPAND STRING TOKEN                                          ³
+³=SB_ETXTT        EXPAND TEXT TOKEN                                            ³
+³=SB_ESPCT        EXPAND SPACE TOKEN                                           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³JOB:                                                                          ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:                                                                        ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+8ACE SB_ESTRT      BSR.S    L08AD2
+                   BSR.S    SB_ETXTT               ;call expand text token to expand string
+8AD2 L08AD2        MOVE.B   1(A6,A4.L),D2
+                   BRA.S    L08B38
+
+8AD8 SB_ETXTT      MOVE.W   2(A6,A4.L),D1
+                   BEQ.S    L08AF2
+                   LEA      4(A4),A1
+                   BRA.S    L08B40
+
+8AE4 SB_ESPCT      MOVE.B   1(A6,A4.L),D1
+                   BSR.S    L08AAC
+8AEA L08AEA        MOVEQ    #" ",D2
+                   BSR.S    L08B38
+                   SUBQ.B   #1,D1
+                   BGT.S    L08AEA
+8AF2 L08AF2        RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=SB_ESEPT        EXPAND SEPERATOR TOKEN                                       ³
+³=SB_EOPST        EXPAND OPERATION SYMBOL TOKEN                                ³
+³=SB_EKEYT        EXPAND KEYWORD TOKEN                                         ³
+³=SB_EMONT        EXPAND MONO-OPERATION SYMBOL TOKEN                           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³JOB:                                                                          ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³SYNTAX:                                                                       ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+*ACTION:
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³ENTRY:                                                                        ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+8AF4 SB_ESEPT      LEA      L08B58(PC),A1
+                   BRA.S    L08B0A
+
+8AFA SB_EOPST      LEA      L08B7A(PC),A1
+                   BRA.S    L08B0A
+
+8B00 SB_EKEYT      BSR.S    L08B0A
+8B02 L08B02        MOVEQ    #" ",D2
+                   BRA.S    L08B38
+
+8B06 SB_EMONT      LEA      L08B6A(PC),A1
+8B0A L08B0A        MOVE.B   1(A6,A4.L),D1
+                   MOVE.B   0(A1,D1.W),D1
+                   ADDA.L   D1,A1
+                   MOVE.B   (A1)+,D1
+                   LSR.L    #4,D1
+                   BRA.S    L08B46
+
+8B1A L08B1A        DC.B     "="
+                   DC.B     ":"
+                   DC.B     "#"
+                   DC.B     ","
+                   DC.B     "("
+                   DC.B     ")"
+                   DC.B     "{"
+                   DC.B     "}"
+                   DC.B     " "
+                   DC.B     10
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=SB_ESYMT        EXPAND SYMBOL TOKEN                                          ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³JOB:                                                                          ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:                                                                        ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+8B24 SB_ESYMT      MOVE.B   1(A6,A4.L),D1
+                   MOVE.B   $8B1A-1(PC,D1.W),D2
+                   MOVEQ    #0,D4
+                   SUB.B    D2,D1
+                   BNE.S    L08B38
+                   ADDQ.W   #4,A4
+                   MOVE.B   #$8D,D4
+8B38 L08B38        MOVE.B   D2,0(A6,A0.L)
+                   ADDQ.W   #1,A0
+                   BRA.S    L08B50
+
+8B40 L08B40        BSR      L08AAC
+                   ADDA.L   A6,A1
+8B46 L08B46        MOVE.B   (A1)+,0(A6,A0.L)
+                   ADDQ.W   #1,A0
+                   SUBQ.W   #1,D1
+                   BGT.S    L08B46
+8B50 L08B50        MOVE.L   A0,BV.BFP(A6)
+                   MOVEQ    #0,D0
+                   RTS
+
+   Operator table number 2
+
+8B58 L08B58        DC.B     5                      ;number of offsets to follow
+                   DC.B     6
+                   DC.B     8
+                   DC.B     10
+                   DC.B     12
+                   DC.B     14
+                   DC.B     $10,","
+                   DC.B     $10,";"
+                   DC.B     $10,"\"
+                   DC.B     $10,"!"
+                   DC.B     $20,"TO",0
+
+   mono-operation symbol table
+
+8B6A L08B6A        DC.B     4                      ;number of offsets to follow
+                   DC.B     5
+                   DC.B     7
+                   DC.B     9
+                   DC.B     12
+                   DC.B     $10,"-"
+                   DC.B     $10,"+"
+                   DC.B     $20,"~~"
+                   DC.B     $30,"NOT"
+
+8B7A L08B7A        DC.B     22                     ;number of offsets to follow
+                   DC.B     23
+                   DC.B     25
+                   DC.B     27
+                   DC.B     29
+                   DC.B     31
+                   DC.B     34
+                   DC.B     36
+                   DC.B     39
+                   DC.B     41
+                   DC.B     44
+                   DC.B     47
+                   DC.B     49
+                   DC.B     52
+                   DC.B     55
+                   DC.B     58
+                   DC.B     60
+                   DC.B     62
+                   DC.B     65
+                   DC.B     69
+                   DC.B     73
+                   DC.B     77
+                   DC.B     81
+                   DC.B     $10,"+"
+                   DC.B     $10,"-"
+                   DC.B     $10,"*"
+                   DC.B     $10,"/"
+                   DC.B     $20,">="
+                   DC.B     $10,">"
+                   DC.B     $20,"=="
+                   DC.B     $10,"="
+                   DC.B     $20,"<>"
+                   DC.B     $20,"<="
+                   DC.B     $10,"<"
+                   DC.B     $20,"||"
+                   DC.B     $20,"&&"
+                   DC.B     $20,"^^"
+                   DC.B     $10,"^"
+                   DC.B     $10,"and"
+                   DC.B     $20,"OR"
+                   DC.B     $30,"AND"
+                   DC.B     $30,"XOR"
+                   DC.B     $30,"MOD"
+                   DC.B     $30,"DIV"
+                   DC.B     $50,"INSTR",0
+
+8BD2 L08BD2        ANDI.B   #%00001111,1(A6,A2.L)
+                   TST.L    4(A6,A2.L)
+                   BGE.S    L08BE2
+                   MOVEQ    #ERR.BN,D0             ;signal "bad name"
+                   RTS
+
+8BE2 L08BE2        JSR      $4F58(PC)
+                   MOVEA.L  BV.NTP(A6),A3
+                   ADDQ.L   #8,BV.NTP(A6)
+                   MOVE.W   0(A6,A2.L),0(A6,A3.L)
+                   MOVE.W   D4,2(A6,A3.L)
+                   MOVEA.L  4(A6,A2.L),A2
+                   ADDA.L   BV.VVBAS(A6),A2
+                   MOVE.W   4(A6,A2.L),D1
+                   LSL.L    #2,D1
+                   ADDQ.W   #6,D1
+                   JSR      $6C88(PC)
+8C0C L08C0C        MOVE.W   0(A6,A2.L),0(A6,A0.L)
+                   ADDQ.W   #2,A2
+                   ADDQ.W   #2,A0
+                   SUBQ.W   #2,D1
+                   BGT.S    L08C0C
+8C1A L08C1A        JSR      L09B92(PC)
+                   CMPI.W   #SYM.EQ,D1             ;equals sign ?
+                   BEQ.S    L08C42
+                   CMPI.W   #SYM.LBKT,D1           ;left round bracket ?
+                   BNE      L08CAE
+                   ADDQ.W   #2,A4
+                   MOVEA.L  A4,A0
+                   LEA      8(A3),A5
+                   JSR      $5CDC(PC)
+                   LEA      -8(A5),A3
+                   MOVEA.L  A0,A4
+                   BNE.S    L08C7A
+                   BRA.S    L08C1A
+8C42 L08C42        ADDQ.W   #2,A4
+                   CMPI.B   #2,0(A6,A3.L)
+                   BEQ.S    L08C64
+                   CMPI.B   #1,1(A6,A3.L)
+                   BGT.S    L08CB2
+                   MOVEA.L  4(A6,A3.L),A2
+                   ADDA.L   BV.VVBAS(A6),A2
+                   CMPI.W   #1,4(A6,A2.L)
+                   BGT.S    L08CB2
+8C64 L08C64        MOVEA.L  A4,A0
+                   MOVE.B   1(A6,A3.L),D0
+                   MOVE.L   A3,-(A7)
+                   JSR      $54FA(PC)
+                   MOVEA.L  (A7)+,A3
+                   MOVEA.L  A0,A4
+                   BNE.S    L08C7A
+                   JSR      $6C12(PC)
+8C7A L08C7A        CMPI.B   #3,0(A6,A3.L)
+                   BNE.S    L08C96
+                   MOVEA.L  4(A6,A3.L),A2
+                   ADDA.L   BV.VVBAS(A6),A2
+                   MOVE.L   D0,-(A7)
+                   MOVE.L   A3,-(A7)
+                   JSR      L0920A(PC)
+                   MOVEA.L  (A7)+,A3
+                   MOVE.L   (A7)+,D0
+8C96 L08C96        CLR.L    0(A6,A3.L)
+                   CLR.L    4(A6,A3.L)
+                   ADDQ.W   #8,A3
+                   CMPA.L   BV.NTP(A6),A3
+                   BNE.S    L08CAA
+                   SUBQ.L   #8,BV.NTP(A6)
+8CAA L08CAA        TST.L    D0
+                   RTS
+
+8CAE L08CAE        MOVEQ    #-$11,D0
+                   BRA.S    L08C7A
+
+8CB2 L08CB2        MOVEQ    #-$13,D0
+                   BRA.S    L08C7A
+
+8CB6 L08CB6        JSR      $4F5E(PC)
+                   MOVEA.L  BV.RTP(A6),A5
+                   TST.B    D5
+                   BEQ.S    L08CEE
+                   MOVE.L   D4,D3
+                   MOVEA.L  BV.NTP(A6),A3
+                   MOVE.L   A3,0(A6,A5.L)
+                   MOVE.L   A3,4(A6,A5.L)
+                   MOVE.L   A3,8(A6,A5.L)
+                   MOVE.W   4(A6,A2.L),D4
+                   BEQ      L08D6C
+                   MOVE.W   D4,12(A6,A5.L)
+                   MOVE.B   1(A6,A2.L),$0E(A6,A5.L)
+                   SF       $0F(A6,A5.L)
+                   ADDA.W   #$10,A5
+8CEE L08CEE        MOVE.B   D5,0(A6,A5.L)
+                   MOVE.B   BV.STMNT(A6),1(A6,A5.L)
+                   MOVE.W   BV.LINUM(A6),2(A6,A5.L)
+                   MOVE.L   BV.INLIN(A6),4(A6,A5.L)
+                   ADDQ.W   #8,A5
+                   MOVE.L   A5,BV.RTP(A6)
+                   TST.B    D5
+                   BEQ.S    L08D62
+                   CMPI.B   #3,D5
+                   BEQ.S    L08D5A
+                   MOVEA.L  A4,A0
+                   JSR      $5BB4(PC)
+                   MOVEA.L  BV.RTP(A6),A5
+                   MOVE.L   BV.NTP(A6),-$14(A6,A5.L)
+                   MOVE.L   BV.NTP(A6),-$10(A6,A5.L)
+                   TST.L    D0
+                   BNE.S    L08D3C
+                   MOVE.W   0(A6,A0.L),D1
+                   CMPI.B   #2,D5
+                   BEQ.S    L08D4C
+                   BSR.S    L08DAA
+                   BEQ.S    L08D58
+8D3C L08D3C        BSR      L08F86
+                   SUBI.L   #$18,BV.RTP(A6)
+                   MOVEQ    #ERR.BP,D0             ;signal "bad parameter"
+                   RTS
+
+8D4C L08D4C        CMPI.W   #SYM.RBKT,D1           ;right round bracket ?
+                   BNE.S    L08D3C
+                   ADDQ.W   #2,A0
+                   MOVE.L   A0,8(A7)
+8D58 L08D58        MOVEA.L  A0,A4
+8D5A L08D5A        ST       -9(A6,A5.L)
+                   MOVEA.L  -$18(A6,A5.L),A3
+8D62 L08D62        TST.B    BV.SING(A6)
+                   BEQ.S    L08D80
+                   BSR.S    L08D70
+                   BEQ.S    L08D80
+8D6C L08D6C        MOVEQ    #ERR.NF,D0             ;signal "not found"
+                   RTS
+
+8D70 L08D70        MOVEA.L  BV.PFBAS(A6),A4
+                   SF       BV.SING(A6)
+                   CLR.W    BV.LNGTH(A6)
+                   JMP      L09F42(PC)
+
+8D80 L08D80        TST.B    D5
+                   BEQ      L0976A
+                   BSR      L08F2E
+                   BSR      L08E64
+8D8E L08D8E        BSR.S    L08DDE
+                   BEQ.S    L08DAE
+                   MOVEA.L  BV.RTP(A6),A5
+                   MOVE.L   BV.NTP(A6),-$10(A6,A5.L)
+                   TST.L    D0
+                   BNE.S    L08DA8
+                   ADDQ.W   #4,A7
+                   JMP      L09ED0(PC)
+
+                   MOVEQ    #0,D0                  ;signal "no errors"
+8DA8 L08DA8        RTS
+
+8DAA L08DAA        BRA      L08E58
+8DAE L08DAE        ADDQ.W   #2,A4
+                   BSR.S    L08E2E
+                   CMPI.B   #$88,D0                ;start of name token ?
+                   BNE.S    L08DD0
+                   BSR.S    L08E32
+                   BSR.S    L08E2E
+                   CMPI.W   #SYM.LBKT,D1           ;left round bracket ?
+                   BNE.S    L08DD0
+                   ADDQ.B   #1,0(A6,A2.L)
+                   SUBQ.W   #4,A4
+                   JSR      L090B6(PC)
+                   BNE.S    L08DA8
+                   BSR.S    L08E2E
+8DD0 L08DD0        CMPI.W   #SYM.COM,D1            ;comma token ?
+                   BEQ.S    L08DAE
+                   BSR.S    L08DAA
+                   BEQ.S    L08D8E
+                   MOVEQ    #ERR.BL,D0             ;signal "bad line"
+                   RTS
+
+8DDE L08DDE        JSR      L09C30(PC)
+                   BNE.S    L08DFA
+                   BSR.S    L08E2E
+                   MOVEQ    #0,D0
+                   CMPI.W   #KEY.RMRK,D1           ;REMark token ?
+                   BEQ.S    L08DDE
+                   CMPI.W   #KEY.DATA,D1           ;DATA token ?
+                   BEQ.S    L08DDE
+                   CMPI.W   #KEY.LOCL,D1           ;LOCal token ?
+                   RTS
+
+8DFA L08DFA        MOVEQ    #ERR.EF,D0             ;signal "end of file"
+                   RTS
+
+8DFE L08DFE        MOVEQ    #0,D0
+                   MOVE.W   2(A6,A4.L),D0
+                   LSL.L    #3,D0
+                   MOVEA.L  BV.NTBAS(A6),A2
+                   ADDA.L   D0,A2
+                   MOVE.W   0(A6,A2.L),D0
+                   MOVE.W   0(A6,A3.L),0(A6,A2.L)
+                   MOVE.W   D0,0(A6,A3.L)
+                   MOVE.L   4(A6,A2.L),D0
+                   MOVE.L   4(A6,A3.L),4(A6,A2.L)
+                   MOVE.L   D0,4(A6,A3.L)
+                   ADDQ.W   #8,A3
+                   ADDQ.W   #4,A4
+                   RTS
+
+8E2E L08E2E        JMP      L09B92(PC)
+
+8E32 L08E32        MOVEA.L  BV.NTP(A6),A3
+                   MOVE.B   #2,0(A6,A3.L)
+                   MOVE.W   #$FFFF,2(A6,A3.L)
+                   MOVE.L   #$FFFFFFFF,4(A6,A3.L)
+                   BSR.S    L08DFE
+                   MOVE.B   -7(A6,A3.L),1(A6,A2.L)
+                   MOVE.L   A3,BV.NTP(A6)
+                   RTS
+
+8E58 L08E58        CMPI.W   #SYM.LF,D1             ;line feed symbol token ?
+                   BEQ.S    L08E62
+                   CMPI.W   #SYM.COL,D1            ; colon symbol token ?
+8E62 L08E62        RTS
+
+8E64 L08E64        BSR.S    L08E2E
+                   ADDQ.W   #2,A4
+                   BSR.S    L08E2E
+                   ADDQ.W   #2,A4
+                   BSR.S    L08E2E
+                   TST.W    D3
+                   BLT.S    L08E78
+                   CMP.W    2(A6,A4.L),D3
+                   BNE.S    L08E86
+8E78 L08E78        ADDQ.W   #4,A4
+                   BSR.S    L08E2E
+                   CMPI.W   #SYM.LBKT,D1           ;left bracket symbol token ?
+                   BEQ.S    L08E92
+                   BSR.S    L08E58
+                   BEQ.S    L08E8C
+8E86 L08E86        ADDQ.W   #4,A7
+8E88 L08E88        MOVEQ    #ERR.NF,D0             ;signal "not found"
+                   RTS
+
+8E8C L08E8C        MOVEA.L  -$14(A6,A5.L),A3
+                   RTS
+
+8E92 L08E92        ADDQ.W   #2,A4
+8E94 L08E94        BSR.S    L08E2E
+                   CMPI.B   #$88,D0                ;start of a name token ?
+                   BNE.S    L08EB0
+                   CMPA.L   -$14(A6,A5.L),A3
+                   BLT.S    L08EAA
+                   BSR.S    L08E32
+                   MOVE.L   A3,-$14(A6,A5.L)
+                   BRA.S    L08E94
+8EAA L08EAA        BSR      L08DFE
+                   BRA.S    L08E94
+8EB0 L08EB0        CMPI.W   #SYM.RBKT,D1           ;right round bracket symbol token ?
+                   BNE.S    L08E92
+8EB6 L08EB6        RTS
+
+8EB8 L08EB8        MOVEA.L  BV.RTP(A6),A5
+                   CMPA.L   BV.RTBAS(A6),A5
+                   BLE.S    L08E88
+                   MOVE.B   -8(A6,A5.L),D5
+                   BEQ.S    L08EEA
+                   MOVE.B   D5,D0
+                   SUBQ.B   #2,D0
+                   BLT.S    L08EE6
+                   MOVE.B   -10(A6,A5.L),D0
+                   MOVEA.L  A4,A0
+                   JSR      $54FA(PC)
+                   MOVEA.L  A0,A4
+                   BLT.S    L08EB6
+                   BEQ.S    L08EE2
+                   MOVEQ    #ERR.XP,D0             ;signal "error in expression"
+                   RTS
+
+8EE2 L08EE2        MOVEA.L  BV.RTP(A6),A5
+8EE6 L08EE6        BSR.S    L08F36
+                   BNE.S    L08EB6
+8EEA L08EEA        MOVE.L   -4(A6,A5.L),BV.INLIN(A6)
+                   MOVE.W   -6(A6,A5.L),D4
+                   BSR.S    L08F2E
+                   MOVE.L   -4(A6,A5.L),BV.INLIN(A6)
+                   MOVE.B   -7(A6,A5.L),D4
+                   JSR      L096FC(PC)
+                   SUBQ.W   #8,A5
+                   TST.B    D5
+                   BEQ.S    L08F0E
+                   SUBA.W   #$10,A5
+8F0E L08F0E        SF       BV.UNRVL(A6)
+                   MOVE.L   A5,BV.RTP(A6)
+                   MOVEQ    #0,D0
+                   SUBQ.B   #2,D5
+                   BLT.S    L08F2A
+                   MOVEA.L  BV.NTP(A6),A5
+                   MOVE.B   #1,-8(A6,A5.L)
+                   ADDQ.W   #8,A7
+                   MOVEA.L  (A7)+,A0
+8F2A L08F2A        TST.L    D0
+                   RTS
+
+8F2E L08F2E        JSR      L09694(PC)
+                   JMP      L09F42(PC)
+8F36 L08F36        CMPA.L   BV.PFBAS(A6),A4
+                   BLE.S    L08F42
+                   CMPA.L   BV.PFP(A6),A4
+                   BLT.S    L08F46
+8F42 L08F42        BSR      L08D70
+8F46 L08F46        TST.B    -9(A6,A5.L)
+                   BEQ.S    L08F86
+                   MOVE.W   -12(A6,A5.L),D4
+                   MOVEA.L  -$14(A6,A5.L),A3
+                   BSR.S    L08F2E
+8F56 L08F56        BSR      L08DDE
+                   BNE.S    L08F6E
+8F5C L08F5C        MOVE.W   #NAM.W,D4              ;name token
+                   JSR      L09C02(PC)
+                   BNE.S    L08F56
+                   BSR      L08DFE
+                   SUBQ.W   #4,A4
+                   BRA.S    L08F5C
+8F6E L08F6E        MOVE.W   -12(A6,A5.L),D4
+                   MOVEA.L  -$18(A6,A5.L),A3
+                   TST.B    D0
+                   BEQ.S    L08F7E
+                   BSR      L08D70
+8F7E L08F7E        BSR.S    L08F2E
+                   MOVEQ    #-1,D3
+                   BSR      L08E64
+8F86 L08F86        MOVEA.L  -$18(A6,A5.L),A3
+                   MOVEA.L  -$10(A6,A5.L),A5
+                   JSR      $5178(PC)
+                   BNE.S    L08F2A
+                   MOVEA.L  BV.RTP(A6),A5
+                   RTS
+
+                   BSR.S    L08FB0
+                   RTS
+
+   Message
+
+8F9E L08F9E        ORI.B    #$52,(A0)
+                   DC.W     $4F43
+                   MOVE.L   D6,$4E20(A7)
+
+     L?????        BLS.S    L09016
+                   BCS.S    L0900D
+                   MOVEQ    #$65,D1
+                   BCC.S    L08FBA
+8FB0 L08FB0        MOVEA.L  BV.CHBAS(A6),A0
+                   MOVEA.L  0(A6,A0.L),A0
+                   LEA      L08F9E(PC),A1
+                   JSR      $3A22(PC)
+8FC0 L08FC0        MOVEA.L  BV.RTP(A6),A5
+                   CMPA.L   BV.RTBAS(A6),A5
+                   BLE.S    L08FF6
+                   MOVE.B   -8(A6,A5.L),D5
+                   BEQ.S    L08FD8
+                   BSR      L08F36
+                   SUBA.W   #$10,A5
+8FD8 L08FD8        SUBQ.W   #8,A5
+                   MOVE.L   A5,BV.RTP(A6)
+                   SUBQ.B   #2,D5
+                   BLT.S    L08FC0
+                   MOVEA.L  BV.NTP(A6),A5
+                   SUBQ.W   #8,A5
+8FE8 L08FE8        MOVEQ    #0,D2
+                   JSR      $5732(PC)
+                   BNE.S    L08FE8
+                   MOVE.L   A5,BV.NTP(A6)
+                   BRA.S    L08FC0
+8FF6 L08FF6        SF       BV.UNRVL(A6)
+                   MOVEA.L  (A7)+,A3
+                   MOVEA.L  (A7)+,A5
+                   TRAP     #$                     ;??????????????
+                   MOVEA.L  $64(A6),A1
+                   ADDA.L   A6,A1
+                   SUBQ.W   #4,A1
+                   MOVE.L   A1,USP
+                   MOVE.W   #0,SR
+                   MOVE.L   A5,-(A7)
+                   MOVE.L   A3,-(A7)
+                   ST       BV.SING(A6)
+9016 L09016        TST.B    BV.UNDO(A6)
+                   BNE      L09D10
+                   RTS
+
+9020 L09020        MOVE.L   A4,-(A7)
+                   JSR      L092B6(PC)
+                   BLT.S    L09040
+9028 L09028        ADDQ.W   #2,A4
+                   JSR      L09B92(PC)
+                   MOVE.L   A4,-(A7)
+                   JSR      L092B6(PC)
+                   CMPA.L   (A7)+,A4
+                   BNE.S    L0903E
+                   TST.B    D0
+                   BGE.S    L09028
+                   BRA.S    L09040
+903E L0903E        MOVEQ    #0,D0
+9040 L09040        MOVEA.L  (A7)+,A4
+                   RTS
+
+9044 L09044        MOVEQ    #0,D6
+                   MOVE.L   A4,D3
+9048 L09048        MOVE.W   0(A6,A4.L),D1
+                   CMPI.W   #KEY.GO,D1             ;GO keyword token ?
+                   BEQ.S    L0906E
+                   JSR      L08E58(PC)
+                   BEQ.S    L09070
+                   CMPI.W   #SYM.EQ,D1             ;equals symbol token ?
+                   BNE.S    L09068
+                   TST.B    D6
+                   BNE.S    L09068
+                   ADDQ.W   #2,A4
+                   MOVE.L   A4,D3
+                   MOVEQ    #1,D6
+9068 L09068        JSR      L0885E(PC)
+                   BRA.S    L09048
+906E L0906E        MOVEQ    #-1,D0
+9070 L09070        MOVEA.L  D3,A4
+                   RTS
+
+9074 L09074        JSR      L09C30(PC)
+                   BNE.S    L09090
+                   JSR      L09B92(PC)
+                   CMPI.W   #KEY.END,D1            ;END keyword token ?
+                   BNE.S    L09074
+                   ADDQ.W   #2,A4
+                   JSR      L09B92(PC)
+                   CMPI.W   #KEY.DEF,D1            ;DEFine keyword token ?
+                   BNE.S    L09074
+9090 L09090        MOVEQ    #0,D0                  ;signal "no errors"
+                   RTS
+
+                   MOVEM.L  D4-6/A5,-(A7)
+                   SUBQ.W   #2,A4
+909A L0909A        ADDQ.W   #2,A4
+                   JSR      L09B92(PC)
+                   BSR.S    L090B6
+                   BNE.S    L090B0
+                   JSR      L09B92(PC)
+                   CMPI.W   #SYM.COM,D1            ;comma symbol token ?
+                   BEQ.S    L0909A
+                   MOVEQ    #0,D0                  ;signal "no errors"
+90B0 L090B0        MOVEM.L  (A7)+,D4-6/A5
+                   RTS
+
+90B6 L090B6        MOVEQ    #0,D4
+                   MOVE.W   2(A6,A4.L),D4
+                   ADDQ.W   #4,A4
+                   JSR      L09B92(PC)
+                   ADDQ.W   #2,A4
+                   MOVEQ    #0,D5
+                   MOVEA.L  (A6),A5
+                   MOVEA.L  A4,A0
+90CA L090CA        MOVE.L   A5,-(A7)
+                   JSR      $54F8(PC)
+                   MOVEA.L  (A7)+,A5
+                   MOVEA.L  A0,A4
+                   BNE.S    L0914E
+                   ADDQ.L   #1,D5
+                   MOVE.W   0(A6,A1.L),0(A6,A5.L)
+                   BLT.S    L09148
+                   ADDQ.W   #4,A5
+                   ADDQ.L   #2,BV.RIP(A6)
+                   ADDQ.W   #2,A0
+                   CMPI.W   #SYM.COM,-2(A6,A0.L)   ;comma symbol token ?
+                   BEQ.S    L090CA
+                   CMPI.W   #SYM.RBKT,-2(A6,A0.L)  ;right round bracket symbol tok
+                   BNE.S    L0914C
+                   LSL.L    #3,D4
+                   MOVEA.L  BV.NTBAS(A6),A3
+                   ADDA.L   D4,A3
+                   CMPI.B   #3,0(A6,A3.L)
+                   BNE.S    L09150
+                   MOVE.B   1(A6,A3.L),D6
+                   CMPI.B   #1,D6
+                   BNE.S    L09126
+                   MOVE.W   -4(A6,A5.L),D1
+                   ADDQ.W   #1,D1
+                   BCLR     #0,D1
+                   MOVE.W   D1,-4(A6,A5.L)
+                   BLE.S    L09148
+                   MOVEQ    #2,D1
+                   BRA.S    L09128
+9126 L09126        MOVEQ    #1,D1
+9128 L09128        MOVE.L   D5,D0
+                   MOVEQ    #1,D2
+912C L0912C        SUBQ.W   #4,A5
+                   MOVE.W   D2,2(A6,A5.L)
+                   SUBQ.L   #1,D0
+                   BEQ.S    L09154
+                   MOVE.L   D1,D3
+                   MOVEQ    #1,D1
+                   ADD.W    0(A6,A5.L),D3
+                   MULU     D3,D2
+                   MOVE.L   D2,D3
+                   SWAP     D3
+                   TST.W    D3
+                   BEQ.S    L0912C
+9148 L09148        MOVEQ    #ERR.OR,D0             ;signal "out of range"
+                   RTS
+
+914C L0914C        MOVEQ    #ERR.XP,D0             ;signal "error in expression"
+914E L0914E        RTS
+
+9150 L09150        MOVEQ    #ERR.BN,D0             ;signal "bad name"
+                   RTS
+
+9154 L09154        MOVEA.L  A0,A4
+                   MOVE.L   4(A6,A3.L),D4
+                   BLT.S    L0915E
+                   BSR.S    L091CC
+915E L0915E        MOVE.L   D5,D1
+                   LSL.L    #2,D1
+                   ADDQ.L   #6,D1
+                   MOVE.L   A3,-(A7)
+                   JSR      $4EF0(PC)
+                   MOVEA.L  (A7)+,A3
+                   MOVE.L   A0,D1
+                   SUB.L    BV.VVBAS(A6),D1
+                   MOVE.L   D1,4(A6,A3.L)
+                   MOVE.L   A0,-(A7)
+                   MOVE.W   D5,4(A6,A0.L)
+                   ADDQ.W   #6,A0
+917E L0917E        MOVE.L   0(A6,A5.L),0(A6,A0.L)
+                   ADDQ.W   #4,A5
+                   ADDQ.W   #4,A0
+                   SUBQ.L   #1,D5
+                   BGT.S    L0917E
+                   MOVEA.L  (A6),A5
+                   MOVEQ    #1,D1
+                   ADD.W    0(A6,A5.L),D1
+                   MULU     2(A6,A5.L),D1
+                   SUBQ.B   #2,D6
+                   BLT.S    L091AA
+                   BEQ.S    L091A2
+                   ADD.L    D1,D1
+                   BRA.S    L091AA
+91A2 L091A2        ADD.L    D1,D1
+                   MOVE.L   D1,D0
+                   ADD.L    D1,D1
+                   ADD.L    D0,D1
+91AA L091AA        MOVE.L   A3,-(A7)
+                   JSR      $4EF0(PC)
+                   MOVEA.L  (A7)+,A3
+                   MOVE.L   A0,D2
+                   SUB.L    BV.VVBAS(A6),D2
+                   MOVEA.L  (A7)+,A2
+                   MOVE.L   D2,0(A6,A2.L)
+91BE L091BE        CLR.W    0(A6,A0.L)
+                   ADDQ.W   #2,A0
+                   SUBQ.L   #2,D1
+                   BGT.S    L091BE
+                   MOVEQ    #0,D0
+                   RTS
+
+91CC L091CC        MOVEA.L  BV.VVBAS(A6),A2
+                   ADDA.L   D4,A2
+                   MOVEQ    #1,D2
+                   ADD.W    6(A6,A2.L),D2
+                   MULU     8(A6,A2.L),D2
+                   MOVE.B   D6,D1
+                   SUBQ.B   #2,D1
+                   BLT.S    L091F0
+                   BEQ.S    L091E8
+                   ADD.L    D2,D2
+                   BRA.S    L091F0
+91E8 L091E8        ADD.L    D2,D2
+                   MOVE.L   D2,D1
+                   ADD.L    D2,D2
+                   ADD.L    D1,D2
+91F0 L091F0        MOVE.L   D2,D1
+                   MOVEA.L  BV.VVBAS(A6),A0
+                   ADDA.L   0(A6,A2.L),A0
+                   MOVE.L   A3,-(A7)
+                   MOVE.L   A2,-(A7)
+                   JSR      $50E2(PC)
+                   MOVEA.L  (A7)+,A2
+                   BSR.S    L0920A
+                   MOVEA.L  (A7)+,A3
+                   RTS
+
+920A L0920A        MOVEQ    #0,D1
+                   MOVE.W   4(A6,A2.L),D1
+                   LSL.L    #2,D1
+                   ADDQ.L   #6,D1
+                   MOVEA.L  A2,A0
+                   JMP      $50E2(PC)
+                   MOVEQ    #0,D4
+921C L0921C        JSR      L092B6(PC)
+                   BGE.S    L09228
+                   TST.B    BV.INLIN(A6)
+                   BNE.S    L09272
+9228 L09228        JSR      L09C30(PC)
+                   BNE.S    L09272
+                   JSR      L09B92(PC)
+                   CMPI.B   #$81,D0                ;start of a keyword token ?
+                   BNE.S    L0921C
+                   ADDQ.W   #2,A4
+                   CMPI.B   #3,D1
+                   BNE.S    L0925A
+                   JSR      L09020(PC)
+                   BLT.S    L09256
+                   TST.B    BV.INLIN(A6)
+                   BNE.S    L09256
+924C L0924C        JSR      L092B6(PC)
+                   BLT.S    L09228
+                   ADDQ.W   #2,A4
+                   BRA.S    L0924C
+9256 L09256        ADDQ.W   #1,D4
+                   BRA.S    L0921C
+925A L0925A        CMPI.B   #1,D1
+                   BNE.S    L0921C
+                   JSR      L09B92(PC)
+                   CMPI.W   #KEY.IF,D1             ;IF keyword token ?
+                   BNE.S    L0921C
+                   TST.B    D4
+                   BEQ.S    L09272
+                   SUBQ.W   #1,D4
+                   BRA.S    L0921C
+9272 L09272        MOVEQ    #0,D0
+                   RTS
+
+                   JSR      L09B92(PC)
+                   CMPI.W   #KEY.DEF,D1            ;DEFine keyword token ?
+                   BEQ      L08EB8
+                   MOVEQ    #6,D5
+                   CMPI.W   #KEY.REP,D1            ;REPeat keyword token ?
+                   BEQ.S    L09292
+                   MOVEQ    #7,D5
+                   CMPI.W   #KEY.FOR,D1            ;FOR keyword token ?
+                   BNE.S    L092AE
+9292 L09292        ADDQ.W   #2,A4
+                   JSR      L09790(PC)
+                   BNE.S    L092B0
+                   CMP.B    D5,D1
+                   BNE.S    L092B2
+                   MOVE.W   BV.LINUM(A6),8(A6,A2.L)
+                   MOVE.B   BV.STMNT(A6),$0B(A6,A2.L)
+                   JMP      L099A0(PC)
+92AE L092AE        MOVEQ    #0,D0                  ;signal "no errors"
+92B0 L092B0        RTS
+
+92B2 L092B2        MOVEQ    #ERR.NF,D0             ;signal "not found"
+                   RTS
+
+92B6 L092B6        MOVEQ    #0,D0
+                   MOVE.W   0(A6,A4.L),D1
+                   CMPI.W   #SYM.COL,D1            ;colon symbol token ?
+                   BEQ.S    L092E0
+                   CMPI.W   #SYM.LF,D1             ;linefeed symbol token ?
+                   BEQ.S    L092DE
+                   MOVEQ    #1,D0
+                   CMPI.W   #KEY.THEN,D1           ;THEN keyword token ?
+                   BEQ.S    L092E0
+                   MOVEQ    #2,D0
+                   CMPI.W   #KEY.ELSE,D1           ;ELSE keyword token ?
+                   BEQ.S    L092E0
+                   JSR      L0885E(PC)
+                   BRA.S    L092B6
+92DE L092DE        MOVEQ    #ERR.NC,D0             ;signal "not complete"
+92E0 L092E0        RTS
+
+   Message
+
+92E2 L092E2        ORI.B    #$74,??
+                   MOVEA.L  $696E(A4),A0
+
+     L?????        BCS.S    L0930C
+                   ST       BV.SING(A6)
+                   BRA.S    L092F4
+
+92F2 L092F2        MOVEQ    #-1,D0
+92F4 L092F4        MOVEA.L  BV.CHBAS(A6),A0
+                   MOVEA.L  0(A6,A0.L),A0
+                   MOVE.W   #-1,BV.NXLIN(A6)
+                   TST.B    BV.SING(A6)
+                   BNE.S    L0934E
+                   MOVE.L   D0,-(A7)
+                   LEA      L092E2(PC),A1
+                   JSR      $3A22(PC)
+                   MOVEA.L  A0,A5
+                   MOVEA.W  #$68,A1
+                   MOVEA.L  (A6),A0
+                   JSR      $3EC4(PC)
+                   MOVE.B   #" ",0(A6,A0.L)
+                   ADDQ.W   #1,D1
+                   MOVEA.L  (A6),A1
+                   MOVE.W   D1,D2
+                   MOVEA.L  A5,A0
+                   MOVEQ    #7,D0
+                   MOVEQ    #-1,D3
+                   TRAP     #4
+                   TRAP     #3
+
+                   MOVE.L   (A7)+,D0
+9336 L09336        MOVE.W   BV.LINUM(A6),BV.CNLNO(A6)
+                   MOVE.B   BV.STMNT(A6),BV.CNSTM(A6)
+                   MOVE.B   BV.INLIN(A6),BV.CNINL(A6)
+                   MOVE.W   BV.INDEX(A6),BV.CNIND(A6)
+934E L0934E        JSR      $3872(PC)
+                   MOVE.L   BV.RTP(A6),D0
+                   SUB.L    BV.RTBAS(A6),D0
+                   SNE      BV.UNRVL(A6)
+                   MOVEQ    #-1,D0                 ;signal "no errors"
+                   RTS
+
+                   JSR      L09790(PC)
+                   BNE      L093FA
+                   MOVE.W   8(A6,A2.L),D4
+                   BEQ.S    L09386
+                   JSR      L09694(PC)
+                   BNE.S    L09384
+                   JSR      L09F42(PC)
+                   BNE.S    L09384
+                   MOVE.B   $0B(A6,A2.L),D4
+                   JSR      L096FC(PC)
+9384 L09384        BRA.S    L093F8
+9386 L09386        MOVE.W   -2(A6,A4.L),D4
+                   MOVEQ    #7,D5
+                   SUB.B    D1,D5
+938E L0938E        JSR      L092B6(PC)
+                   BLT.S    L0939C
+                   ADDQ.W   #2,A4
+                   ADDQ.B   #1,BV.STMNT(A6)
+                   BRA.S    L093BE
+939C L0939C        TST.B    BV.INLIN(A6)
+                   BEQ.S    L093B0
+                   SF       BV.INLIN(A6)
+                   MOVE.W   BV.LINUM(A6),D0
+                   CMP.W    6(A6,A2.L),D0
+                   BEQ.S    L093F8
+93B0 L093B0        TST.B    BV.SING(A6)
+                   BNE.S    L093F8
+                   ADDQ.W   #2,A4
+                   JSR      L09F42(PC)
+                   BNE.S    L093F8
+93BE L093BE        JSR      L09B92(PC)
+                   CMPI.W   #KEY.END,D1            ;END keyword token ?
+                   BNE.S    L0938E
+                   ADDQ.W   #2,A4
+                   JSR      L09B92(PC)
+                   TST.B    D5
+                   BEQ.S    L093DA
+                   CMPI.W   #KEY.REP,D1            ;REPeat keyword token ?
+                   BNE.S    L0938E
+                   BRA.S    L093E0
+93DA L093DA        CMPI.W   #KEY.FOR,D1            ;FOR keyword token ?
+                   BNE.S    L0938E
+93E0 L093E0        ADDQ.W   #2,A4
+                   JSR      L09B92(PC)
+                   CMP.W    2(A6,A4.L),D4
+                   BNE.S    L0938E
+                   MOVE.W   BV.LINUM(A6),8(A6,A2.L)
+                   MOVE.B   BV.STMNT(A6),$0B(A6,A2.L)
+93F8 L093F8        MOVEQ    #0,D0                  ;signal "no errors"
+93FA L093FA        RTS
+
+93FC L093FC        MOVEQ    #0,D5
+93FE L093FE        BSR.S    L09444
+                   BNE.S    L09454
+                   JSR      L09B92(PC)
+                   CMPI.B   #$81,D0
+                   BNE.S    L093FE
+                   ADDQ.W   #2,A4
+                   CMPI.B   #1,D1
+                   BNE.S    L09424
+                   JSR      L09B92(PC)
+                   CMPI.W   #KEY.SEL,D1            ;SELect keyword token ?
+                   BNE.S    L093FE
+                   SUBQ.W   #1,D5
+                   BLT.S    L09454
+                   BRA.S    L093FE
+9424 L09424        CMPI.B   #5,D1
+                   BNE.S    L093FE
+                   JSR      L09020(PC)
+                   BLT.S    L09436
+                   TST.B    BV.INLIN(A6)
+                   BEQ.S    L0943A
+9436 L09436        ADDQ.W   #1,D5
+                   BRA.S    L093FE
+943A L0943A        JSR      L092B6(PC)
+                   BLT.S    L093FE
+                   ADDQ.W   #2,A4
+                   BRA.S    L0943A
+9444 L09444        JSR      L09C30(PC)
+                   BNE.S    L09462
+                   TST.B    D0
+                   BEQ.S    L09454
+                   TST.B    BV.INLIN(A6)
+                   BNE.S    L09458
+9454 L09454        MOVEQ    #0,D0                  ;signal "no errors"
+                   RTS
+
+9458 L09458        SUBQ.W   #8,A4
+                   MOVE.W   2(A6,A4.L),D0
+                   SUB.W    D0,BV.LNGTH(A6)
+9462 L09462        TST.B    BV.INLIN(A6)
+                   BGT.S    L0946C
+                   SF       BV.INLIN(A6)
+946C L0946C        MOVEQ    #1,D0
+                   RTS
+
+9470 L09470        MOVEQ    #0,D5
+9472 L09472        JSR      L09444(PC)
+                   BNE.S    L094EA
+                   JSR      L09B92(PC)
+                   CMPI.W   #SYM.EQ,D1             ;equals symbol token ?
+                   BNE.S    L0948A
+                   ADDQ.W   #2,A4
+                   TST.B    D5
+                   BEQ.S    L094EC
+                   BRA.S    L09472
+948A L0948A        CMPI.B   #$81,D0
+                   BNE.S    L09472
+                   CMPI.B   #$15,D1
+                   BNE.S    L094B4
+                   TST.B    D5
+                   BNE.S    L09472
+                   JSR      L09044(PC)
+                   BLT.S    L09472
+                   MOVEA.L  A4,A3
+94A2 L094A2        SUBQ.W   #2,A3
+                   CMPI.W   #NAM.W,0(A6,A3.L)      ;name token ?
+                   BNE.S    L094A2
+                   CMP.W    2(A6,A3.L),D4
+                   BNE.S    L09472
+                   BRA.S    L094EC
+94B4 L094B4        CMPI.B   #5,D1
+                   BNE.S    L094D4
+                   JSR      L09020(PC)
+                   BLT.S    L094C6
+                   TST.B    BV.INLIN(A6)
+                   BEQ.S    L094CA
+94C6 L094C6        ADDQ.W   #1,D5
+                   BRA.S    L09472
+94CA L094CA        JSR      L092B6(PC)
+                   BLT.S    L09472
+                   ADDQ.W   #2,A4
+                   BRA.S    L094CA
+94D4 L094D4        CMPI.B   #1,D1
+                   BNE.S    L09472
+                   ADDQ.W   #2,A4
+                   JSR      L09B92(PC)
+                   CMPI.W   #KEY.SEL,D1            ;SELect keyword token ?
+                   BNE.S    L09472
+                   SUBQ.W   #1,D5
+                   BGE.S    L09472
+94EA L094EA        RTS
+
+94EC L094EC        MOVEQ    #0,D0                  ;signal "no errors"
+                   RTS
+
+                   MOVEA.L  A4,A5
+                   JSR      L09B92(PC)
+                   MOVEQ    #0,D4
+                   MOVE.W   2(A6,A4.L),D4
+                   ADDQ.W   #4,A4
+                   JSR      L09020(PC)
+                   BLT.S    L0950E
+                   MOVE.B   #1,BV.INLIN(A6)
+                   MOVE.W   D4,BV.INDEX(A6)
+950E L0950E        JSR      L09688(PC)
+                   MOVE.B   0(A6,A2.L),D2
+                   MOVEQ    #6,D1
+                   SUBQ.B   #2,D2
+                   BEQ.S    L0952A
+                   MOVEQ    #12,D1
+                   SUBQ.B   #4,D2
+                   BEQ.S    L0952A
+                   SUBQ.B   #1,D2
+                   BEQ.S    L09552
+                   MOVEQ    #-$0C,D0
+                   RTS
+
+952A L0952A        MOVE.L   A2,-(A7)
+                   MOVE.L   4(A6,A2.L),D2
+                   BLT.S    L0953C
+                   MOVEA.L  BV.VVBAS(A6),A0
+                   ADDA.L   D2,A0
+                   JSR      $50E2(PC)
+953C L0953C        MOVEQ    #$1A,D1
+                   JSR      $4EF0(PC)
+                   SUBA.L   BV.VVBAS(A6),A0
+                   MOVEA.L  (A7)+,A2
+                   MOVE.B   #7,0(A6,A2.L)
+                   MOVE.L   A0,4(A6,A2.L)
+9552 L09552        JSR      L09924(PC)
+                   JSR      L09B92(PC)
+                   MOVE.L   A4,D0
+                   SUB.L    A5,D0
+                   MOVE.L   D7,12(A6,A2.L)
+                   MOVE.L   D7,$10(A6,A2.L)
+                   MOVE.L   D7,$14(A6,A2.L)
+                   MOVE.W   D0,$18(A6,A2.L)
+                   JSR      L0957E(PC)
+                   BGT.S    L09576
+                   RTS
+
+9576 L09576        MOVEQ    #0,D5
+                   JMP      L0938E(PC)
+                   BCHG     D0,D0
+957E L0957E        MOVE.L   A4,-(A7)
+                   MOVE.W   0(A6,A4.L),D1
+                   JSR      L08E58(PC)
+                   BNE.S    L0958E
+                   MOVEQ    #1,D0
+                   BRA.S    L0959C
+958E L0958E        CMPI.W   #SYM.EQ,D1             ;equals symbol token ?
+                   BEQ.S    L095A0
+                   CMPI.W   #SYM.COM,D1            ;comma symbol token ?
+                   BEQ.S    L095A0
+                   MOVEQ    #ERR.OR,D0             ;signal "out of range"
+959C L0959C        ADDQ.W   #4,A7
+                   RTS
+
+95A0 L095A0        ADDQ.W   #2,A4
+                   MOVEA.L  A4,A0
+                   MOVE.L   D4,D6
+                   JSR      $54F4(PC)
+                   MOVEA.L  A0,A4
+                   BNE.S    L0959C
+                   BSR      L09674
+                   MOVE.W   0(A6,A1.L),0(A6,A2.L)
+                   MOVE.L   2(A6,A1.L),2(A6,A2.L)
+                   ADDQ.L   #6,BV.RIP(A6)
+                   CMPI.W   #KEY.TO,0(A6,A4.L)     ; TO keyword token ?
+                   BEQ.S    L095EA
+                   MOVE.W   0(A6,A2.L),12(A6,A2.L)
+                   MOVE.L   2(A6,A2.L),$0E(A6,A2.L)
+                   MOVE.W   D7,$12(A6,A2.L)
+                   MOVE.L   D7,$14(A6,A2.L)
+                   MOVE.L   A4,D0
+                   SUB.L    (A7)+,D0
+                   ADD.W    D0,$18(A6,A2.L)
+                   BRA      L0966C
+95EA L095EA        ADDQ.W   #2,A4
+                   MOVEA.L  A4,A0
+                   JSR      $54F4(PC)
+                   MOVEA.L  A0,A4
+95F4 L095F4        BNE.S    L0959C
+                   BSR.S    L09674
+                   MOVE.W   0(A6,A1.L),12(A6,A2.L)
+                   MOVE.L   2(A6,A1.L),$0E(A6,A2.L)
+                   ADDQ.L   #6,BV.RIP(A6)
+                   CMPI.W   #KEY.STEP,0(A6,A4.L)   ; STEP keyword token ?
+                   BEQ.S    L09628
+                   MOVE.B   #8,$12(A6,A2.L)
+                   MOVE.B   $957C(PC),$13(A6,A2.L)
+                   MOVE.L   D7,$14(A6,A2.L)
+                   MOVE.B   $957D(PC),$14(A6,A2.L)
+                   BRA.S    L09646
+9628 L09628        ADDQ.W   #2,A4
+                   MOVEA.L  A4,A0
+                   JSR      $54F4(PC)
+                   MOVEA.L  A0,A4
+                   BNE.S    L095F4
+                   BSR.S    L09674
+                   MOVE.W   0(A6,A1.L),$12(A6,A2.L)
+                   MOVE.L   2(A6,A1.L),$14(A6,A2.L)
+                   ADDQ.L   #6,BV.RIP(A6)
+9646 L09646        MOVE.L   A4,D0
+                   SUB.L    (A7)+,D0
+                   ADD.W    D0,$18(A6,A2.L)
+                   JSR      $4F46(PC)
+                   MOVEA.L  BV.RIP(A6),A1          ;point A1 at the top of the maths stack
+                   SUBQ.W   #6,A1
+                   MOVE.L   2(A6,A2.L),2(A6,A1.L)
+                   MOVE.W   0(A6,A2.L),0(A6,A1.L)
+                   JSR      L09A2A(PC)
+                   BRA.S    L0966E
+                   BRA.S    L09670
+966C L0966C        MOVEQ    #0,D0                  ;signal "no errors"
+966E L0966E        RTS
+
+9670 L09670        BRA      L0957E
+9674 L09674        MOVE.L   D6,D4
+9676 L09676        BSR.S    L09688
+                   MOVE.B   0(A6,A2.L),D1
+                   MOVE.L   4(A6,A2.L),D0
+                   MOVEA.L  BV.VVBAS(A6),A2
+                   ADDA.L   D0,A2
+                   RTS
+
+9688 L09688        MOVE.L   D4,D0
+                   MOVEA.L  BV.NTBAS(A6),A2
+                   LSL.L    #3,D0
+                   ADDA.W   D0,A2
+                   RTS
+

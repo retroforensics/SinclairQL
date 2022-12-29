@@ -1,0 +1,2555 @@
+
+9694 L09694        TST.B    BV.SING(A6)
+                   BEQ.S    L096A0
+                   MOVEA.L  BV.TKBAS(A6),A4
+                   BRA.S    L096F8
+96A0 L096A0        CMPI.W   #SYM.LF,0(A6,A4.L)
+                   BEQ.S    L096AE
+                   JSR      L0885E(PC)
+                   BRA.S    L096A0
+96AE L096AE        ADDQ.W   #2,A4
+                   MOVEQ    #0,D1
+                   MOVEQ    #0,D2
+                   CMP.W    BV.LINUM(A6),D4
+                   BLE.S    L096DE
+96BA L096BA        CMPA.L   BV.PFP(A6),A4
+                   BLT.S    L096C4
+                   JMP      L09F6C(PC)
+96C4 L096C4        CMP.W    4(A6,A4.L),D4
+                   BLE.S    L096F8
+96CA L096CA        MOVE.W   4(A6,A4.L),D2
+                   MOVE.W   0(A6,A4.L),D1
+                   ADDQ.W   #2,A4
+                   ADD.W    D1,BV.LNGTH(A6)
+                   ADDA.W   BV.LNGTH(A6),A4
+                   BRA.S    L096BA
+96DE L096DE        SUBA.W   BV.LNGTH(A6),A4
+                   SUBQ.W   #2,A4
+                   MOVE.W   0(A6,A4.L),D1
+                   SUB.W    D1,BV.LNGTH(A6)
+                   CMP.W    4(A6,A4.L),D4
+                   BGT.S    L096CA
+                   CMPA.L   BV.PFBAS(A6),A4
+                   BGT.S    L096DE
+96F8 L096F8        MOVEQ    #0,D0
+                   RTS
+
+96FC L096FC        CMP.B    BV.STMNT(A6),D4
+                   BLE.S    L09710
+                   JSR      L092B6(PC)
+                   BLT.S    L09710
+                   ADDQ.W   #2,A4
+                   ADDQ.B   #1,BV.STMNT(A6)
+                   BRA.S    L096FC
+9710 L09710        MOVEQ    #0,D0
+                   RTS
+
+                   MOVEQ    #1,D4
+                   BRA.S    L0972A
+                   JSR      L09044(PC)
+                   BGE      L093FC
+                   BSR.S    L09778
+                   MOVE.W   0(A6,A1.L),D4
+                   BLE.S    L09774
+                   ADDQ.W   #2,A4
+972A L0972A        JSR      L09B92(PC)
+                   CMPI.B   #$0B,D1
+                   SEQ      D5
+9734 L09734        MOVE.W   0(A6,A4.L),D1
+                   JSR      L08E58(PC)
+                   BEQ.S    L09774
+                   ADDQ.W   #2,A4
+                   BSR.S    L09778
+                   BGT.S    L09734
+                   SUBQ.W   #1,D4
+                   BNE.S    L09734
+                   MOVE.W   0(A6,A1.L),D4
+                   TST.B    D5
+                   BEQ      L08CB6
+                   SF       BV.INLIN(A6)
+                   TST.B    BV.SING(A6)
+                   BEQ.S    L0976A
+                   SF       BV.SING(A6)
+                   MOVEA.L  BV.PFBAS(A6),A4
+                   JSR      L09F42(PC)
+                   BNE.S    L09770
+976A L0976A        JSR      L09694(PC)
+                   SUBQ.W   #2,A4
+9770 L09770        MOVEQ    #0,D0
+                   RTS
+
+9774 L09774        MOVEQ    #-4,D0
+                   RTS
+
+9778 L09778        MOVEA.L  A4,A0
+                   JSR      $54F8(PC)
+                   MOVEA.L  A0,A4
+                   BLT.S    L0978C
+                   BGT.S    L0978A
+                   ADDQ.L   #2,BV.RIP(A6)          ;restore the pointer to the maths stack
+                   MOVEQ    #0,D0                  ;signal "no errors"
+978A L0978A        RTS
+
+978C L0978C        ADDQ.W   #4,A7
+                   RTS
+
+9790 L09790        JSR      L09B92(PC)
+                   MOVEQ    #0,D4
+                   MOVE.W   2(A6,A4.L),D4
+                   ADDQ.W   #4,A4
+979C L0979C        JSR      L09676(PC)
+                   MOVEQ    #0,D0
+                   MOVE.B   D1,D0
+                   SUBQ.B   #6,D0
+                   BEQ.S    L097AE
+                   SUBQ.B   #1,D0
+                   BEQ.S    L097AE
+                   MOVEQ    #-7,D0
+97AE L097AE        RTS
+
+                   MOVEA.L  A4,A0
+                   JSR      $54F4(PC)
+                   MOVEA.L  A0,A4
+                   BNE      L09842
+                   JSR      L09020(PC)
+                   BLT.S    L097CC
+                   TST.B    BV.INLIN(A6)
+                   BNE.S    L097CC
+                   ST       BV.INLIN(A6)
+97CC L097CC        ADDQ.L   #6,BV.RIP(A6)
+                   TST.W    0(A6,A1.L)
+                   BNE.S    L09840
+                   MOVEQ    #0,D4
+97D8 L097D8        JSR      L092B6(PC)
+                   BGE.S    L097E4
+                   TST.B    BV.INLIN(A6)
+                   BNE.S    L09840
+97E4 L097E4        JSR      L09C30(PC)
+                   BNE.S    L09840
+                   JSR      L09B92(PC)
+                   CMPI.B   #KEY.B,D0
+                   BNE.S    L097D8
+                   ADDQ.W   #2,A4
+                   CMPI.B   #3,D1
+                   BNE.S    L09816
+                   JSR      L09020(PC)
+                   BLT.S    L09812
+                   TST.B    BV.INLIN(A6)
+                   BNE.S    L09812
+9808 L09808        JSR      L092B6(PC)
+                   BLT.S    L097E4
+                   ADDQ.W   #2,A4
+                   BRA.S    L09808
+9812 L09812        ADDQ.W   #1,D4
+                   BRA.S    L097D8
+9816 L09816        CMPI.B   #1,D1
+                   BNE.S    L0982E
+                   JSR      L09B92(PC)
+                   CMPI.W   #KEY.IF,D1
+                   BNE.S    L097D8
+                   TST.B    D4
+                   BEQ.S    L09840
+                   SUBQ.W   #1,D4
+                   BRA.S    L097D8
+982E L0982E        CMPI.B   #$14,D1
+                   BNE.S    L097D8
+                   TST.B    D4
+                   BEQ.S    L0983E
+                   ADDQ.B   #1,BV.STMNT(A6)
+                   BRA.S    L097D8
+983E L0983E        SUBQ.W   #2,A4
+9840 L09840        MOVEQ    #0,D0
+9842 L09842        RTS
+
+    data from here...
+
+                   DC.W     $F9F4
+                   DC.W     $FC6E
+                   DC.W     $FF2E
+                   MOVEP.L  $05E2(A6),D2
+                   BTST     D4,??
+                   DC.W     $F7F2
+                   ORI.B    #0,D0
+                   DC.W     $FE92
+                   ORI.B    #0,D0
+                   ORI.B    #0,D0
+                   ORI.B    #0,D0
+                   BCLR     D2,$0116
+                   DC.W     $FAE0
+                   DC.W     $F998
+                   DC.W     $FE96
+                   DC.W     $F636
+                   ORI.B    #$4A,D0
+                   DC.W     $F812
+                   ORI.L    #$D60000,(A6)+
+                   ORI.B    #$4A,D0
+                   ORI.L    #$70001036,(A6)+
+
+   to here
+
+                   AND.B    D1,D4
+                   ADDQ.W   #2,A4
+                   ADD.B    D0,D0
+                   MOVE.W   L09842(PC,D0.W),D0
+                   BEQ.S    L09896
+                   JMP      L09882(PC,D0.W)
+9896 L09896        MOVEQ    #-7,D0
+                   RTS
+
+989A L0989A        MOVEA.L  A2,A3
+                   ANDI.B   #$0F,1(A6,A3.L)
+                   MOVE.L   A3,-(A7)
+                   MOVE.B   1(A6,A3.L),-(A7)
+                   JSR      $737C(PC)
+                   BNE.S    L0991C
+                   CMPI.W   #SYM.LBKT,D1
+                   BNE.S    L098E8
+                   CMPI.B   #1,1(A6,A3.L)
+                   BNE.S    L0991A
+                   MOVE.L   4(A6,A3.L),D0
+                   BLT.S    L0991A
+                   MOVEA.L  BV.VVBAS(A6),A2
+                   ADDA.L   D0,A2
+                   MOVE.L   D0,-(A7)
+                   LEA      2(A4),A0
+                   JSR      $5EA0(PC)
+                   MOVEA.L  A0,A4
+                   MOVEA.L  BV.VVBAS(A6),A2
+                   ADDA.L   (A7)+,A2
+                   BNE.S    L0991C
+                   JSR      L09B92(PC)
+                   CMPI.W   #SYM.EQ,D1
+                   BNE.S    L0991A
+                   SF       (A7)
+98E8 L098E8        CMPI.W   #SYM.EQ,D1
+                   BNE.S    L0991A
+                   ADDQ.W   #2,A4
+                   MOVE.B   (A7),D0
+                   MOVEA.L  A4,A0
+                   SUBA.L   BV.VVBAS(A6),A2
+                   MOVE.L   A2,-(A7)
+                   JSR      $54FA(PC)
+                   MOVEA.L  BV.VVBAS(A6),A2
+                   ADDA.L   (A7)+,A2
+                   MOVEA.L  A0,A4
+                   BNE.S    L09914
+                   MOVE.B   (A7)+,D0
+                   MOVEA.L  (A7)+,A3
+                   MOVE.B   D0,1(A6,A3.L)
+                   JMP      $6C12(PC)
+9914 L09914        BLT.S    L0991C
+                   MOVEQ    #-$11,D0
+                   BRA.S    L0991C
+991A L0991A        MOVEQ    #-$0C,D0
+991C L0991C        ADDQ.W   #6,A7
+                   RTS
+
+                   MOVEQ    #-$15,D0
+                   RTS
+
+9924 L09924        MOVEA.L  4(A6,A2.L),A2
+                   ADDA.L   BV.VVBAS(A6),A2
+                   MOVE.W   D7,0(A6,A2.L)
+                   MOVE.L   D7,2(A6,A2.L)
+                   MOVE.W   BV.LINUM(A6),D1
+                   MOVE.B   BV.STMNT(A6),D0
+                   CMP.W    6(A6,A2.L),D1
+                   BNE.S    L09948
+                   CMP.B    $0A(A6,A2.L),D0
+                   BEQ.S    L09954
+9948 L09948        MOVE.W   D1,6(A6,A2.L)
+                   MOVE.L   D7,8(A6,A2.L)
+                   MOVE.B   D0,$0A(A6,A2.L)
+9954 L09954        MOVEQ    #0,D0
+                   RTS
+
+                   JSR      L09B92(PC)
+                   CMPI.B   #NAM.W,D0
+                   BNE.S    L09994
+9962 L09962        MOVEQ    #0,D4
+                   MOVE.W   2(A6,A4.L),D4
+                   ADDQ.W   #4,A4
+                   JSR      L09B92(PC)
+                   JSR      L09688(PC)
+                   MOVE.B   0(A6,A2.L),D0
+                   CMPI.B   #3,D0
+                   BEQ      L08BD2
+                   CMPI.B   #8,D0
+                   BEQ      L09D18
+                   MOVEQ    #1,D5
+                   CMPI.B   #4,D0
+                   BEQ      L08CB6
+                   JMP      L0989A(PC)
+9994 L09994        MOVEQ    #-$13,D0
+                   RTS
+
+                   JSR      L09790(PC)
+                   BLT      L09A28
+99A0 L099A0        MOVE.L   D4,D6
+                   CMPI.B   #6,D1
+                   BEQ.S    L099FA
+                   MOVE.L   A2,-(A7)
+                   JSR      $4F46(PC)
+                   MOVEA.L  (A7),A2
+                   MOVEA.L  BV.RIP(A6),A1          ;point A1 at the top of the maths stack
+                   SUBA.W   #12,A1
+                   MOVE.L   $14(A6,A2.L),2(A6,A1.L)
+                   BEQ.S    L09A04
+                   MOVE.W   $12(A6,A2.L),0(A6,A1.L)
+                   MOVE.W   0(A6,A2.L),6(A6,A1.L)
+                   MOVE.L   2(A6,A2.L),8(A6,A1.L)
+                   JSR      $48D2(PC)
+                   BLT.S    L099FC
+                   MOVE.L   A1,BV.RIP(A6)          ;restore the pointer to the maths stack
+                   JSR      $4ACE(PC)
+                   MOVEA.L  (A7),A2
+                   BSR.S    L09A2A
+                   BRA.S    L099FC
+                   BRA.S    L09A00
+                   MOVEA.L  (A7)+,A2
+                   MOVE.W   0(A6,A0.L),0(A6,A2.L)
+                   MOVE.L   2(A6,A0.L),2(A6,A2.L)
+                   ADDQ.L   #6,BV.RIP(A6)
+99FA L099FA        BRA.S    L09A0A
+99FC L099FC        ADDQ.W   #4,A7
+                   RTS
+
+9A00 L09A00        ADDQ.L   #6,BV.RIP(A6)
+9A04 L09A04        MOVEA.L  (A7)+,A2
+                   MOVEQ    #1,D3
+                   BRA.S    L09A0C
+9A0A L09A0A        MOVEQ    #0,D3
+9A0C L09A0C        BSR.S    L09A72
+                   BNE.S    L09A28
+                   TST.B    BV.INLIN(A6)
+                   BGT.S    L09A1A
+                   SF       BV.INLIN(A6)
+9A1A L09A1A        CMPI.B   #$7F,BV.STMNT(A6)
+                   BNE.S    L09A26
+                   SF       BV.INLIN(A6)
+9A26 L09A26        MOVEQ    #0,D0
+9A28 L09A28        RTS
+
+9A2A L09A2A        MOVE.L   A2,-(A7)
+                   SUBQ.W   #6,A1
+                   MOVE.L   $0E(A6,A2.L),2(A6,A1.L)
+                   MOVE.W   12(A6,A2.L),0(A6,A1.L)
+                   JSR      $48C4(PC)
+                   MOVEA.L  (A7)+,A2
+                   BLT.S    L09A70
+                   MOVEQ    #$0D,D1
+                   ADD.W    0(A6,A1.L),D1
+                   CMP.W    $12(A6,A2.L),D1
+                   BGT.S    L09A54
+                   LEA      12(A2),A0
+                   BRA.S    L09A6C
+9A54 L09A54        MOVEA.L  BV.RIP(A6),A0          ;point A0 at the top of the maths stack
+                   TST.B    2(A6,A1.L)
+                   BLT.S    L09A66
+                   TST.B    $14(A6,A2.L)
+                   BLT.S    L09A6C
+                   BRA.S    L09A6E
+9A66 L09A66        TST.B    $14(A6,A2.L)
+                   BLT.S    L09A6E
+9A6C L09A6C        ADDQ.L   #2,(A7)
+9A6E L09A6E        ADDQ.L   #2,(A7)
+9A70 L09A70        RTS
+
+9A72 L09A72        MOVE.B   BV.STMNT(A6),-(A7)
+                   MOVE.L   BV.LINUM(A6),-(A7)
+                   MOVE.L   A4,-(A7)
+                   MOVE.W   6(A6,A2.L),D4
+                   JSR      L09694(PC)
+                   BNE.S    L09AD0
+                   JSR      L09F46(PC)
+                   BNE.S    L09AD0
+                   MOVE.B   $0A(A6,A2.L),D4
+                   JSR      L096FC(PC)
+                   JSR      L09B92(PC)
+                   CMPI.W   #KEY.FOR,D1
+                   BEQ.S    L09AA4
+                   CMPI.W   #KEY.REP,D1
+                   BNE.S    L09AD0
+9AA4 L09AA4        ADDQ.W   #2,A4
+                   MOVEA.L  A4,A5
+                   JSR      L09B92(PC)
+                   CMP.W    2(A6,A4.L),D6
+                   BNE.S    L09AD0
+                   TST.B    D3
+                   BEQ.S    L09ACA
+                   MOVEA.L  A5,A4
+                   ADDA.W   $18(A6,A2.L),A4
+                   MOVE.L   D6,D4
+                   JSR      L0957E(PC)
+                   BLT.S    L09AD2
+                   BEQ.S    L09ACA
+                   MOVEQ    #0,D0
+                   BRA.S    L09AD2
+9ACA L09ACA        ADDA.W   #$0A,A7
+                   RTS
+
+9AD0 L09AD0        MOVEQ    #-7,D0
+9AD2 L09AD2        MOVEA.L  (A7)+,A4
+                   MOVE.L   (A7)+,BV.LINUM(A6)
+                   MOVE.B   (A7)+,BV.STMNT(A6)
+                   TST.L    D0
+                   RTS
+
+9AE0 L09AE0        MOVE.L   A4,-(A7)
+                   MOVE.B   BV.SING(A6),D6
+                   BEQ.S    L09AF2
+                   MOVEA.L  BV.TKBAS(A6),A4
+                   MOVEQ    #0,D5
+                   BRA.S    L09B14
+9AF0 L09AF0        SF       D6
+9AF2 L09AF2        TST.B    BV.EDIT(A6)
+                   SF       BV.EDIT(A6)
+                   BEQ.S    L09B10
+                   MOVEA.L  BV.PFBAS(A6),A4
+9B00 L09B00        TST.B    D6
+                   BNE.S    L09AF0
+                   MOVE.W   4(A6,A4.L),D5
+                   ADDQ.W   #6,A4
+                   CMPA.L   BV.PFP(A6),A4
+                   BLT.S    L09B14
+9B10 L09B10        MOVEA.L  (A7)+,A4
+                   RTS
+
+9B14 L09B14        BSR.S    L09B92
+                   CMPI.B   #NAM.W,D0
+                   BEQ.S    L09B4C
+                   CMPI.B   #KEY.B,D0
+                   BNE.S    L09B82
+                   ADDQ.W   #2,A4
+                   CMPI.B   #$14,D1
+                   BEQ.S    L09B14
+                   CMPI.B   #2,D1
+                   BNE.S    L09B34
+                   BSR.S    L09B92
+                   BRA.S    L09B5A
+9B34 L09B34        CMPI.B   #4,D1
+                   BNE.S    L09B44
+                   BSR.S    L09B92
+                   CMPI.B   #$88,D0
+                   BNE.S    L09B82
+                   BRA.S    L09B5A
+9B44 L09B44        CMPI.B   #$1B,D1
+                   BNE.S    L09B60
+                   BSR.S    L09B92
+9B4C L09B4C        MOVE.L   A4,D4
+                   ADDQ.W   #4,A4
+                   BSR.S    L09B92
+                   CMPI.W   #SYM.EQ,D1
+                   BNE.S    L09B82
+                   MOVEA.L  D4,A4
+9B5A L09B5A        MOVEQ    #2,D1
+9B5C L09B5C        BSR.S    L09BA4
+                   BRA.S    L09B82
+9B60 L09B60        CMPI.B   #7,D1
+                   BNE.S    L09B7A
+                   BSR.S    L09B92
+                   MOVE.W   D1,D4
+                   ADDQ.W   #2,A4
+                   BSR.S    L09B92
+                   MOVEQ    #4,D1
+                   CMPI.B   #8,D4
+                   BEQ.S    L09B5C
+                   MOVEQ    #5,D1
+                   BRA.S    L09B5C
+9B7A L09B7A        CMPI.B   #$19,D1
+                   BNE.S    L09B82
+                   BSR.S    L09BF0
+9B82 L09B82        JSR      L092B6(PC)
+                   BGE.S    L09B8E
+                   ADDQ.W   #2,A4
+                   BRA      L09B00
+9B8E L09B8E        ADDQ.W   #2,A4
+                   BRA.S    L09B14
+9B92 L09B92        MOVE.W   0(A6,A4.L),D1
+                   MOVE.B   0(A6,A4.L),D0
+                   CMPI.B   #SPC.B,D0
+                   BNE.S    L09BEE
+                   JMP      L0885E(PC)
+9BA4 L09BA4        MOVEQ    #0,D0
+                   MOVE.W   2(A6,A4.L),D0
+                   LSL.L    #3,D0
+                   MOVEA.L  BV.NTBAS(A6),A0
+                   ADDA.L   D0,A0
+                   MOVE.B   0(A6,A0.L),D0
+                   CMP.B    D0,D1
+                   BEQ.S    L09BDE
+                   SUBQ.B   #2,D0
+                   BLT.S    L09BDE
+                   BEQ.S    L09BCE
+                   SUBQ.B   #1,D0
+                   BEQ.S    L09BEE
+                   SUBQ.B   #2,D0
+                   BGT.S    L09BCE
+                   CMPI.B   #4,D1
+                   BGE.S    L09BDE
+9BCE L09BCE        MOVEA.L  A0,A2
+                   MOVEM.L  D1/A0,-(A7)
+                   JSR      $51FA(PC)
+                   MOVEM.L  (A7)+,D1/A0
+                   BNE.S    L09BEE
+9BDE L09BDE        MOVE.B   D1,0(A6,A0.L)
+                   SUBQ.B   #4,D1
+                   BEQ.S    L09BEA
+                   SUBQ.B   #1,D1
+                   BNE.S    L09BEE
+9BEA L09BEA        MOVE.W   D5,4(A6,A0.L)
+9BEE L09BEE        RTS
+
+9BF0 L09BF0        MOVEQ    #0,D3
+                   SUBQ.W   #2,A4
+9BF4 L09BF4        MOVE.W   #NAM.W,D4
+                   BSR.S    L09C02
+                   BNE.S    L09C2E
+                   MOVEQ    #3,D1
+                   BSR.S    L09BA4
+                   BRA.S    L09BF4
+9C02 L09C02        MOVEQ    #0,D3
+9C04 L09C04        JSR      L0885E(PC)
+                   CMP.W    D4,D1
+                   BNE.S    L09C12
+                   TST.B    D3
+                   BEQ.S    L09C2E
+                   BRA.S    L09C04
+9C12 L09C12        CMPI.W   #SYM.LBKT,D1
+                   BNE.S    L09C1C
+                   ADDQ.B   #1,D3
+                   BRA.S    L09C04
+9C1C L09C1C        CMPI.W   #SYM.RBKT,D1
+                   BNE.S    L09C26
+                   SUBQ.B   #1,D3
+                   BRA.S    L09C04
+9C26 L09C26        JSR      L08E58(PC)
+                   BNE.S    L09C04
+                   MOVEQ    #1,D1
+9C2E L09C2E        RTS
+
+9C30 L09C30        JSR      L092B6(PC)
+                   BGE.S    L09C62
+                   TST.B    BV.SING(A6)
+                   BNE.S    L09C60
+                   ADDQ.W   #2,A4
+                   CMPA.L   BV.PFP(A6),A4
+                   BLT.S    L09C48
+                   JMP      L09F6C(PC)
+9C48 L09C48        MOVE.W   0(A6,A4.L),D0
+                   ADD.W    D0,BV.LNGTH(A6)
+                   MOVE.W   4(A6,A4.L),BV.LINUM(A6)
+                   MOVEQ    #1,D0
+                   MOVE.B   D0,BV.STMNT(A6)
+                   ADDQ.W   #6,A4
+                   MOVEQ    #0,D1
+9C60 L09C60        RTS
+
+9C62 L09C62        ADDQ.W   #2,A4
+                   ADDQ.B   #1,BV.STMNT(A6)
+                   MOVEQ    #0,D0
+                   RTS
+
+9C6C L09C6C        JSR      L09B92(PC)
+                   CMPI.W   #KEY.RMND,D1
+                   BEQ.S    L09CF0
+                   BSR.S    L09CAE
+                   CMPI.W   #KEY.TO,0(A6,A4.L)
+                   BEQ.S    L09C94
+                   BSR.S    L09CF8
+                   MOVE.W   0(A6,A1.L),D0
+                   BEQ.S    L09CEC
+                   ADDI.W   #$18,D0
+                   SUB.W    -6(A6,A1.L),D0
+                   BLE.S    L09CEC
+                   BRA.S    L09CC8
+9C94 L09C94        BSR.S    L09CF8
+                   TST.B    2(A6,A1.L)
+                   BGT.S    L09CC8
+                   ADDQ.W   #2,A4
+                   ADDQ.L   #6,BV.RIP(A6)
+                   BSR.S    L09CAE
+                   BSR.S    L09CF8
+                   TST.B    2(A6,A1.L)
+                   BLT.S    L09CC8
+                   BRA.S    L09CEC
+9CAE L09CAE        MOVEA.L  A4,A0
+                   SUBA.L   BV.VVBAS(A6),A2
+                   MOVE.L   A2,-(A7)
+                   JSR      $54F4(PC)
+                   MOVEA.L  BV.VVBAS(A6),A2
+                   ADDA.L   (A7)+,A2
+                   MOVEA.L  A0,A4
+                   BEQ.S    L09CF6
+                   ADDQ.W   #4,A7
+                   RTS
+
+9CC8 L09CC8        ADDQ.L   #6,BV.RIP(A6)
+9CCC L09CCC        MOVE.W   0(A6,A4.L),D0
+                   CMPI.W   #SYM.COM,D0
+                   BNE.S    L09CDA
+                   ADDQ.W   #2,A4
+                   BRA.S    L09C6C
+9CDA L09CDA        CMPI.W   #SYM.LF,D0
+                   BEQ.S    L09CF4
+                   CMPI.W   #SYM.COL,D0
+                   BEQ.S    L09CF4
+                   JSR      L0885E(PC)
+                   BRA.S    L09CCC
+9CEC L09CEC        ADDQ.L   #6,BV.RIP(A6)
+9CF0 L09CF0        MOVEQ    #0,D0
+                   RTS
+
+9CF4 L09CF4        MOVEQ    #-1,D0
+9CF6 L09CF6        RTS
+
+9CF8 L09CF8        SUBQ.W   #6,A1
+                   MOVE.L   2(A6,A2.L),2(A6,A1.L)
+                   MOVE.W   0(A6,A2.L),0(A6,A1.L)
+                   JSR      $48C4(PC)
+                   BEQ.S    L09D0E
+                   ADDQ.W   #4,A7
+9D0E L09D0E        RTS
+
+9D10 L09D10        MOVEA.L  BV.TKPOS(A6),A4
+                   MOVEA.L  BV.PTEMP(A6),A2
+9D18 L09D18        SF       BV.UNDO(A6)
+                   MOVE.L   A4,BV.TKPOS(A6)
+                   MOVE.L   A2,BV.PTEMP(A6)
+                   MOVE.L   4(A6,A2.L),D4
+                   MOVEA.L  A4,A0
+                   MOVE.L   BV.NTP(A6),D0
+                   SUB.L    BV.NTBAS(A6),D0
+                   MOVE.L   D0,-(A7)
+                   JSR      $5BB4(PC)
+                   BNE.S    L09D46
+                   MOVE.W   0(A6,A0.L),D1
+                   JSR      L08E58(PC)
+                   BEQ.S    L09D54
+                   MOVEQ    #-$0F,D0
+9D46 L09D46        MOVE.L   BV.NTBAS(A6),D1
+                   ADD.L    (A7)+,D1
+                   MOVE.L   D1,BV.NTP(A6)
+                   TST.L    D0
+                   RTS
+
+9D54 L09D54        MOVE.L   A5,D0
+                   SUB.L    BV.NTBAS(A6),D0
+                   MOVE.L   D0,-(A7)
+                   MOVEA.L  A0,A4
+                   MOVEA.L  BV.NTBAS(A6),A3
+                   ADDA.L   4(A7),A3
+                   MOVEA.L  D4,A2
+                   MOVEA.L  BV.RIP(A6),A1          ;point A1 at the top of the maths stack
+                   SUBA.L   BV.RIBAS(A6),A1
+                   MOVEM.L  D5-7/A1/A4,-(A7)
+                   MOVE.L   BV.LINUM(A6),-(A7)
+                   MOVE.B   BV.STMNT(A6),-(A7)
+                   MOVE.L   BV.INLIN(A6),-(A7)
+                   JSR      (A2)
+                   MOVE.L   D0,D2
+                   MOVE.L   (A7)+,BV.INLIN(A6)
+                   MOVE.B   (A7)+,BV.STMNT(A6)
+                   MOVE.L   (A7)+,BV.LINUM(A6)
+                   MOVEM.L  (A7)+,D5-7/A1/A4
+                   ADDA.L   BV.RIBAS(A6),A1
+                   MOVE.L   A1,BV.RIP(A6)          ;restore the pointer to the maths stack
+                   MOVEA.L  BV.NTBAS(A6),A5
+                   MOVEA.L  A5,A3
+                   ADDA.L   (A7)+,A5
+                   ADDA.L   (A7)+,A3
+                   JSR      $5178(PC)
+                   MOVE.L   D2,D0
+                   TST.B    BV.UNDO(A6)
+                   BNE      L08FB0
+                   RTS
+
+9DB6 L09DB6        MOVE.B   #$7F,BV.STMNT(A6)
+                   MOVEQ    #0,D4
+                   MOVE.W   BV.INDEX(A6),D4
+                   JSR      L0979C(PC)
+                   BGE      L099A0
+                   RTS
+
+                   MOVEQ    #0,D0
+                   RTS
+
+                   JSR      L09B92(PC)
+                   CMPI.B   #$88,D0
+                   BNE.S    L09E0A
+                   MOVEQ    #0,D4
+                   MOVE.W   2(A6,A4.L),D4
+                   ADDQ.W   #4,A4
+                   JSR      L09020(PC)
+                   BLT.S    L09DF2
+                   MOVE.B   #1,BV.INLIN(A6)
+                   MOVE.W   D4,BV.INDEX(A6)
+9DF2 L09DF2        JSR      L09688(PC)
+                   MOVE.B   0(A6,A2.L),D2
+                   MOVEQ    #6,D1
+                   SUBQ.B   #2,D2
+                   BEQ.S    L09E0E
+                   SUBQ.B   #4,D2
+                   BEQ.S    L09E36
+                   MOVEQ    #$1A,D1
+                   SUBQ.B   #1,D2
+                   BEQ.S    L09E0E
+9E0A L09E0A        MOVEQ    #-$0C,D0
+                   RTS
+
+9E0E L09E0E        MOVE.L   A2,-(A7)
+                   MOVE.L   4(A6,A2.L),D2
+                   BLT.S    L09E20
+                   MOVEA.L  BV.VVBAS(A6),A0
+                   ADDA.L   D2,A0
+                   JSR      $50E2(PC)
+9E20 L09E20        MOVEQ    #12,D1
+                   JSR      $4EF0(PC)
+                   SUBA.L   BV.VVBAS(A6),A0
+                   MOVEA.L  (A7)+,A2
+                   MOVE.L   A0,4(A6,A2.L)
+                   MOVE.B   #6,0(A6,A2.L)
+9E36 L09E36        JMP      L09924(PC)
+                   CLR.W    BV.DALNO(A6)
+                   MOVEA.L  A4,A0
+                   JSR      $54F8(PC)
+                   MOVEA.L  A0,A4
+                   BLT.S    L09E62
+                   BGT.S    L09E54
+                   ADDQ.L   #2,BV.RIP(A6)
+                   MOVE.W   0(A6,A1.L),BV.DALNO(A6)
+9E54 L09E54        MOVE.B   #1,BV.DASTM(A6)
+                   MOVE.B   #1,BV.DAITM(A6)
+                   MOVEQ    #0,D0
+9E62 L09E62        RTS
+
+                   JSR      L09B92(PC)
+                   CMPI.W   #KEY.ON,D1
+                   BNE.S    L09E74
+                   ADDQ.W   #2,A4
+                   JSR      L09B92(PC)
+9E74 L09E74        MOVEQ    #0,D4
+                   MOVE.W   2(A6,A4.L),D4
+                   ADDQ.W   #4,A4
+                   JSR      L09676(PC)
+                   TST.L    D0
+                   BLT.S    L09EB2
+                   JSR      L09020(PC)
+                   BLT.S    L09EA2
+                   TST.B    BV.INLIN(A6)
+                   BNE.S    L09E94
+                   ST       BV.INLIN(A6)
+9E94 L09E94        JSR      L09B92(PC)
+                   CMPI.W   #SYM.EQ,D1
+                   BNE.S    L09EA2
+                   ADDQ.W   #2,A4
+                   BRA.S    L09EA8
+9EA2 L09EA2        JSR      L09470(PC)
+                   BNE.S    L09EAE
+9EA8 L09EA8        JSR      L09C6C(PC)
+                   BLT.S    L09EA2
+9EAE L09EAE        MOVEQ    #0,D0
+                   RTS
+
+9EB2 L09EB2        MOVEQ    #-$11,D0
+                   RTS
+
+9EB6 L09EB6        MOVEA.L  BV.PFBAS(A6),A4
+                   SF       BV.INLIN(A6)
+                   TST.B    BV.SING(A6)
+                   BNE.S    L09EC8
+9EC4 L09EC4        BSR.S    L09F42
+                   BNE.S    L09F08
+9EC8 L09EC8        MOVEQ    #1,D0
+                   JSR      $4F2C(PC)
+                   MOVEQ    #0,D0
+9ED0 L09ED0        JSR      L09B92(PC)
+                   CMPI.B   #KEY.B,D0
+                   BNE.S    L09EE0
+                   JSR      L09882(PC)
+                   BRA.S    L09EFA
+9EE0 L09EE0        CMPI.B   #$88,D0                ;name token ?
+                   BNE.S    L09EEC
+                   JSR      L09962(PC)
+                   BRA.S    L09EFA
+9EEC L09EEC        CMPI.B   #SYM.B,D0
+                   BNE.S    L09EF8
+                   JSR      L0A1AE(PC)
+                   BRA.S    L09EFA
+9EF8 L09EF8        MOVEQ    #-$13,D0
+9EFA L09EFA        TST.L    D0
+                   BNE      L092F4
+                   TAS      BV.BRK(A6)
+                   BEQ      L092F2
+9F08 L09F08        TAS      BV.CONT(A6)
+                   BEQ      L09F92
+                   TST.B    BV.SING(A6)
+                   BNE.S    L09F1C
+                   CMPA.L   BV.PFBAS(A6),A4
+                   BLE.S    L09EB6
+9F1C L09F1C        JSR      L092B6(PC)
+                   BGE.S    L09F3A
+                   TST.B    BV.INLIN(A6)
+                   BLE.S    L09F2E
+                   JSR      L09DB6(PC)
+                   BRA.S    L09EFA
+9F2E L09F2E        TST.B    BV.SING(A6)
+                   ADDQ.W   #2,A4
+                   BEQ.S    L09EC4
+                   BSR.S    L09F70
+                   BRA.S    L09F68
+9F3A L09F3A        ADDQ.W   #2,A4
+                   ADDQ.B   #1,BV.STMNT(A6)
+                   BRA.S    L09EC8
+9F42 L09F42        SF       BV.INLIN(A6)
+9F46 L09F46        TST.B    BV.SING(A6)
+                   BNE.S    L09F62
+                   CMPA.L   BV.PFP(A6),A4
+                   BGE.S    L09F6C
+                   MOVE.W   0(A6,A4.L),D0
+                   ADD.W    D0,BV.LNGTH(A6)
+                   MOVE.W   4(A6,A4.L),BV.LINUM(A6)
+                   ADDQ.W   #6,A4
+9F62 L09F62        MOVE.B   #1,BV.STMNT(A6)
+9F68 L09F68        MOVEQ    #0,D0
+                   RTS
+
+9F6C L09F6C        SF       BV.CONT(A6)
+9F70 L09F70        MOVE.W   #$FFFF,BV.NXLIN(A6)
+                   MOVE.W   #4,BV.STOPN(A6)
+                   RTS
+
+   data from here ...
+
+9F7E LO9F7E        DC.W     $0032                  ;9FC4
+                   DC.W     $010E                  ;A0A0
+                   DC.W     $0200                  ;A192
+                   DC.W     $009E                  ;A030
+                   DC.W     $010E
+                   DC.W     $010E
+                   DC.W     $0208                  ;A19A
+                   DC.W     $0208
+                   DC.W     $01D8                  ;A14A
+                   DC.W     $010C                  ;A09E
+
+9F92 L09F92        MOVE.W   BV.STOPN(A6),D1
+                   MOVE.W   L09F7E(PC,D1.W),D1
+                   JMP      L09F92(PC,D1.W)
+                   JSR      L092F4(PC)
+                   MOVEA.L  BV.RTP(A6),A0
+                   SF       BV.AUTO(A6)
+9FAA L09FAA        CMPA.L   BV.RTBAS(A6),A0
+                   BLE.S    L09FCE
+                   MOVE.B   -8(A6,A0.L),D0
+                   BEQ.S    L09FC0
+                   MOVE.L   -$18(A6,A0.L),BV.NTP(A6)
+                   SUBA.W   #$10,A0
+9FC0 L09FC0        SUBQ.W   #8,A0
+                   BRA.S    L09FAA
+9FC4 L09FC4        TST.B    BV.UNRVL(A6)
+                   BEQ.S    L09FCE
+                   JSR      L08FB0(PC)
+9FCE L09FCE        BSR      L0A05A
+                   JSR      $513C(PC)
+                   MOVEA.L  BV.NTBAS(A6),A0
+9FDA L09FDA        MOVE.B   0(A6,A0.L),D0
+                   SUBQ.B   #1,D0
+                   BEQ.S    L0A01C
+                   SUBQ.B   #3,D0
+                   BLT.S    L09FEE
+                   SUBQ.B   #2,D0
+                   BLT.S    L0A024
+                   SUBQ.B   #2,D0
+                   BGE.S    L0A024
+9FEE L09FEE        MOVE.W   2(A6,A0.L),D0
+                   BLT.S    L0A01C
+                   BSR      L0A090
+                   MOVE.B   -1(A6,A1.L),D0
+                   MOVEQ    #1,D1
+                   SUBI.B   #$25,D0
+                   BLT.S    L0A00A
+                   BGT.S    L0A008
+                   ADDQ.W   #1,D1
+A008 L0A008        ADDQ.W   #1,D1
+A00A L0A00A        MOVE.B   D1,1(A6,A0.L)
+                   MOVE.B   D7,0(A6,A0.L)
+                   MOVE.L   #$FFFFFFFF,4(A6,A0.L)
+                   BRA.S    L0A024
+A01C L0A01C        MOVE.L   D7,0(A6,A0.L)
+                   MOVE.L   D7,4(A6,A0.L)
+A024 L0A024        ADDQ.W   #8,A0
+                   CMPA.L   BV.NTP(A6),A0
+                   BLT.S    L09FDA
+                   ST       BV.EDIT(A6)
+A030 L0A030        TST.B    BV.UNRVL(A6)
+                   BEQ.S    L0A052
+                   MOVE.W   BV.NXLIN(A6),BV.PTEMP(A6)
+                   MOVE.W   BV.STOPN(A6),BV.PTEMP+2(A6)
+                   JSR      L08FB0(PC)
+                   MOVE.W   BV.PTEMP(A6),BV.NXLIN(A6)
+                   MOVE.W   BV.PTEMP+2(A6),BV.STOPN(A6)
+A052 L0A052        JSR      L09AE0(PC)
+                   BRA      L0A1A4
+
+旼컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴커
+�=                                                                             �
+쳐컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴캑
+쿕OB:                                                                          �
+쳐컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴캑
+쿐NTRY:       D7.L     = 0                                                     �
+�                                                                              �
+쿐XIT:        A?.L                                                             �
+�                                                                              �
+쿐RRORS:      none                                                             �
+읕컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴켸
+
+   Reclaim all the memory used by the SuperBASIC tables and stacks.
+
+A05A L0A05A        MOVE.L   D7,BV.DALNO(A6)        ;set current DATA line number to zero
+                   MOVE.B   #1,BV.DAITM(A6)        ;and the current DATA item number to be the first
+                   MOVE.L   BV.VVBAS(A6),BV.VVP(A6);clear out the variable value area
+                   MOVE.L   BV.RTBAS(A6),BV.RTP(A6);and clear out the return stack
+
+   Set D0 to the offset to the last of the stack pointer SuperBASIC system variables
+   from the start of the system variables and scan back through the pointers,
+   resetting each one in turn.
+
+                   MOVEQ    #BV.RIP,D0             ;the last of the SuperBASIC stack pointers
+A072 L0A072        MOVE.L   BV.RIBAS(A6),0(A6,D0.W);reset it
+                   SUBQ.W   #4,D0                  ;point at the previous pointer in the list
+                   CMPI.B   #BV.BTP,D0             ;has the first of the stack pointers been reached ?
+                   BGE.S    L0A072                 ;reset the previous pointer if not
+                   SF       BV.UNRVL(A6)           ;otherwise signal "need to unravel stack"
+                   MOVE.L   D7,BV.VVFRE(A6)        ;set first free space in variable value table
+                   JSR      $5098(PC)              ;reclaim the spare space above the return stack
+                   JMP      $5090(PC)              ;reclaim the spare space above the variable value area
+
+旼컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴커
+�=                                                                             �
+쳐컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴캑
+쿕OB:                                                                          �
+쳐컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴캑
+쿐NTRY:       D0.W     offset to the name from the start of the name list      �
+�                                                                              �
+쿐XIT:        A1.L     relative pointer to the next name in the name list      �
+�                                                                              �
+쿐RRORS:      none                                                             �
+읕컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴켸
+
+   Point A1 at the name after a name in the name list given the offset to the name
+   in D0.W.
+
+A090 L0A090        MOVEA.L  BV.NLBAS(A6),A1        ;point A1 at the start of the name list
+                   ADDA.W   D0,A1                  ;add offset into list to required name
+                   MOVEQ    #1,D0
+                   ADD.B    0(A6,A1.L),D0          ;get the length of the name
+                   ADDA.W   D0,A1                  ;and point A1 at the next name in the list
+A09E L0A09E        RTS
+
+旼컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴커
+�=                                                                             �
+쳐컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴캑
+쿕OB:                                                                          �
+쳐컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴캑
+쿐NTRY:       D7.L                                                             �
+�                                                                              �
+쿐XIT:                                                                         �
+�                                                                              �
+쿐RRORS:                                                                       �
+읕컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴켸
+
+   Close all the channels bar the first three and redraw the screen as for a "NEW".
+
+A0A0 L0A0A0        MOVEA.L  BV.CHP(A6),A3          ;SuperBASIC channel table running pointer
+                   MOVEA.L  BV.CHBAS(A6),A2        ;start of channel table
+                   ADDA.W   #3*CH.LENCH,A2         ;step past the first three channels
+                   MOVE.L   A2,BV.CHP(A6)          ;and update the running pointer
+A0B0 L0A0B0        CMPA.L   A3,A2                  ;has the end of the channel table been reached ?
+                   BGE.S    L0A0C6                 ;jump forward to redraw the screen if so
+                   MOVE.L   CH.ID(A6,A2.L),D0      ;otherwise get the QDOS channel ID for the channel
+                   BLT.S    L0A0C0                 ;and try the next channel if this channel is unused
+                   MOVEA.L  D0,A0                  ;get the channel ID ready for the TRAP
+                   MOVEQ    #IO.CLOSE,D0           ;TRAP to close a channel
+                   TRAP     #2                     ;close it
+
+A0C0 L0A0C0        ADDA.W   #CH.LENCH,A2           ;point at the next channel block
+                   BRA.S    L0A0B0                 ;and check the channel
+
+   Read the display mode and type and redaw the screen.
+
+A0C6 L0A0C6        MOVEQ    #MT.DMODE,D0           ;TRAP to read or set the display mode
+                   MOVEQ    #-1,D1                 ;signal "return display mode"
+                   MOVEQ    #-1,D2                 ;signal "return display type"
+                   TRAP     #1                     ;and read them
+
+   D1 now contains the display mode and D2 the display type.
+
+                   MOVEQ    #MT.DMODE,D0           ;TRAP to read or set the display mode
+                   TRAP     #1                     ;set it to redraw the screen
+
+   Reset the running pointer to the line number table to point to the start of
+   the table in order to clear it. Then do the same for the program file running
+   pointer. This has the effect of clearing out the basic program without reclaiming
+   the space used by the old one.
+
+                   MOVE.L   BV.LNBAS(A6),BV.LNP(A6);reset the line number table running pointer
+                   CLR.W    BV.LSBAS(A6)           ;and signal "no current statement"
+                   BSR      L0A05A                 ;reclaim the memory used by the stacks and tables
+                   MOVE.L   BV.PFBAS(A6),BV.PFP(A6);and clear out the program file
+
+                   MOVEQ    #0,D0
+                   MOVEQ    #0,D5
+                   MOVEA.L  BV.NTBAS(A6),A0        ;point A0 at the start of the name table
+                   MOVEQ    #8,D1                  ;and set D1 to the length of one entry
+A0F0 L0A0F0        CMPA.L   BV.NTP(A6),A0          ;end of name table reached ?
+                   BEQ.S    L0A148                 ;jump forward if so
+                   CMP.B    NTB.TYPE(A6,A0.L),D1
+                   BGT.S    L0A106
+                   TST.B    D5
+                   BNE.S    L0A114
+                   MOVE.W   NTB.OFFN(A6,A0.L),D0   ;get the offset to the name in the name list
+                   BRA.S    L0A144
+
+A106 L0A106        TST.B    D5
+                   BNE.S    L0A144
+                   MOVEA.L  A0,A2                  ;move pointer 
+                   BSR.S    L0A090                 ;point past this variable's name
+                   MOVEA.L  A1,A3
+                   ST       D5
+                   BRA.S    L0A144
+
+A114 L0A114        MOVE.L   NTB.TYPE(A6,A0.L),0(A6,A2.L)
+                   MOVE.L   NTB.OFFV(A6,A0.L),4(A6,A2.L)
+                   MOVE.W   2(A6,A2.L),D0
+                   BSR      L0A090
+                   SUBA.W   D0,A1
+                   MOVE.L   A3,D2
+                   SUB.L    BV.NLBAS(A6),D2
+                   MOVE.W   D2,2(A6,A2.L)
+                   ADDQ.W   #8,A2
+
+   Copy D0 words at (A1.L) to (A3.L)
+
+A136 L0A136        MOVE.B   0(A6,A1.L),0(A6,A3.L)
+                   ADDQ.W   #1,A1
+                   ADDQ.W   #1,A3
+                   SUBQ.W   #1,D0
+                   BGT.S    L0A136
+
+A144 L0A144        ADDQ.W   #8,A0
+                   BRA.S    L0A0F0
+
+A148 L0A148        TST.B    D5
+A14A L0A14A        BEQ.S    L0A154
+                   MOVE.L   A2,BV.NTP(A6)
+                   MOVE.L   A3,BV.NLP(A6)
+A154 L0A154        JSR      CA_RECHP(PC)           ;reclaim space above channel table
+                   JSR      CA_RENLP(PC)           ;reclaim space above name list
+                   JSR      CA_RENTP(PC)           ;reclaim space above name table
+                   JSR      CA_REPFP(PC)           ;reclaim space above program file
+                   JSR      $513C(PC)
+                   BRA.S    L0A18C
+
+                   CLR.W    BV.STOPN(A6)
+                   MOVE.W   BV.CNLNO(A6),BV.NXLIN(A6)
+                   MOVE.B   BV.CNSTM(A6),BV.NXSTM(A6)
+                   MOVE.W   #$FFFF,BV.CNLNO(A6)
+                   MOVE.B   BV.CNINL(A6),BV.INLIN(A6)
+                   MOVE.W   BV.CNIND(A6),BV.INDEX(A6)
+A18C L0A18C        SF       BV.COMLN(A6)
+                   BRA.S    L0A1AA
+
+A192 L0A192        MOVEQ    #0,D0
+                   JSR      L09336(PC)
+                   BRA.S    L0A1AA
+
+A19A L0A19A        TST.B    BV.UNRVL(A6)
+                   BEQ.S    L0A1A4
+                   JSR      L08FB0(PC)
+A1A4 L0A1A4        MOVE.B   BV.SING(A6),BV.COMLN(A6)
+A1AA L0A1AA        MOVEQ    #0,D0
+                   RTS
+
+A1AE L0A1AE        CMPI.W   #SYM.EQ,D1
+                   BNE.S    L0A1BA
+                   ADDQ.W   #2,A4
+                   JMP      L093FC(PC)
+A1BA L0A1BA        MOVEQ    #0,D0
+                   RTS
+
+A1BE L0A1BE        MOVEQ    #-$13,D0
+                   RTS
+
+2.25 Fonts.
+
+   Default font for characters 32 to 127
+
+A1C2 FONT_1        DC.B     %00011111
+                   DC.B     %01100000
+                   DC.B     %01010100
+                   DC.B     %00101000
+                   DC.B     %01010100
+                   DC.B     %00101000
+                   DC.B     %01010100
+                   DC.B     %00101000
+                   DC.B     %01010100
+                   DC.B     %00101000
+                   DC.B     %01010100
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00000000
+                   DC.B     %00010000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00101000
+                   DC.B     %00101000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00101000
+                   DC.B     %00101000
+                   DC.B     %01111100
+                   DC.B     %00101000
+                   DC.B     %01111100
+                   DC.B     %00101000
+                   DC.B     %00101000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00111000
+                   DC.B     %01010000
+                   DC.B     %01010000
+                   DC.B     %00111000
+                   DC.B     %00010100
+                   DC.B     %00010100
+                   DC.B     %00111000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %01100100
+                   DC.B     %01100100
+                   DC.B     %00001000
+                   DC.B     %00010000
+                   DC.B     %00100000
+                   DC.B     %01001100
+                   DC.B     %01001100
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00100000
+                   DC.B     %01010000
+                   DC.B     %01010000
+                   DC.B     %00100000
+                   DC.B     %01010100
+                   DC.B     %01001000
+                   DC.B     %00110100
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000100
+                   DC.B     %00001000
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00001000
+                   DC.B     %00000100
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %01000000
+                   DC.B     %00100000
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00100000
+                   DC.B     %01000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00010000
+                   DC.B     %01010100
+                   DC.B     %00111000
+                   DC.B     %00010000
+                   DC.B     %00111000
+                   DC.B     %01010100
+                   DC.B     %00010000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %01111100
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00011000
+                   DC.B     %00011000
+                   DC.B     %00001000
+                   DC.B     %00010000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %01111100
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00011000
+                   DC.B     %00011000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000100
+                   DC.B     %00000100
+                   DC.B     %00001000
+                   DC.B     %00010000
+                   DC.B     %00100000
+                   DC.B     %01000000
+                   DC.B     %01000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00111000
+                   DC.B     %01000100
+                   DC.B     %01001100
+                   DC.B     %01010100
+                   DC.B     %01100100
+                   DC.B     %01000100
+                   DC.B     %00111000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00010000
+                   DC.B     %00110000
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00111000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00111000
+                   DC.B     %01000100
+                   DC.B     %00000100
+                   DC.B     %00001000
+                   DC.B     %00010000
+                   DC.B     %00100000
+                   DC.B     %01111100
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00111000
+                   DC.B     %01000100
+                   DC.B     %00000100
+                   DC.B     %00011000
+                   DC.B     %00000100
+                   DC.B     %01000100
+                   DC.B     %00111000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00001000
+                   DC.B     %00011000
+                   DC.B     %00101000
+                   DC.B     %01001000
+                   DC.B     %01111100
+                   DC.B     %00001000
+                   DC.B     %00001000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %01111100
+                   DC.B     %01000000
+                   DC.B     %01111000
+                   DC.B     %00000100
+                   DC.B     %00000100
+                   DC.B     %01000100
+                   DC.B     %00111000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00011000
+                   DC.B     %00100000
+                   DC.B     %01000000
+                   DC.B     %01111000
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %00111000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %01111100
+                   DC.B     %00000100
+                   DC.B     %00001000
+                   DC.B     %00010000
+                   DC.B     %00100000
+                   DC.B     %01000000
+                   DC.B     %01000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00111000
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %00111000
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %00111000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00111000
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %00111100
+                   DC.B     %00000100
+                   DC.B     %00001000
+                   DC.B     %00110000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00011000
+                   DC.B     %00011000
+                   DC.B     %00000000
+                   DC.B     %00011000
+                   DC.B     %00011000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00011000
+                   DC.B     %00011000
+                   DC.B     %00000000
+                   DC.B     %00011000
+                   DC.B     %00011000
+                   DC.B     %00001000
+                   DC.B     %00010000
+                   DC.B     %00000100
+                   DC.B     %00001000
+                   DC.B     %00010000
+                   DC.B     %00100000
+                   DC.B     %00010000
+                   DC.B     %00001000
+                   DC.B     %00000100
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %01111100
+                   DC.B     %00000000
+                   DC.B     %01111100
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %01000000
+                   DC.B     %00100000
+                   DC.B     %00010000
+                   DC.B     %00001000
+                   DC.B     %00010000
+                   DC.B     %00100000
+                   DC.B     %01000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00111000
+                   DC.B     %01000100
+                   DC.B     %00000100
+                   DC.B     %00001000
+                   DC.B     %00010000
+                   DC.B     %00000000
+                   DC.B     %00010000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00111000
+                   DC.B     %01000100
+                   DC.B     %01001100
+                   DC.B     %01010100
+                   DC.B     %01001100
+                   DC.B     %01000000
+                   DC.B     %00110000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00111000
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %01111100
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %01111000
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %01111000
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %01111000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00111000
+                   DC.B     %01000100
+                   DC.B     %01000000
+                   DC.B     %01000000
+                   DC.B     %01000000
+                   DC.B     %01000100
+                   DC.B     %00111000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %01111000
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %01111000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %01111100
+                   DC.B     %01000000
+                   DC.B     %01000000
+                   DC.B     %01111000
+                   DC.B     %01000000
+                   DC.B     %01000000
+                   DC.B     %01111100
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %01111100
+                   DC.B     %01000000
+                   DC.B     %01000000
+                   DC.B     %01111000
+                   DC.B     %01000000
+                   DC.B     %01000000
+                   DC.B     %01000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00111000
+                   DC.B     %01000100
+                   DC.B     %01000000
+                   DC.B     %01000000
+                   DC.B     %01001100
+                   DC.B     %01000100
+                   DC.B     %00111000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %01111100
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00111000
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00111000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000100
+                   DC.B     %00000100
+                   DC.B     %00000100
+                   DC.B     %00000100
+                   DC.B     %00000100
+                   DC.B     %01000100
+                   DC.B     %00111000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %01000100
+                   DC.B     %01001000
+                   DC.B     %01010000
+                   DC.B     %01100000
+                   DC.B     %01010000
+                   DC.B     %01001000
+                   DC.B     %01000100
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %01000000
+                   DC.B     %01000000
+                   DC.B     %01000000
+                   DC.B     %01000000
+                   DC.B     %01000000
+                   DC.B     %01000000
+                   DC.B     %01111100
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %01000100
+                   DC.B     %01101100
+                   DC.B     %01010100
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %01100100
+                   DC.B     %01010100
+                   DC.B     %01001100
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00111000
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %00111000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %01111000
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %01111000
+                   DC.B     %01000000
+                   DC.B     %01000000
+                   DC.B     %01000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00111000
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %01010100
+                   DC.B     %01001000
+                   DC.B     %00110100
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %01111000
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %01111000
+                   DC.B     %01010000
+                   DC.B     %01001000
+                   DC.B     %01000100
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00111000
+                   DC.B     %01000100
+                   DC.B     %01000000
+                   DC.B     %00111000
+                   DC.B     %00000100
+                   DC.B     %01000100
+                   DC.B     %00111000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %01111100
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %00111000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %00101000
+                   DC.B     %00010000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %01010100
+                   DC.B     %01010100
+                   DC.B     %00101000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %00101000
+                   DC.B     %00010000
+                   DC.B     %00101000
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %00101000
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %01111100
+                   DC.B     %00000100
+                   DC.B     %00001000
+                   DC.B     %00010000
+                   DC.B     %00100000
+                   DC.B     %01000000
+                   DC.B     %01111100
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00011100
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00011100
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %01000000
+                   DC.B     %01000000
+                   DC.B     %00100000
+                   DC.B     %00010000
+                   DC.B     %00001000
+                   DC.B     %00000100
+                   DC.B     %00000100
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %01110000
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %01110000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00010000
+                   DC.B     %00101000
+                   DC.B     %01000100
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %01111100
+                   DC.B     %00000000
+                   DC.B     %00011000
+                   DC.B     %00100100
+                   DC.B     %00100000
+                   DC.B     %01110000
+                   DC.B     %00100000
+                   DC.B     %00100000
+                   DC.B     %01111100
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00110100
+                   DC.B     %01001100
+                   DC.B     %01000100
+                   DC.B     %01001100
+                   DC.B     %00110100
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %01000000
+                   DC.B     %01000000
+                   DC.B     %01111000
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %01111000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00111100
+                   DC.B     %01000000
+                   DC.B     %01000000
+                   DC.B     %01000000
+                   DC.B     %00111100
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000100
+                   DC.B     %00000100
+                   DC.B     %00111100
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %00111100
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00111000
+                   DC.B     %01000100
+                   DC.B     %01111100
+                   DC.B     %01000000
+                   DC.B     %00111100
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00011000
+                   DC.B     %00100100
+                   DC.B     %00100000
+                   DC.B     %01110000
+                   DC.B     %00100000
+                   DC.B     %00100000
+                   DC.B     %00100000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00111000
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %00111100
+                   DC.B     %00000100
+                   DC.B     %00111000
+                   DC.B     %01000000
+                   DC.B     %01000000
+                   DC.B     %01111000
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00010000
+                   DC.B     %00000000
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00001000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00010000
+                   DC.B     %00000000
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00100000
+                   DC.B     %01000000
+                   DC.B     %01000000
+                   DC.B     %01000100
+                   DC.B     %01001000
+                   DC.B     %01110000
+                   DC.B     %01001000
+                   DC.B     %01000100
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00001000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %01101000
+                   DC.B     %01010100
+                   DC.B     %01010100
+                   DC.B     %01010100
+                   DC.B     %01010100
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %01111000
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00111000
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %00111000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %01111000
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %01111000
+                   DC.B     %01000000
+                   DC.B     %01000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00111100
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %00111100
+                   DC.B     %00000100
+                   DC.B     %00000100
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %01011000
+                   DC.B     %01100100
+                   DC.B     %01000000
+                   DC.B     %01000000
+                   DC.B     %01000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00111000
+                   DC.B     %01000000
+                   DC.B     %00111000
+                   DC.B     %00000100
+                   DC.B     %00111000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00111000
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00001100
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %00111100
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %00101000
+                   DC.B     %00010000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %01010100
+                   DC.B     %00101000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %01000100
+                   DC.B     %00101000
+                   DC.B     %00010000
+                   DC.B     %00101000
+                   DC.B     %01000100
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %00111100
+                   DC.B     %00000100
+                   DC.B     %00111000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %01111100
+                   DC.B     %00001000
+                   DC.B     %00010000
+                   DC.B     %00100000
+                   DC.B     %01111100
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00001000
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00100000
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00001000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00100000
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00001000
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00100000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00010100
+                   DC.B     %00101000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00111000
+                   DC.B     %01000100
+                   DC.B     %01011100
+                   DC.B     %01100100
+                   DC.B     %01011100
+                   DC.B     %01000100
+                   DC.B     %00111000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+
+旼컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴커
+   Default font for characters 127 to 191
+旼컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴커
+
+A52E FONT_2        DC.B     %01111111
+                   DC.B     %01000000
+                   DC.B     %01010100
+                   DC.B     %00101000
+                   DC.B     %01010100
+                   DC.B     %00101000
+                   DC.B     %01010100
+                   DC.B     %00101000
+                   DC.B     %01010100
+                   DC.B     %00101000
+                   DC.B     %01010100
+                   DC.B     %01000100
+                   DC.B     %00000000
+                   DC.B     %00110100
+                   DC.B     %01001100
+                   DC.B     %01000100
+                   DC.B     %01001100
+                   DC.B     %00110100
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00010100
+                   DC.B     %00101000
+                   DC.B     %00000000
+                   DC.B     %00111100
+                   DC.B     %01000100
+                   DC.B     %01001100
+                   DC.B     %00110100
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00010000
+                   DC.B     %00101000
+                   DC.B     %00010000
+                   DC.B     %00111100
+                   DC.B     %01000100
+                   DC.B     %01001100
+                   DC.B     %00110100
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00001000
+                   DC.B     %00010000
+                   DC.B     %00111000
+                   DC.B     %01000100
+                   DC.B     %01111100
+                   DC.B     %01000000
+                   DC.B     %00111100
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %01000100
+                   DC.B     %00000000
+                   DC.B     %00111000
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %00111000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00010100
+                   DC.B     %00101000
+                   DC.B     %00000000
+                   DC.B     %00111000
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %00111000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00111100
+                   DC.B     %01001100
+                   DC.B     %01010100
+                   DC.B     %01100100
+                   DC.B     %01111000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %01000100
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %00111100
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00111100
+                   DC.B     %01000000
+                   DC.B     %01000000
+                   DC.B     %01000000
+                   DC.B     %00111100
+                   DC.B     %00010000
+                   DC.B     %00100000
+                   DC.B     %00010100
+                   DC.B     %00101000
+                   DC.B     %00000000
+                   DC.B     %01111000
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00111100
+                   DC.B     %01010000
+                   DC.B     %01111100
+                   DC.B     %01010000
+                   DC.B     %01011100
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00101100
+                   DC.B     %01010000
+                   DC.B     %01011100
+                   DC.B     %01010000
+                   DC.B     %00101100
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00001000
+                   DC.B     %00010000
+                   DC.B     %00110100
+                   DC.B     %01001100
+                   DC.B     %01000100
+                   DC.B     %01001100
+                   DC.B     %00110100
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00100000
+                   DC.B     %00010000
+                   DC.B     %00110100
+                   DC.B     %01001100
+                   DC.B     %01000100
+                   DC.B     %01001100
+                   DC.B     %00110100
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00010000
+                   DC.B     %00101000
+                   DC.B     %00000000
+                   DC.B     %00111100
+                   DC.B     %01000100
+                   DC.B     %01001100
+                   DC.B     %00110100
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %01000100
+                   DC.B     %00000000
+                   DC.B     %00111000
+                   DC.B     %01000100
+                   DC.B     %01111100
+                   DC.B     %01000000
+                   DC.B     %00111100
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00100000
+                   DC.B     %00010000
+                   DC.B     %00111000
+                   DC.B     %01000100
+                   DC.B     %01111100
+                   DC.B     %01000000
+                   DC.B     %00111100
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00010000
+                   DC.B     %00101000
+                   DC.B     %00111000
+                   DC.B     %01000100
+                   DC.B     %01111100
+                   DC.B     %01000000
+                   DC.B     %00111100
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %01000100
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00001000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00001000
+                   DC.B     %00010000
+                   DC.B     %00000000
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00001000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00100000
+                   DC.B     %00010000
+                   DC.B     %00000000
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00001000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00010000
+                   DC.B     %00101000
+                   DC.B     %00000000
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00001000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00001000
+                   DC.B     %00010000
+                   DC.B     %00111000
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %00111000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00100000
+                   DC.B     %00010000
+                   DC.B     %00111000
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %00111000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00010000
+                   DC.B     %00101000
+                   DC.B     %00000000
+                   DC.B     %00111000
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %00111000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00001000
+                   DC.B     %00010000
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %00111100
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00100000
+                   DC.B     %00010000
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %00111100
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00010000
+                   DC.B     %00101000
+                   DC.B     %00000000
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %00111100
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00111000
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %01011000
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %01011000
+                   DC.B     %01000000
+                   DC.B     %01000000
+                   DC.B     %00000000
+                   DC.B     %00001000
+                   DC.B     %00111100
+                   DC.B     %01001000
+                   DC.B     %01001000
+                   DC.B     %01001000
+                   DC.B     %00111100
+                   DC.B     %00001000
+                   DC.B     %00000000
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %00101000
+                   DC.B     %00010000
+                   DC.B     %01111100
+                   DC.B     %00010000
+                   DC.B     %00111000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00100000
+                   DC.B     %00010000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %01000100
+                   DC.B     %00010000
+                   DC.B     %00101000
+                   DC.B     %01000100
+                   DC.B     %01111100
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00010100
+                   DC.B     %00101000
+                   DC.B     %00010000
+                   DC.B     %00101000
+                   DC.B     %01000100
+                   DC.B     %01111100
+                   DC.B     %01000100
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00010000
+                   DC.B     %00101000
+                   DC.B     %00010000
+                   DC.B     %00101000
+                   DC.B     %01000100
+                   DC.B     %01111100
+                   DC.B     %01000100
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00001000
+                   DC.B     %00010000
+                   DC.B     %01111100
+                   DC.B     %01000000
+                   DC.B     %01111100
+                   DC.B     %01000000
+                   DC.B     %01111100
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %01000100
+                   DC.B     %00111000
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %00111000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00010100
+                   DC.B     %00101000
+                   DC.B     %00111000
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %00111000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00110100
+                   DC.B     %01000100
+                   DC.B     %01001100
+                   DC.B     %01010100
+                   DC.B     %01100100
+                   DC.B     %01000100
+                   DC.B     %01011000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %01000100
+                   DC.B     %00000000
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %00111000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00111000
+                   DC.B     %01000100
+                   DC.B     %01000000
+                   DC.B     %01000000
+                   DC.B     %01000000
+                   DC.B     %01000100
+                   DC.B     %00111000
+                   DC.B     %00010000
+                   DC.B     %00100000
+                   DC.B     %00111000
+                   DC.B     %00000000
+                   DC.B     %01000100
+                   DC.B     %01100100
+                   DC.B     %01010100
+                   DC.B     %01001100
+                   DC.B     %01000100
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00111100
+                   DC.B     %01001000
+                   DC.B     %01001000
+                   DC.B     %01111100
+                   DC.B     %01001000
+                   DC.B     %01001000
+                   DC.B     %01001100
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00111100
+                   DC.B     %01001000
+                   DC.B     %01001000
+                   DC.B     %01001100
+                   DC.B     %01001000
+                   DC.B     %01001000
+                   DC.B     %00111100
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00100100
+                   DC.B     %01011000
+                   DC.B     %01001000
+                   DC.B     %01011000
+                   DC.B     %00100100
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00111000
+                   DC.B     %01000100
+                   DC.B     %01000000
+                   DC.B     %00111000
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %00111000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00111000
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %01111100
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %00111000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %01000000
+                   DC.B     %00100000
+                   DC.B     %00100000
+                   DC.B     %00010000
+                   DC.B     %00011000
+                   DC.B     %00101000
+                   DC.B     %01000100
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %01100100
+                   DC.B     %01011100
+                   DC.B     %01000000
+                   DC.B     %01000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00111100
+                   DC.B     %01101000
+                   DC.B     %00101000
+                   DC.B     %00101000
+                   DC.B     %00101000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00111000
+                   DC.B     %01010100
+                   DC.B     %01010100
+                   DC.B     %01010100
+                   DC.B     %00111000
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00000000
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00010000
+                   DC.B     %00000000
+                   DC.B     %00010000
+                   DC.B     %00100000
+                   DC.B     %01000000
+                   DC.B     %01000100
+                   DC.B     %00111000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00111000
+                   DC.B     %01000100
+                   DC.B     %00000100
+                   DC.B     %00111000
+                   DC.B     %01000000
+                   DC.B     %01000100
+                   DC.B     %00111000
+                   DC.B     %00000000
+                   DC.B     %00010000
+                   DC.B     %00111000
+                   DC.B     %01000100
+                   DC.B     %01000000
+                   DC.B     %00111000
+                   DC.B     %01000100
+                   DC.B     %00111000
+                   DC.B     %00000100
+                   DC.B     %01000100
+                   DC.B     %00111000
+                   DC.B     %00000000
+                   DC.B     %01000100
+                   DC.B     %00111000
+                   DC.B     %01000100
+                   DC.B     %01000100
+                   DC.B     %00111000
+                   DC.B     %01000100
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00010100
+                   DC.B     %00101000
+                   DC.B     %01010000
+                   DC.B     %00101000
+                   DC.B     %00010100
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %01010000
+                   DC.B     %00101000
+                   DC.B     %00010100
+                   DC.B     %00101000
+                   DC.B     %01010000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00010000
+                   DC.B     %00101000
+                   DC.B     %00010000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00010000
+                   DC.B     %00000000
+                   DC.B     %01111100
+                   DC.B     %00000000
+                   DC.B     %00010000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00010000
+                   DC.B     %00110000
+                   DC.B     %01111100
+                   DC.B     %00110000
+                   DC.B     %00010000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00010000
+                   DC.B     %00011000
+                   DC.B     %01111100
+                   DC.B     %00011000
+                   DC.B     %00010000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00010000
+                   DC.B     %00111000
+                   DC.B     %01111100
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00000000
+                   DC.B     %00000000
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %00010000
+                   DC.B     %01111100
+                   DC.B     %00111000
+                   DC.B     %00010000
+                   DC.B     %00000000
+                   DC.B     %00000000

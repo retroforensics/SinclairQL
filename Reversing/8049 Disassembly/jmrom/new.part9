@@ -1,0 +1,3329 @@
+2.10 IPC routines.
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=IPC_CMND        DO IPC COMMAND                                               ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A3.L     address of command string                           ³
+³                                                                              ³
+³EXIT:            A3.L     one past end of command string                      ³
+³                 D1.B     return parameter if specified                       ³
+³                                                                              ³
+³ERRORS:          none                                                         ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   All user IPC commands have a precisely defined format. Any deviation
+   from this will result in the IPC crashing. the format is as follows:-
+
+   1.     Function number in low nibble (0 to 15)          $00(A3) byte
+   2.     number of parameters to send, n = 0 to 17        $01(A3) byte
+   3.     Amount bit string (see below)                    $02(A3) long
+   4.     The parameters to be sent                        $06(A3) n bytes
+   5.     size of reply expected if any                    7+n(A3) byte
+
+   There are 16 commands altogether as follows:-
+
+    1.    IPC_0    processor reset                     0 0 ? ? ? ? 1
+    2.    IPC_1    report input status                 1 0 ? ? ? ? 2
+    3.    IPC_2    open serial port 1                  2 0 ? ? ? ? 1
+    4.    IPC_3    open serial port 2                  3 0 ? ? ? ? 1
+    5.    IPC_4    close serial port 1                 4 0 ? ? ? ? 1
+    6.    IPC_5    close serial port 2                 5 0 ? ? ? ? 1
+    7.    IPC_6    read serial port 1
+    8.    IPC_7    read serial port 2
+    9.    IPC_8    read keyboard
+   10.    IPC_9    keyboard direct read                9 1 0 0 0 0 row 2
+   11.    IPC_10   initiate sound process              23 bytes total
+   12.    IPC_11   kill sound process                  B 0 ? ? ? ? 1
+   13.    IPC_12   microdrive reduced sensitivity
+   14.    IPC_13   change baud rate
+   15.    IPC_14   random number generator             E 0 ? ? ? ? 2
+   16.    IPC_16   test
+
+   The whole IPC communications process is extremely slow as it uses a very
+   complex protocol consisting of multiple bit tests for each bit used.
+
+2B8C IPC_CMND      MOVE     SR,-(A7)
+                   ORI.W    #$0700,SR              ;disable interrupts
+                   JSR      IPC_SET(PC)            ;set up registers for IPC command
+                   MOVE.B   (A3)+,D0               ;get command number
+                   BSR.S    IPC_PARA               ;send the command number nibble
+                   MOVE.B   (A3)+,D7               ;get number of parameters to send
+                   MOVE.L   (A3)+,D4               ;and the amount bit string long word
+
+   The amount bit string long word consists of pairs of bits for each of
+   the parameters sent as follows:-
+
+   1.     %00 = send least significant nibble (four bits)
+   2.     %01 = send nothing
+   3.     %10 = send all eight bits,high nibble first, then low nibble
+   4.     %11 = send nothing
+
+   The reply size byte also uses the same format.
+
+2B9E IPC_PUT       SUBQ.B   #1,D7                  ;next parameter number
+                   BLT.S    IPC_END                ;exit if number more or finished
+                   MOVE.B   (A3)+,D0               ;get the parameter
+                   BTST     #0,D4                  ;nothing to be sent ?
+                   BNE.S    L02BBA                 ;jump forward if so
+                   BTST     #1,D4                  ;4 or 8 bits ?
+                   BEQ.S    L02BB8                 ;jump forward if only 4
+                   MOVE.W   D0,D5                  ;save parameter
+                   ROR.W    #4,D0                  ;move high nibble into view
+                   BSR.S    IPC_PARA               ;send it
+                   MOVE.W   D5,D0                  ;restore parameter
+2BB8 L02BB8        BSR.S    IPC_PARA               ;then send the low nibble
+2BBA L02BBA        ROR.L    #2,D4                  ;move next amount bits into place
+                   BRA.S    IPC_PUT                ;and check next parameter
+
+   All the parameters, if any, have been sent so check to see if a return
+   parameter is required and find it's size.
+
+2BBE IPC_END       MOVE.B   (A3)+,D4               ;get size of reply required
+                   BTST     #0,D4                  ;number reply ?
+                   BNE.S    ACK_INTR               ;jump forward if so
+                   BTST     #1,D4                  ;4 or 8 bits ?
+                   BNE.S    IPC_GETP               ;jump forward if only 8
+                   JSR      IPC_RETN(PC)           ;get return parameter nibble
+                   BRA.S    ACK_INTR               ;acknowledge receipt of parameter
+
+2BD2 IPC_GETP      JSR      IPC_RETB(PC)           ;get return parameter byte
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=ACK_INTR        ACKNOWLEDGE PERIPHERAL INTERRUPT OR COMMAND                  ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A0.L     address of interrupt or peripheral register         ³
+³                 A6.L     system variables                                    ³
+³                                                                              ³
+³EXIT:            D7.L     new interrupt status                                ³
+³                                                                              ³
+³ERRORS:          none                                                         ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+2BD6 ACK_INTR      MOVEQ    #%00000010,D7          ;mask for acknowledge bit
+                   OR.B     SV.PCINT(A6),D7        ;update copy of register
+
+   Acknowledge the interrupt by sending copy to transmit register.
+
+                   MOVE.B   D7,1(A0)               ;acknowledge the interrupt or command
+                   RTE
+
+2BE2 IPC_PARA      JMP      IPC_SEND(PC)           ;send command to ipc
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=INTRFINT        INTERFACE INTERRUPT HANDLER                                  ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A5.L     saved SuperBASIC registers                          ³
+³                 A6.L     start of system variables                           ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   The registers are saved in the order:-
+
+   1.     Long word for program counter       $0E(A5)
+   2.     Word for status register            $0C(A5)
+   3.     Long word for A6                    $08(A5)
+   4.     Long word for A5                    $04(A5)
+   5.     Long word for D7                    $00(A5)
+
+2BE6 INTRFINT      MOVEM.L  D0-6/A0-4,-(A7)        ;save the rest of the registers
+                   MOVEQ    #0,D3
+                   BSR.S    CHK_IPC                ;check IPC I/P status
+                   MOVEQ    #%00000010,D7          ;mask for interface bit
+                   BRA.S    L02C00                 ;acknowledge the interrupt
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=TRNSMINT        TRANSMIT INTERRUPT HANDLER                                   ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A5.L     saved SuperBASIC registers                          ³
+³                 A6.L     start of system variables                           ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   The registers are saved in the order:-
+
+   1.     Long word for program counter       $0E(A5)
+   2.     Word for status register            $0C(A5)
+   3.     Long word for A6                    $08(A5)
+   4.     Long word for A5                    $04(A5)
+   5.     Long word for D7                    $00(A5)
+
+2BF2 TRNSMINT      MOVEM.L  D0-6/A0-4,-(A7)        ;save the rest of the registers
+                   MOVEQ    #0,D3
+                   ST       D4
+                   BSR      SER_TXRX               ;handle serial port transmission
+                   MOVEQ    #%00000100,D7          ;mask for transmit bit
+2C00 L02C00        OR.B     SV.PCINT(A6),D7        ;add to copy of interrupt register
+                   MOVE.B   D7,PC_INTR             ;acknowledge the interrupt
+                   MOVEM.L  (A7)+,D0-6/A0-4        ;restore the registers saved above
+                   BRA      EXITTRAP               ;exit TRAP #1's
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=POLLTASK        START (AND END) OF POLLED TASKS LINKED LIST                  ³
+³=SECTASK         SECOND TASK IN SCHEDULER LINKED LIST                         ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:                                                                        ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+2C12 POLLTASK      DC.L     0                      ;link to next entry (null)
+                   DC.L     L02C22                 ;pointer to routine
+
+2C1A SECTASK       DC.L     DOWAITIO               ;link to next entry
+                   DC.L     L02C2E                 ;pointer to routine
+
+   Similar to interface interrupt.
+
+2C22 L02C22        MOVE     SR,-(A7)               ;save SR to allow "RTE" return
+                   ORI.W    #$0700,SR              ;disable interrupts
+                   BSR.S    CHK_IPC                ;do normal interface interrupt actions
+                   JMP      ACK_INTR(PC)           ;then acknowledge the interrupt
+
+   Similar to transmit interrupts.
+
+2C2E L02C2E        MOVE     SR,-(A7)               ;save SR to allow "RTE" return
+                   ORI.W    #$0700,SR              ;disable interrupts
+                   SF       D4
+                   BSR.S    SER_TXRX               ;do normal transmit interrupt actions
+                   RTE
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=CHK_IPC         CHECK IPC INPUT STATUS                                       ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A6.L     start of system variables                           ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:          none                                                         ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+2C3A CHK_IPC       JSR      IPC_SET(PC)            ;set up registers for IPC command
+                   MOVEQ    #IPC_1,D0              ;"read IPC input status" command
+                   JSR      IPC_SEND(PC)           ;send the command
+                   JSR      IPC_RETB(PC)           ;get the return parameter byte
+
+   The bits of the IPC status byte have the following meanings when set:-
+
+   1.     bit 0 = key being pressed
+   2.     bit 1 = sound is being produced
+   3.     bit 4 = a byte has been read from serial port 1
+   4.     bit 5 = a byte has been read from serial port 2
+   5.     bit 6 = the rotating cartridge is write protected
+
+   Bits 2,3 and 7 are undefined but may change between readings.
+
+                   MOVE.B   D1,D7                  ;copy status
+                   BTST     #6,D7                  ;rotating cartridge write protected ?
+                   SEQ      SV.WP(A6)              ;signal "not protected" if not
+                   BTST     #1,D7                  ;sound being produced ?
+                   SNE      SV.SOUND(A6)           ;signal "sound on" if so
+                   BTST     #0,D7                  ;key being pressed ?
+                   BEQ.S    CHK_SER1               ;jump forward if not
+                   JSR      CHK_KEY(PC)            ;otherwise decode the key press
+
+   Read both RS232 ports if data available and suitable queues exist.
+
+2C64 CHK_SER1      MOVE.L   SV.SER1C(A6),D0        ;D0 points at serial port 1 I/P queue
+                   BEQ.S    CHK_SER2               ;jump forward if number queue
+                   BTST     #4,D7                  ;byte read from port 1 ?
+                   BEQ.S    CHK_SER2               ;jump forward if not
+                   MOVEA.L  D0,A2                  ;copy address of queue
+                   MOVEQ    #6,D5
+                   JSR      L02D32(PC)             ;insert the byte read into the queue
+2C78 CHK_SER2      MOVE.L   SV.SER2C(A6),D0        ;D0 points at serial port 2 I/P queue
+                   BEQ.S    EXIT_CHK               ;exit if number queue
+                   BTST     #5,D7                  ;byte read from port 2 ?
+                   BEQ.S    EXIT_CHK               ;exit if not
+                   MOVEA.L  D0,A2                  ;copy address of queue
+                   MOVEQ    #7,D5
+                   JSR      L02D32(PC)             ;insert the byte read into the queue
+2C8C EXIT_CHK      RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=SER_TXRX        DO TRANSMIT INTERRUPT ACTION FOR SERIAL PORTS                ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A6.L     start of system variables                           ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+2C8E SER_TXRX      LEA      SV.TMODE(A6),A4        ;A4 points at ULA transmit mode copy
+                   BTST     #4,(A4)                ;microdrive turning ?
+                   BNE.S    L02CA2                 ;jump forward if not
+                   LEA      PC_IPCRD,A1            ;A1 points at IPC read only port
+                   BTST     #1,(A1)
+2CA2 L02CA2        BNE.S    L02D1C
+                   MOVEQ    #0,D6
+                   MOVE.B   (A4),D6
+                   LSL.B    #4,D6
+                   LSR.B    #7,D6
+                   MOVE.W   D6,D7
+                   ADDQ.B   #4,D7
+                   LSL.B    #2,D6
+                   LEA      SV.SER1C(A6),A5
+                   ADDA.W   D6,A5
+                   MOVE.L   (A5),D0
+                   BEQ.S    L02D1E
+                   MOVEA.W  #$62,A2
+                   ADDA.L   D0,A2
+                   TST.B    -$65(A2)
+                   BEQ.S    L02CCC
+                   BTST     D7,(A1)
+                   BNE.S    L02CD8
+2CCC L02CCC        JSR      IO_QOUT(PC)
+                   BEQ.S    L02D10
+                   ADDQ.L   #1,D0
+                   BEQ.S    L02D1E
+                   BRA.S    L02CEE
+
+2CD8 L02CD8        JSR      IO_QTEST(PC)           ;test queue status
+                   CMPI.W   #ERR.IU,D0             ;in use ?
+                   BNE.S    L02D1E
+                   TST.B    -$63(A2)
+                   BLT.S    L02CEE
+                   TST.B    -$65(A2)
+                   BNE.S    L02D1C
+2CEE L02CEE        TST.B    D4
+                   BNE.S    L02D1C
+                   MOVE.B   -$63(A2),D6
+                   LEA      -$82(A2),A0
+                   JSR      MM_RECHP(PC)           ;release the space
+                   CLR.L    (A5)
+                   TST.B    D6
+                   BLT.S    L02D1C
+                   MOVEQ    #$1A,D1
+                   BTST     #0,-$67(A2)
+                   BEQ.S    L02D10
+                   MOVEQ    #-$66,D1
+2D10 L02D10        MOVE.B   D1,PC_TDATA            ;send to transmit register
+                   MOVE.W   SV.TIMOV(A6),SV.TIMO(A6)
+2D1C L02D1C        RTS
+
+2D1E L02D1E        SUB.W    D3,SV.TIMO(A6)
+                   BGE.S    L02D1C
+                   CLR.W    SV.TIMO(A6)
+                   BCHG     #3,(A4)
+                   MOVE.B   (A4),-$1E(A1)
+                   RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=                                                                             ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:                                                                        ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+2D32 L02D32        JSR      IO_QTEST(PC)           ;test queue status
+                   CMPI.W   #$19,D2                ;enough free space ?
+                   BLT.S    L02D70
+                   MOVE.L   D5,D0
+                   JSR      IPC_SEND(PC)
+                   JSR      IPC_RETB(PC)
+                   MOVE.B   D1,D4
+                   ANDI.W   #%00111111,D4
+                   BEQ.S    L02D70
+                   SUBQ.W   #1,D4
+2D50 L02D50        JSR      IPC_RETB(PC)
+                   TST.B    -2(A2)
+                   BLT.S    L02D68
+                   MOVEQ    #%01111111,D0
+                   AND.B    D1,D0
+                   CMPI.B   #$1A,D0
+                   BNE.S    L02D68
+                   JSR      IO_QEOF(PC)
+2D68 L02D68        JSR      IO_QIN(PC)
+                   DBF      D4,L02D50
+2D70 L02D70        RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=CHK_KEY         SCAN THE KEYBOARD AND DECODE KEY PRESS                       ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A6.L     QDOS system variables                               ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+2D72 CHK_KEY       MOVEA.L  SV.KEYQ(A6),A2         ;A2 points at current keyboard queue
+                   MOVE.L   A2,D0
+                   BEQ.S    L02DD6                 ;exit if number queue
+                   MOVEQ    #IPC_8,D0              ;"read keyboard" command
+                   JSR      IPC_SEND(PC)           ;send the command
+                   JSR      IPC_RETN(PC)           ;and get the return parameter nibble
+                   MOVE.B   D1,D5                  ;save it
+                   MOVE.B   D1,D4
+                   ANDI.W   #%00000111,D4          ;multiple key press ?
+                   BEQ.S    L02DAC                 ;jump forward if so
+                   SUBQ.W   #1,D4
+
+   Now scan the keyboard and perform the key repeat algorithm. The ????????
+   routine takes into account all the special key combinations.
+
+2D90 L02D90        CLR.W    SV.ARBUF(A6)           ;clear auto-repeat buffer
+                   JSR      IPC_RETN(PC)           ;get parameter nibble for row number
+                   MOVE.B   D1,D2                  ;copy to D2
+                   JSR      IPC_RETB(PC)           ;get key bits byte for that row
+                   JSR      L0AABE                 ;convert to ascii code in D1
+
+   These are the return points for the two decode key errors.
+
+                   BRA.S    BRK_KEY                ;branch if break key pressed
+                   BSR.S    L02E00                 ;branch if key ok
+                   DBF      D4,L02D90              ;scan keyboard again
+
+   the keyboard has been scanned to ?
+
+2DAC L02DAC        BTST     #3,D5                  ;multiple key press ?
+                   BEQ.S    L02DD0                 ;jump forward if so
+                   SUB.W    D3,SV.ARCNT(A6)        ;reduce count
+                   BGT.S    L02DD6                 ;exit if not timed out
+                   JSR      IO_QTEST(PC)           ;test current keyboard queue status
+                   TST.L    D0                     ;in use ?
+                   BEQ.S    L02DC8
+                   MOVE.W   SV.ARBUF(A6),D1
+                   BEQ.S    L02DC8
+                   BSR.S    L02E00
+2DC8 L02DC8        MOVE.W   SV.ARFRQ(A6),SV.ARCNT(A6)
+                   RTS
+
+2DD0 L02DD0        MOVE.W   SV.ARDEL(A6),SV.ARCNT(A6)
+2DD6 L02DD6        RTS
+
+2DD8 BRK_KEY       SF       SV.SCRST(A6)           ;switch screen on
+                   MOVEA.L  SV.JBBAS(A6),A3        ;A3 points at first entry in job table
+                   MOVEA.L  (A3),A3                ;and then at SuperBASIC's job header
+                   SF       JB.END+BV.BRK(A3)      ;signal "break pressed"
+                   MOVE.W   JB.STAT(A3),D0         ;get job status
+                   BEQ.S    L02DFE                 ;exit if already active
+                   ADDQ.W   #1,D0                  ;otherwise increment status
+                   BLT.S    L02DFE                 ;and exit if it was "waiting"
+                   CLR.W    JB.STAT(A3)            ;signal "not suspended"
+                   MOVE.L   JB.HOLD(A3),D0         ;get address to be cleared on release
+                   BEQ.S    L02DFE                 ;exit if none given
+                   MOVEA.L  D0,A3                  ;copy address and clear it
+                   SF       (A3)
+2DFE L02DFE        RTS
+
+   check for any special key codes.
+
+2E00 L02E00        CMPI.W   #$F9,D1                ;CTRL F5 ?
+                   BEQ.S    CTRL_F5                ;jump forward if so
+                   SF       SV.SCRST(A6)           ;otherwise signal "screen active"
+                   CMP.W    SV.CQCH(A6),D1         ;change keyboard queue ?
+                   BEQ.S    CTRL_C                 ;jump forward if so
+                   CMPI.W   #$E0,D1                ;CAPS LOCK ?
+                   BNE.S    CHK_ALT                ;jump forward if not
+                   NOT.B    SV.CAPS(A6)            ;invert caps lock status
+                   TST.L    SV.CSUB(A6)            ;is there a routine to call ?
+                   BEQ.S    L02DD6                 ;exit if not
+                   LEA      SV.CSUB(A6),A5         ;otherwise get address of routine
+                   JMP      (A5)                   ;and call it
+
+   Now check for combinations using the ALT key. D1 will contain $FF in
+   it's least significant byte if the ALT key was pressed with it.
+
+2E26 CHK_ALT       MOVE.W   SV.ARDEL(A6),SV.ARCNT(A6)
+                   MOVE.W   D1,SV.ARBUF(A6)        ;use as last key pressed
+                   CMPI.B   #$FF,D1                ;ALT pressed with the key ?
+                   BNE.S    NO_ALT                 ;insert the character alone if not
+                   SWAP     D1                     ;save both characters
+                   JSR      IO_QTEST(PC)           ;check queue status
+
+   The free space left in the queue is now in D2.
+
+                   CMPI.W   #2,D2                  ;room for another two characters ?
+                   BLT.S    L02DD6                 ;exit if not
+                   SWAP     D1                     ;move characters back into view
+                   JSR      IO_QIN(PC)             ;and insert $FF into the queue
+                   LSR.W    #8,D1                  ;move key pressed with it into view
+2E4A NO_ALT        JMP      IO_QIN(PC)             ;and insert it into the queue.
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=CTRL_F5         SWITCH SCREEN STATUS                                         ³
+³=CTRL_C          CHANGE CURRENT KEYBOARD UEUE                                 ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A2.L     start of keyboard queue linked list                 ³
+³                 A6.L     start of system variables                           ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+2E4E CTRL_F5       NOT.B    SV.SCRST(A6)           ;invert screen status
+                   RTS
+
+   All the keybaord queues in the common heap are linked together in a
+   linked list format.
+
+2E54 CTRL_C        LEA      -SD.KBD(A2),A0         ;A0 points at start of channel definitio
+                   TST.B    SD.CURF(A0)            ;cursor enabled ?
+                   BGE.S    L02E66                 ;jump forward if enabled
+                   JSR      SD_CURE(PC)            ;otherwise enable cursor
+
+   Scan the list until the current one is found.
+
+                   LEA      SD.KBD(A0),A2          ;A2 points at keyboard queue header
+2E66 L02E66        MOVEA.L  (A2),A2                ;get address of next queue in list
+2E68 L02E68        CMPA.L   SV.KEYQ(A6),A2         ;current queue ?
+                   BEQ.S    L02E7C                 ;jump forward if so
+                   TST.B    SD.CURF-SD.KBD(A2)
+                   BEQ.S    L02E66                 ;try next queue if not enabled
+
+   The current keyboard queue has been found and the address of the next
+   queue in the list is in A2.
+
+                   MOVE.L   A2,SV.KEYQ(A6)         ;use this as the new current queue
+                   CLR.W    SV.FSTAT(A6)           ;reset cursor flash counter
+2E7C L02E7C        JMP      IPC_SET(PC)            ;set up a new "empty" queue header
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=IPC_SET         SET UP IPC COMMAND                                           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           none                                                         ³
+³                                                                              ³
+³EXIT:            D6.L     bit number to test for completeion (6)              ³
+³                 A0.L     pointer to IPC read only register, PC_IPCRD         ³
+³                 A1.L     pointer to IPC write only register, PC_IPCWR        ³
+³                                                                              ³
+³ERRORS:          none                                                         ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+2E80 IPC_SET       LEA      PC_IPCWR,A1            ;A1 points at IPC write only port
+                   LEA      $1D(A1),A0             ;and A0 at the IPC read only port
+                   MOVEQ    #6,D6
+                   RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=IPC_SEND        SEND COMMAND TO IPC                                          ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D0.B     command or parameter to be sent                     ³
+³                 D6.L     bit number to test for completion                   ³
+³                 A0.L     pointer to IPC read only register                   ³
+³                 A1.L     pointer to IPC write only register                  ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:          none                                                         ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+2E8E IPC_SEND      LSL.B    #4,D0
+                   ORI.B    #8,D0
+2E94 L02E94        LSL.B    #1,D0
+                   BEQ.S    L02EA6
+                   MOVEQ    #3,D1
+                   ROXL.B   #1,D1
+                   ASL.B    #1,D1
+                   MOVE.B   D1,(A1)
+2EA0 L02EA0        BTST     D6,(A0)
+                   BNE.S    L02EA0
+                   BRA.S    L02E94
+
+2EA6 L02EA6        RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=IPC_RETN        GET IPC RETURN PARAMETER NIBBLE                              ³
+³=IPC_RETB        GET IPC RETURN PARAMETER BYTE                                ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D6.B     bit number to test for completion                   ³
+³                 A0.L     pointer to IPC read only register                   ³
+³                 A1.L     pointer to IPC write only register                  ³
+³                                                                              ³
+³EXIT:            D1.B     return parameter                                    ³
+³                                                                              ³
+³ERRORS:          none                                                         ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   Communications with the IPC are particularly slow and this routine is number
+   exception as it transfers information one bit at a time until either the
+   lower nibble or a full byte's worth has been collected.
+
+2EA8 IPC_RETN      MOVEQ    #%00010000,D1          ;signal "get four bits from the IPC"
+                   BRA.S    L02EAE                 ;get the bits
+
+2EAC IPC_RETB      MOVEQ    #%00000001,D1          ;signal "get eight bits from the IPC"
+2EAE L02EAE        MOVE.B   #%00001110,(A1)        ;signal "expect a return parameter"
+2EB2 L02EB2        BTST     D6,(A0)                ;is it ok to fetch it ?
+                   BNE.S    L02EB2                 ;wait until it is ok if not
+                   MOVE.B   (A0),D0                ;then get a parameter bit
+                   ROXL.B   #1,D0                  ;and move it into the return parameter
+                   ROXL.B   #1,D1                  ;check number of bits received so far
+                   BCC.S    L02EAE                 ;carry flag set if amount correct
+                   RTS
+
+2.11 General memory management utilities.
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=MM_ALCHP        ALLOCATE COMMMON HEAP               (VECTOR $C0)             ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D1.L     number of bytes required                            ³
+³                 A6.L     system variables                                    ³
+³                                                                              ³
+³EXIT:            D1.L     number of bytes allocated                           ³
+³                 A0.L     start of area allocated                             ³
+³                 D2,D3,A1,A2 and A3 corrupted                                 ³
+³                                                                              ³
+³ERRORS:          ERR.OM   out of memory                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+2EC0 MM_ALCHP      LEA      SV.CHPFR(A6),A0
+                   MOVEQ    #15,D2
+                   JSR      L03018(PC)
+                   BLT.S    L02EE8
+                   LEA      4(A6),A2
+                   CMPA.L   A1,A2
+                   BEQ.S    L02ED8
+                   CLR.L    8(A1)
+2ED8 L02ED8        MOVE.L   D1,D0
+                   ADDQ.W   #4,A0
+                   SUBQ.L   #4,D0
+2EDE L02EDE        CLR.L    (A0)+
+                   SUBQ.L   #4,D0
+                   BGT.S    L02EDE
+                   SUBA.L   D1,A0
+                   BRA.S    L02F0A
+
+2EE8 L02EE8        MOVE.L   D1,-(A7)
+2EEA L02EEA        ADDA.L   (A0),A1
+                   CMPA.L   SV.FREE(A6),A1
+                   BNE.S    L02EF4
+                   SUB.L    (A0),D1
+2EF4 L02EF4        JSR      L03160(PC)
+                   BNE.S    L02F08
+                   SUBA.L   D1,A0
+                   LEA      SV.CHPFR(A6),A1
+                   JSR      L03070(PC)
+                   MOVE.L   (A7)+,D1
+                   BRA.S    MM_ALCHP
+
+2F08 L02F08        ADDQ.W   #4,A7
+2F0A L02F0A        RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=MM_ALTPA        EXPAND TRANSIENT PROGRAM AREA                                ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:                                                                        ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+2F0C MM_ALTPA      LEA      SV.TRNFR(A6),A0
+2F10 L02F10        MOVEQ    #15,D2
+                   MOVEQ    #1,D0
+                   JSR      MM_SRCH(PC)
+                   TST.L    D2
+                   BGT.S    L02F44
+                   MOVE.L   D1,-(A7)
+                   LEA      SV.TRNSP(A6),A1
+                   ADDA.L   4(A1),A1
+                   CMPA.L   SV.TRNSP(A6),A1
+                   BNE.S    L02F2E
+                   SUB.L    (A1),D1
+2F2E L02F2E        JSR      MM_ALBAS(PC)
+                   BNE.S    L02F6C
+                   SUB.L    D1,SV.TRNSP(A6)
+                   LEA      SV.TRNFR(A6),A1
+                   JSR      L03070(PC)
+                   MOVE.L   (A7)+,D1
+                   BRA.S    MM_ALTPA
+
+2F44 L02F44        MOVEA.L  A2,A0
+2F46 L02F46        ADDA.L   4(A2),A0
+                   MOVE.L   (A0),D3
+                   CMP.L    D1,D3
+                   BGT.S    L02F60
+                   MOVE.L   4(A0),D3
+                   BEQ.S    L02F5A
+                   ADD.L    A0,D3
+                   SUB.L    A2,D3
+2F5A L02F5A        MOVE.L   D3,4(A2)
+                   BRA.S    L02F68
+
+2F60 L02F60        SUB.L    D1,D3
+2F62 L02F62        MOVE.L   D3,(A0)
+                   ADDA.L   D3,A0
+                   MOVE.L   D1,(A0)
+2F68 L02F68        MOVEQ    #0,D0                  ;signal "no errors"
+                   RTS
+
+2F6C L02F6C        ADDQ.W   #4,A7
+2F6E L02F6E        RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=MM_RECHP        RELEASE COMMON HEAP SPACE           (VECTOR $C2)             ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A0.L     start of area to release                            ³
+³                 A6.L     system variables                                    ³
+³                                                                              ³
+³EXIT:            D1,D2,D3,A0,A1,A2 and A3 corrupted                           ³
+³                                                                              ³
+³ERRORS:          none                                                         ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+2F70 MM_RECHP      MOVE.L   (A0),D1
+                   LEA      SV.CHPFR(A6),A1
+                   JSR      L03070(PC)
+                   MOVE.L   (A1),D2
+                   ADDA.L   D2,A1
+                   CMPA.L   SV.FREE(A6),A1
+                   BNE.S    L02F9A
+                   MOVE.L   D2,D1
+                   JSR      L03194(PC)
+                   SUB.L    D1,D2
+                   BEQ.S    L02F96
+                   ADDA.L   4(A2),A2
+                   MOVE.L   D2,(A2)
+                   BRA.S    L02F9A
+
+2F96 L02F96        CLR.L    4(A2)
+2F9A L02F9A        MOVEQ    #0,D0                  ;signal "no errors"
+2F9C L02F9C        RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=MM_RETPA        RELEASE TRANSIENT PROGRAM AREA                               ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:                                                                        ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+2F9E MM_RETPA      MOVE.L   (A0),D1
+                   LEA      SV.TRNFR(A6),A1
+                   JSR      L03070(PC)
+                   LEA      SV.TRNSP(A6),A2
+                   ADDA.L   4(A2),A2
+                   CMPA.L   SV.TRNSP(A6),A2
+                   BNE.S    L02FF0
+                   MOVE.L   4(A2),-(A7)
+                   MOVE.L   (A2),D2
+                   MOVE.L   D2,D1
+                   JSR      MM_REBAS(PC)
+                   ADD.L    D1,SV.TRNSP(A6)
+                   SUB.L    D1,D2
+                   BEQ.S    L02FE4
+                   MOVEA.L  (A7)+,A1
+                   ADDA.L   D1,A2
+                   ADD.L    D1,SV.TRNFR(A6)
+                   MOVE.L   D2,(A2)
+                   CLR.L    8(A2)
+                   MOVE.L   A1,4(A2)
+                   BEQ.S    L02FF0
+                   SUB.L    D1,4(A2)
+                   BRA.S    L02FF0
+
+2FE4 L02FE4        MOVE.L   (A7)+,D2
+2FE6 L02FE6        BEQ.S    L02FEC
+                   ADD.L    SV.TRNFR(A6),D2
+2FEC L02FEC        MOVE.L   D2,SV.TRNFR(A6)
+2FF0 L02FF0        RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=MT_FREE         FIND AMOUNT OF FREE SPACE  (TRAP #1 WITH D0 = $06)           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           none                                                         ³
+³                                                                              ³
+³EXIT:            D1.L     maximum free space                                  ³
+³                 D2,D3,A0,A1,A2 and A3 corrupted                              ³
+³                                                                              ³
+³ERRORS:          none                                                         ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   This TRAP finds the maximum free space that could be allocated to a
+   job. This will only occur if the free space in the transient program
+   area (released by a previous job or jobs) is very much larger than the
+   available free space in the slave block area or vice-versa. Otherwise
+   the TRAP will only give half the amount which could be allocated.
+
+2FF2 MT_FREE       MOVEQ    #1,D0                  ;signal "find maximum"
+                   MOVEQ    #0,D1                  ;amount to find
+                   LEA      SV.TRNFR(A6),A0        ;A0 points at start of TRNSP free space
+                   JSR      MM_SRCH(PC)            ;find the largest free space in list
+
+   The largest free space in the transient program area has been found so
+   compare this with the current size of the slave block area. If it's not
+   as large then the latter will be used if allocation is requested.
+
+                   MOVEA.L  SV.BASIC(A6),A0        ;A0 points at end of the system free spa
+                   SUBA.W   #512,A0                ;allow for one slave block at least
+                   SUBA.L   SV.FREE(A6),A0         ;and subtract the start of free space
+                   MOVE.L   A0,D1                  ;copy result for comparison
+                   CMP.L    D1,D2                  ;greater than free space in TRNSP ?
+                   BLE.S    L03012                 ;exit if so
+                   MOVE.L   D2,D1                  ;otherwise use the latter value
+3012 L03012        BRA      CLEANUP                ;to give maximum amount to job
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=MM_ALLOC        ALLOCATE HEAP SPACE                 (VECTOR $D8)             ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D1.L     length of space required                            ³
+³                 A0.L     pointer to pointer to free space                    ³
+³                                                                              ³
+³EXIT:            D1.L     amount of space allocated                           ³
+³                 A0.L     start of area allocated (relative to A6)            ³
+³                 D2,D3,A1,A2 and A3 corrupted                                 ³
+³                                                                              ³
+³ERRORS:          ERR.OM   number free space large enough                      ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+3016 MM_ALLOC      MOVEQ    #7,D2                  ;use an increment size of 8 bytes
+3018 L03018        MOVEQ    #0,D0                  ;and search to end of list
+                   JSR      MM_SRCH(PC)            ;search through the linked list
+                   CMP.L    D1,D2                  ;end of list reached ?
+                   BEQ.S    L03034                 ;jump forward if so or amount ok
+                   BGT.S    L03028
+                   MOVEQ    #ERR.OM,D0             ;signal "out of memory"
+                   RTS
+
+   The required amount has been found so set up the pointers.
+
+3028 L03028        ADD.L    D1,4(A1)               ;form relative pointer to next block
+302C L0302C        MOVEA.L  A0,A1                  ;A1 points at start of space allocated
+                   ADDA.L   D1,A1
+                   SUB.L    D1,D3
+                   MOVE.L   D3,(A1)
+3034 L03034        MOVE.L   4(A0),D2
+                   BEQ.S    L0303E
+                   ADD.L    A0,D2
+                   SUB.L    A1,D2
+303E L0303E        MOVE.L   D2,4(A1)
+                   MOVE.L   D1,(A0)
+                   RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=MM_SRCH         SEARCH THROUGH A FREE SPACE LINKED LIST                      ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D0.B     search flag (0 = goto end of list)                  ³
+³                 D1.L     length of space required                            ³
+³                 D2.B     mask for block size increment                       ³
+³                 A0.L     pointer to pointer to start of list                 ³
+³                                                                              ³
+³EXIT:            D1.L     amount of space allocated                           ³
+³                 A0.L     start of area allocated (relative to A6)            ³
+³                 D2,D3,A1,A2 and A3 corrupted                                 ³
+³                                                                              ³
+³ERRORS:          none                                                         ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+3046 MM_SRCH       SUBQ.W   #4,A0                  ;A0 points at supposed length word at st
+3048 L03048        ADD.L    D2,D1                  ;find nearest multiple of increment
+                   NOT.B    D2
+                   AND.B    D2,D1
+                   MOVEQ    #0,D2                  ;initialise count and amount to find
+                   MOVEA.L  D2,A2
+
+   Search through the linked list of free space blocks until the required
+   amount is found or until the end if the list is reached.
+
+3052 L03052        MOVEA.L  A0,A1                  ;copy pointer to free space block
+                   MOVE.L   4(A0),D3               ;get relative pointer to next block
+                   BEQ.S    L0306E                 ;and exit if end of list (zero if so)
+                   ADDA.L   D3,A0                  ;A0 points at next free space block
+                   MOVE.L   (A0),D3                ;get length of next block
+                   CMP.L    D1,D3                  ;amount ok ?
+                   BLT.S    L03052                 ;try next block if not
+                   MOVEA.L  A1,A2                  ;otherwise set A2 to this block
+                   CMP.L    D2,D3                  ;block increment ok ?
+                   BLE.S    L0306A                 ;jump forward if so otherwise use
+                   MOVE.L   D3,D2                  ;length of next block as increment
+306A L0306A        TST.B    D0                     ;stop here or find maximum ?
+                   BNE.S    L03052                 ;continue to end of list if maximum
+306E L0306E        RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=MM_LNKFR        LINK FREE SPACE INTO HEAP           (VECTOR $DA)             ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D1.L     length to link in                                   ³
+³                 A0.L     base of new space (relative to A6)                  ³
+³                 A1.L     pointer to pointer to free space (relative)         ³
+³                                                                              ³
+³EXIT:            D1,D2,D3,A0,A1,A2 and A3 corrupted                           ³
+³                                                                              ³
+³ERRORS:          none                                                         ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+3070 L03070        CLR.L    8(A0)
+3074 MM_LNKFR      SUBQ.W   #4,A1
+                   SUBA.L   A2,A2
+3078 L03078        MOVEA.L  A2,A3
+                   MOVEA.L  A1,A2
+                   MOVE.L   4(A1),D2
+                   BEQ.S    L0308C
+                   ADDA.L   D2,A1
+                   CMPA.L   A0,A1
+                   BLE.S    L03078
+                   SUBA.L   A0,A1
+                   BRA.S    L0308E
+
+308C L0308C        MOVEA.L  D2,A1
+308E L0308E        MOVE.L   A0,D2
+3090 L03090        SUB.L    A2,D2
+                   MOVE.L   D2,4(A2)
+                   MOVE.L   D1,(A0)+
+                   MOVE.L   A1,(A0)
+309A L0309A        MOVEA.L  A2,A1
+                   MOVEA.L  A3,A2
+309E L0309E        MOVE.L   4(A1),D2
+                   BEQ.S    L030C8
+                   MOVEA.L  A2,A3
+                   MOVEA.L  A1,A2
+                   ADDA.L   D2,A1
+                   MOVE.L   A3,D2
+                   BEQ.S    L0309E
+                   MOVE.L   (A2),D2
+                   ADD.L    A2,D2
+                   CMP.L    A1,D2
+                   BNE.S    L0309E
+                   MOVE.L   4(A1),D2
+                   BEQ.S    L030BE
+                   ADD.L    (A2),D2
+30BE L030BE        MOVE.L   D2,4(A2)
+                   MOVE.L   (A1),D2
+                   ADD.L    D2,(A2)
+                   BRA.S    L0309A
+
+30C8 L030C8        RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=MM_ALBAS        ALLOCATE BASIC AREA                                          ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:                                                                        ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+30CA MM_ALBAS      JSR      L0314C(PC)
+30CE L030CE        BNE.S    L030F0
+                   BSR.S    L030F2
+30D2 L030D2        MOVE.L   (A1)+,(A0)+
+                   SUBQ.L   #4,D0
+                   BNE.S    L030D2
+                   BRA.S    L030F0
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=MM_REBAS        RELEASE BASIC AREA                                           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:                                                                        ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+30DA MM_REBAS      JSR      L03188(PC)
+30DE L030DE        NEG.L    D1
+                   BEQ.S    L030F0
+                   BSR.S    L030F2
+                   NEG.L    D1
+                   ADDA.L   D0,A0
+                   ADDA.L   D0,A1
+30EA L030EA        MOVE.L   -(A1),-(A0)
+                   SUBQ.L   #4,D0
+                   BNE.S    L030EA
+30F0 L030F0        RTS
+
+30F2 L030F2        MOVEA.L  SV.JBBAS(A6),A3
+30F6 L030F6        MOVE.L   A0,(A3)
+                   ADDA.L   D1,A0
+                   SUB.L    D1,$58(A0)
+                   SUB.L    D1,$5C(A0)
+                   MOVEA.L  A0,A1
+                   SUBA.L   D1,A0
+                   MOVE.L   SV.TRNSP(A6),D0
+                   SUB.L    A1,D0
+                   CMPA.L   SV.JBPNT(A6),A3
+                   BNE.S    L0311C
+                   SUB.L    D1,8(A5)
+                   MOVE.L   USP,A3
+                   SUBA.L   D1,A3
+                   MOVE.L   A3,USP
+311C L0311C        RTS
+
+311E L0311E        ADDI.L   #$1FF,D1
+3124 L03124        ANDI.W   #$FE00,D1
+3128 L03128        RTS
+
+312A L0312A        MOVEA.L  SV.BASIC(A6),A0
+312E L0312E        MOVEQ    #-8,D3
+                   BRA.S    L03138
+
+3132 L03132        MOVEA.L  SV.FREE(A6),A0
+3136 L03136        MOVEQ    #8,D3
+3138 L03138        MOVE.L   A0,D0
+                   SUB.L    A6,D0
+                   LSR.L    #6,D0
+                   MOVEA.L  SV.BTBAS(A6),A1
+                   ADDA.W   D0,A1
+                   MOVE.L   D1,D0
+                   LSR.L    #6,D0
+                   LSR.L    #3,D0
+                   RTS
+
+314C L0314C        BSR.S    L0311E
+314E L0314E        BSR.S    L0312A
+                   SUBA.L   D1,A0
+                   CMPA.L   SV.FREE(A6),A0
+                   BLE.S    L031B0
+                   MOVE.L   A0,SV.BASIC(A6)
+                   ADDA.L   D3,A1
+                   BRA.S    L03182
+
+3160 L03160        BSR.S    L0311E
+3162 L03162        BSR.S    L03132
+                   ADDA.L   D1,A0
+                   CMPA.L   SV.BASIC(A6),A0
+                   BGE.S    L031B0
+                   MOVE.L   A0,SV.FREE(A6)
+                   BRA.S    L03182
+
+3172 L03172        MOVEQ    #12,D2
+3174 L03174        AND.B    (A1),D2
+                   BEQ.S    L0317E
+                   JSR      L03434(PC)
+                   BRA.S    L03172
+
+317E L0317E        CLR.B    (A1)
+3180 L03180        ADDA.W   D3,A1
+3182 L03182        DBF      D0,L03172
+                   BRA.S    L031AC
+
+3188 L03188        BSR.S    L03124
+318A L0318A        BSR.S    L0312A
+                   ADDA.L   D1,A0
+                   MOVE.L   A0,SV.BASIC(A6)
+                   BRA.S    L031A8
+
+3194 L03194        BSR.S    L03124
+3196 L03196        BSR.S    L03132
+                   SUBA.L   D1,A0
+                   MOVE.L   A0,SV.FREE(A6)
+                   SUBA.W   D3,A1
+                   BRA.S    L031A8
+
+31A2 L031A2        MOVE.B   #1,(A1)
+31A6 L031A6        SUBA.W   D3,A1
+31A8 L031A8        DBF      D0,L031A2
+31AC L031AC        MOVEQ    #0,D0
+                   BRA.S    L031B2
+
+31B0 L031B0        MOVEQ    #ERR.OM,D0             ;signal "out of memory"
+31B2 L031B2        RTS
+
+2.12 I/O sub-system TRAP #2 handler.
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=CHKTRP2         HANDLE TRAP #2 FUNCTIONS                                     ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D0.B     function number                                     ³
+³                 D3.W     timeout                                             ³
+³                 A0.L     channel ID or address of device name                ³
+³                 A5.L     pointer to saved SuperBASIC registers               ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:          ERR.BP   invalid function                                    ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   TRAP handler alters registers so that A5 and A7 point at saved SuperBASIC
+   registers, A6 points at system variables and D7 = D0.
+   The registers are saved in the order:-
+
+   1.     Long word for program counter       $0E(A5)
+   2.     Word for status register            $0C(A5)
+   3.     Long word for A6                    $08(A5)
+   4.     Long word for A5                    $04(A5)
+   5.     Long word for D7                    $00(A5)
+
+   All the TRAP #2 calls deal with the  allocation of resources to channels
+   , formatting directory device media and deleting files.
+
+31B4 CHKTRP2       MOVEA.L  SV.JBPNT(A6),A1        ;A1 points at current job table entry an
+                   MOVEA.L  (A1),A1                ;at the job header
+                   BCLR     #7,JB.RELA6(A1)        ;absolute addresses to be used ?
+                   BEQ.S    ABS_ADDR               ;jump forward if so otherwise
+                   ADDA.L   8(A5),A0               ;make A0 absolute using saved A6
+31C6 ABS_ADDR      SUBQ.B   #1,D0                  ;is it an IO.OPEN call ?
+                   BEQ.S    IO_OPEN                ;jump forward to routine if so
+                   SUBQ.B   #1,D0                  ;is it an IO.CLOSE call ?
+                   BEQ      IO_CLOSE               ;jump forward to routine if so
+                   SUBQ.W   #1,D0                  ;is it an IO.FORMT call ?
+                   BEQ      IO_FORMT               ;jump forward to routine if so
+                   SUBQ.W   #1,D0                  ;is it an IO.DELET call ?
+                   BEQ      IO_DELET               ;jump forward if so otherwise
+                   MOVEQ    #ERR.BP,D0             ;signal "bad parameter"
+                   BRA      CHKSBIT
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=IO_OPEN         OPEN A CHANNEL             (TRAP #2 WITH D0 = $01)           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D1.L     job ID (-1 if current job)                          ³
+³                 D3.W     open type (0 to 4)                                  ³
+³                 A0.L     address of channel name string                      ³
+³                 A5.L     pointer to saved super basic registers              ³
+³                                                                              ³
+³EXIT:            D1.L     job ID                                              ³
+³                 A0.L     new channel ID                                      ³
+³                 D2,D3,A1,A2 and A3 preserved                                 ³
+³                                                                              ³
+³ERRORS:          ERR.NJ   invalid job ID                                      ³
+³                 ERR.OM   out of memory                                       ³
+³                 ERR.NO   too many channels                                   ³
+³                 ERR.NF   file or device not found                            ³
+³                 ERR.EX   file already exists                                 ³
+³                 ERR.IU   file or device in use                               ³
+³                 ERR.BN   bad device name                                     ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   The value of D3 on entry determines the type of channel open for other
+   than pipes as follows:-
+
+   1.     0 = old exclusive device
+   2.     1 = old shared device
+   3.     2 = new exclusive device
+   4.     3 = new overwrite file
+   5.     4 = open directory
+
+   For pipes, the value of D3 gives the output pipe ID for an input pipe.
+
+   In practice types 0 to 3 are the same for simple device drivers and in
+   fact type 2 is not supported for any device. Type 4 is only relevant for
+   a directory device driver.
+
+31E2 IO_OPEN       MOVEM.L  A1-4,-(A7)             ;save registers used to set up channel
+                   MOVEA.L  A0,A1                  ;save address of device name
+                   JSR      CHKJBID(PC)            ;check job ID,A0 points at header on exi
+                   EXG      A0,A1                  ;swap address of name with channel
+
+   Find the first free entry in the channel table.
+
+                   MOVEA.L  SV.CHBAS(A6),A3        ;A3 points at start of channel table
+31F2 SCAN_CT       TST.B    (A3)                   ;entry free ?
+                   BLT.S    SCAN_DD                ;jump forward if so
+                   ADDQ.W   #4,A3                  ;A3 points at next entry
+                   CMPA.L   SV.CHTOP(A6),A3        ;end of channel table reached ?
+                   BLT.S    SCAN_CT                ;check next entry if not otherwise
+                   MOVEQ    #ERR.NO,D0             ;signal "channel not found" as the
+                   BRA.S    END_OPEN               ;channel table is full
+
+   Call all the device drivers in turn until no errors are returned.
+
+3202 SCAN_DD       MOVEA.L  SV.DRLST(A6),A2        ;A2 points at simple device driver list
+3206 NEXT_DD       MOVEM.L  D1-7/A1-6,-(A7)        ;save registers
+                   LEA      -$18(A2),A3            ;A3 points at assumed start of linkage b
+                   MOVEA.L  DEV.OPEN(A2),A4        ;get address of open routine
+                   JSR      (A4)                   ;call it
+                   MOVEM.L  (A7)+,D1-7/A1-6        ;restore the registers
+                   TST.L    D0                     ;correct device driver found ?
+                   BEQ.S    SET_CHAN               ;set up channel definition block if so
+                   CMPI.W   #ERR.NF,D0             ;"device not found" error ?
+                   BNE.S    END_OPEN               ;jump forward if not
+                   MOVEA.L  (A2),A2                ;get link to next device driver
+                   MOVE.L   A2,D0                  ;end of linked list ?
+                   BGT.S    NEXT_DD                ;call next driver if not
+
+   The device name did not match any of the simple device drivers so try
+   the directory device driver linked list instead.
+
+                   JSR      L03464(PC)
+                   TST.L    D0                     ;any errors ?
+                   BNE.S    END_OPEN               ;exit if so
+
+   The correct device driver has been found so prepare the channel table.
+
+3230 SET_CHAN      MOVE.L   A0,(A3)                ;set up entry in channel table
+                   MOVE.W   SV.CHTAG(A6),D2        ;get current channel tag and set up
+                   ADDQ.W   #1,SV.CHTAG(A6)        ;new one for next time
+                   ADDQ.W   #4,A0                  ;A0 points at CH.DRIVR
+
+   Set up the channel definition block.
+
+                   MOVE.L   A2,(A0)+               ;pointer to driver linkage block
+                   MOVE.L   D1,(A0)+               ;ID of owner job
+                   MOVE.L   A3,(A0)+               ;location to be set when channel closed
+                   MOVE.W   D2,(A0)+               ;channel tag
+                   CLR.W    (A0)+                  ;signal "status ok,no action"
+                   CLR.L    (A0)+                  ;ID of job waiting for I/O
+                   SWAP     D2
+                   SUBA.L   SV.CHBAS(A6),A3        ;A3 = offset into channel table
+                   MOVE.W   A3,D2
+                   LSR.W    #2,D2                  ;form channel ID from offset
+                   MOVEA.L  D2,A0
+                   CMP.W    SV.CHMAX(A6),D2        ;greater than maximum to date ?
+                   BLS.S    END_OPEN               ;jump forward if not
+                   MOVE.W   D2,SV.CHMAX(A6)        ;otherwise update the maximum
+325E END_OPEN      MOVEM.L  (A7)+,A1-4
+                   BRA.S    END_CLOS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=IO_CLOSE        CLOSE A CHANNEL            (TRAP #2 WITH D0 = $02)           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A0.L     channel ID                                          ³
+³                                                                              ³
+³EXIT:            A0       corrupted                                           ³
+³                 D1,D2,D3,A1,A2 and A3 preserved                              ³
+³                                                                              ³
+³ERRORS:          ERR.NC   channel not open                                    ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   When a channel is closed, an attempt is made to release all the space
+   which was associated with that channel normally in the common heap.
+   The actual routine in the device driver is used to free the channel and
+   all this routine does is find the correct channel to close.
+
+3264 IO_CLOSE      MOVE.L   A0,D7                  ;save channel ID for later
+                   JSR      CHKCHID(PC)            ;check channel ID,A0 points at block on
+                   MOVEM.L  D1-7/A1-6,-(A7)        ;save registers
+                   MOVEA.L  CH.DRIVR(A0),A4        ;A4 points at link to next device driver
+                   LEA      -$18(A4),A3            ;A3 points at assummed start of linkage
+                   MOVEA.L  DEV.CLOS(A4),A4        ;get the close channel routine address
+                   JSR      (A4)                   ;and call it
+                   MOVEM.L  (A7)+,D1-7/A1-6        ;restore the registers
+                   LSL.W    #2,D7                  ;form long word offset from channel ID
+                   MOVEA.L  SV.CHBAS(A6),A0        ;A0 points at start of the channel table
+                   ADDA.W   D7,A0                  ;then at required entry in table
+                   ST       (A0)                   ;set entry to "unused"
+328A END_CLOS      BRA      CHKSBIT
+
+2.13 I/O sub-system TRAP #3 handler.
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=CHKTRP3         HANDLE TRAP #3 FUNCTIONS (START OF I/O SUB SYSTEM)           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D0.B     function number                                     ³
+³                 D3.W     timeout                                             ³
+³                 A0.L     channel ID                                          ³
+³                                                                              ³
+³EXIT:            D2,D3,A0,A1,A2 and A3 preserved                              ³
+³                                                                              ³
+³ERRORS:          ERR.NC   not complete                                        ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   TRAP handler alters registers so that A5 and A7 point at saved SuperBASIC
+   registers,A6 points at system variables and D7 = D0.
+   The registers are saved in the order:-
+
+   1.     Long word for program counter       $0E(A5)
+   2.     Word for status register            $0C(A5)
+   3.     Long word for A6                    $08(A5)
+   4.     Long word for A5                    $04(A5)
+   5.     Long word for D7                    $00(A5)
+
+   All the TRAP #3 calls are concerned with aspects of actual device I/O
+   graphics and file handling.
+
+328E CHKTRP3       MOVE.L   A0,D7                  ;move channel ID to D7
+                   JSR      CHKCHID(PC)            ;check channel ID,A0 points at header on
+
+   A0 now points at the channel definition block.
+
+                   TAS      CH.STAT(A0)            ;signal and test "job waiting for I/O"
+                   BNE      L03326                 ;jump if job waiting already
+                   MOVEM.L  D2-7/A2-6,-(A7)
+                   CLR.L    -(A7)                  ;signal "use relative values"
+                   ANDI.L   #$7F,D0                ;reduce to range 0 - 127
+                   CMPI.B   #FS.SAVE,D0            ;is it a standard function ?
+                   BGT.S    BYTE_IO                ;jump forward if not
+                   CMPI.B   #FS.HEADS,D0           ;is it a file header command ?
+                   BGE.S    IOSTRING               ;jump forward if so
+                   CMPI.B   #IO.SSTRG,D0           ;is it a simple I/O TRAP ?
+                   BGT.S    BYTE_IO                ;jump forward if not
+                   BTST     #1,D0                  ;fetch line or byte ?
+                   BEQ.S    BYTE_IO                ;jump forward if byte
+
+   If a string of bytes is required, the cursor position (D1) is zeroed
+   first.
+
+32C0 IOSTRING      MOVEQ    #0,D1                  ;signal "string of bytes required"
+32C2 BYTE_IO       MOVEA.L  SV.JBPNT(A6),A3        ;A3 points at current job table entry
+                   MOVEA.L  (A3),A3                ;and then at job header
+                   BCLR     #7,JB.RELA6(A3)        ;test and signal "not TRAP #4"
+                   BEQ.S    A1_ABS                 ;jump forward if already absolute
+                   MOVE.L   8(A5),(A7)             ;copy saved A6 to top of stack
+                   ADDA.L   (A7),A1                ;make A1 absolute
+32D6 A1_ABS        MOVEA.L  CH.DRIVR(A0),A4        ;A4 points at device driver
+                   MOVE.B   D0,CH.ACTN(A0)         ;set to function number
+                   MOVEQ    #0,D3                  ;set timeout to zero
+                   LEA      -$18(A4),A3            ;A3 points at assumed start of linkage b
+                   MOVEA.L  DEV.IO(A4),A4          ;and A4 at I/O routine
+
+   On entry to the I/O routine the following conditions prevail:-
+
+   1.     D2,A2 and D4 to D7 passed as on entry to TRAP handler.
+
+   2.     D0.B = Action required.
+   3.     D1.0 as on entry to TRAP unless string of bytes required where
+          it is set to 0.
+   4.     D3.L = 0 (do TRAP in one frame).
+   5.     A0.L points at channel definition block.
+   6.     A1.L = absolute value.
+   7.     A3.L points at assumed start of linkage block.
+   8.     A5.L points at saved SuperBASIC registers (see entry conditions above)
+   9.     A6.L points at QDOS system variables.
+
+                   JSR      (A4)                   ;call the routine
+                   SUBA.L   (A7),A1                ;make A1 relative again
+                   CMPI.W   #ERR.NC,D0             ;any errors ?
+                   BNE.S    L03334                 ;jump if other than "not complete"
+                   MOVE.W   10(A7),D3              ;timout expired ?
+                   BEQ.S    L03334                 ;exit if so
+                   MOVEA.L  $2C(A7),A6             ;restore saved A6 (in TRAP handler)
+                   JSR      GETJBID(PC)            ;get ID of current job
+                   MOVE.L   D0,CH.JOBWT(A0)        ;current job is waiting
+                   LEA      CH.STAT(A0),A0         ;A0 points at this variable
+                   TST.L    (A7)+                  ;absolute or relative values ?
+                   BNE.S    L0330E                 ;jump if absolute
+                   ST       (A0)                   ;signal "A1 passed absolute"
+330E L0330E        MOVE.L   A0,JB.HOLD(A3)         ;set to address of {ch.stat}
+                   MOVE.W   D3,JB.STAT(A3)         ;set to timeout given on entry
+                   SF       JB.PRIOR(A3)           ;zero job priority
+                   MOVEQ    #ERR.NC,D0             ;signal "not complete"
+                   MOVEM.L  (A7)+,D2-7/A2-6        ;restore registers
+3320 L03320        MOVEA.L  D7,A0                  ;and channel ID
+                   BRA      SCHEDULER              ;then enter scheduler
+
+3326 L03326        TST.W    D3                     ;check timeout
+                   BEQ.S    L03330                 ;enter scheduler if zero
+                   SUBQ.L   #2,$0E(A7)             ;otherwise reduce timeout suitably
+                   BRA.S    L03320                 ;reset ID then enter scheduler
+
+3330 L03330        MOVEQ    #ERR.NC,D0             ;signal "not complete"
+                   BRA.S    L0333E
+
+3334 L03334        ADDQ.W   #4,A7                  ;ignore top of stack
+                   MOVEM.L  (A7)+,D2-7/A2-6        ;restore registers
+                   SF       CH.STAT(A0)            ;clear status to "ok"
+333E L0333E        MOVEA.L  D7,A0                  ;reset channel ID
+                   BRA      CHKSBIT
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=CHKTRP4         CONVERT TO ABSOLUTE VALUES                                   ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           none                                                         ³
+³                                                                              ³
+³EXIT:            none                                                         ³
+³                                                                              ³
+³ERRORS:          none                                                         ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   TRAP handler alters registers so that A6 now points at system variables.
+
+3344 CHKTRP4       MOVE.L   A3,-(A7)               ;save address of job header
+                   MOVEA.L  SV.JBPNT(A6),A3        ;A3 points at current job table entry
+                   MOVEA.L  (A3),A3                ;and then at job header
+                   TAS      JB.RELA6(A3)           ;test and signal "TRAP #4 issued"
+                   MOVEA.L  (A7)+,A3               ;restore header address
+                   BRA      CHKSBIT
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=CHKCHID         CHECK CHANNEL ID                                             ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A0.L     channel ID                                          ³
+³                 A6.L     system variables                                    ³
+³                                                                              ³
+³EXIT:            A0.L     channel definition block                            ³
+³                                                                              ³
+³ERRORS:          ERR.NO   channel not open                                    ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+3356 CHKCHID       MOVE.L   A0,-(A7)
+                   MOVE.L   D0,-(A7)
+                   MOVE.L   A0,D0                  ;copy ID
+                   CMP.W    SV.CHMAX(A6),D0        ;> maximum to date ?
+                   BHI.S    L0337E                 ;if yes then must be invalid
+                   LSL.W    #2,D0                  ;form offset into channel table
+                   MOVEA.L  SV.CHBAS(A6),A0        ;then add offset to base
+                   ADDA.W   D0,A0
+                   TST.B    (A0)                   ;entry free ?
+                   BLT.S    L0337E                 ;error if not
+                   MOVEA.L  (A0),A0                ;A0 points at channel definition block
+                   SWAP     D0                     ;move channel tag into veiw
+                   CMP.W    CH.TAG(A0),D0          ;tag ok ?
+                   BNE.S    L0337E                 ;error if not
+                   MOVE.L   (A7)+,D0               ;restore function number
+                   ADDQ.W   #4,A7                  ;and ignore saved channel ID
+                   RTS
+
+337E L0337E        ADDQ.W   #4,A7                  ;ignore saved function number
+                   MOVEQ    #ERR.NO,D0             ;signal "channel not open"
+                   MOVEA.L  (A7)+,A0               ;restore channel ID
+                   ADDQ.W   #4,A7                  ;ignore return address
+                   BRA      CHKSBIT
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=DOWAITIO        DO WAITING I/O (END OF SCHEDULER LINKED LIST)                ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:                                                                        ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+338A DOWAITIO      DC.L     0                      ;link to next entry (null)
+                   DC.L     L03392                 ;pointer to routine
+
+3392 L03392        MOVEA.L  SV.CHPNT(A6),A1
+                   MOVEA.W  SV.CHMAX(A6),A2
+                   ADDA.W   A2,A2
+                   ADDA.W   A2,A2
+                   ADDA.L   SV.CHBAS(A6),A2
+                   MOVEA.L  A1,A3
+33A4 L033A4        ADDQ.W   #4,A1
+                   CMPA.L   A2,A1
+                   BLE.S    L033AE
+                   MOVEA.L  SV.CHBAS(A6),A1
+33AE L033AE        TST.B    (A1)
+                   BLT.S    L033BA
+                   MOVEA.L  (A1),A0
+                   MOVE.B   CH.STAT(A0),D4
+                   BNE.S    L033C0
+33BA L033BA        CMPA.L   A1,A3
+                   BNE.S    L033A4
+                   BRA.S    L0342C
+
+33C0 L033C0        MOVE.L   A1,SV.CHPNT(A6)
+                   MOVE.L   CH.JOBWT(A0),D1
+                   LSL.W    #2,D1
+                   MOVEA.L  SV.JBBAS(A6),A4
+                   ADDA.W   D1,A4
+                   TST.B    (A4)
+                   BLT.S    L0342E
+                   MOVEA.L  (A4),A4
+                   SWAP     D1
+                   CMP.W    JB.TAG(A4),D1
+                   BLT.S    L0342E
+                   MOVEQ    #0,D0
+                   MOVE.B   CH.ACTN(A0),D0
+                   MOVEQ    #-1,D3                 ;use an infinite timeout
+                   MOVEM.L  JB.D1(A4),D1-2
+                   MOVEM.L  JB.A1(A4),A1-2
+                   MOVE.L   A4,-(A7)
+                   CLR.L    -(A7)
+                   ADDQ.B   #1,D4
+                   BEQ.S    L03400
+                   MOVE.L   JB.A6(A4),(A7)
+                   ADDA.L   (A7),A1
+3400 L03400        MOVEA.L  CH.DRIVR(A0),A4
+                   LEA      -$18(A4),A3
+                   MOVEA.L  DEV_IO(A4),A4
+                   JSR      (A4)
+                   SUBA.L   (A7)+,A1
+                   MOVEA.L  (A7)+,A4
+                   MOVE.L   D1,JB.D1(A4)
+                   MOVE.L   A1,JB.A1(A4)
+                   CMPI.B   #$FF,D0
+                   BEQ.S    L0342C
+                   MOVE.L   D0,JB.D0(A4)
+                   CLR.B    CH.STAT(A0)
+                   CLR.W    JB.STAT(A4)
+342C L0342C        RTS
+
+342E L0342E        CLR.B    CH.STAT(A0)
+                   RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=                                                                             ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:                                                                        ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+3434 L03434        MOVEM.L  D0-3/A0-4,-(A7)
+                   MOVEQ    #0,D1
+                   MOVE.B   (A1),D1
+                   LSR.B    #4,D1
+                   LSL.B    #2,D1
+                   LEA      $100(A6),A2
+                   MOVEA.L  0(A2,D1.W),A2
+                   MOVEA.L  $10(A2),A4
+                   LEA      -$18(A4),A3
+                   MOVEA.L  $10(A4),A4
+                   JSR      (A4)
+                   MOVEM.L  (A7)+,D0-3/A0-4
+                   RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=IO_DELET        DELETE A FILE                                                ³
+³=IO_OPEN2        CHECK OPEN TYPE                                              ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D1.L     job ID (-1 for current job)                         ³
+³                 A0.L     location of channel name                            ³
+³                                                                              ³
+³EXIT:            D1,D3,A0,A1 and A2 corrupted                                 ³
+³                 D2 and A3  preserved                                         ³
+³                                                                              ³
+³ERRORS:          ERR.OM   out of memory                                       ³
+³                 ERR.NO   file not deleted as channel table full              ³
+³                 ERR.NF   file not found                                      ³
+³                 ERR.BN   bad device name or not a directory device           ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   Removes the file from the specified device if it is a directory device.
+
+345C IO_DELET      ST       D3                     ;signal "delete a file"
+                   BSR.S    TYPE_OK
+                   BRA      CHKSBIT
+
+   This entry point is used by the IO.OPEN TRAP and checks the open type.
+
+3464 IO_OPEN2      CMPI.B   #4,D3                  ;is it a valid open type ?
+                   BLS.S    TYPE_OK                ;jump forward if so otherwise
+                   MOVEQ    #ERR.BP,D0             ;signal "bad parameter" and exit
+                   RTS
+
+   The open type is ok so allocate memory for the channel defintion block.
+
+346E TYPE_OK       MOVEM.L  D1-6/A3-6,-(A7)
+                   MOVEA.L  A0,A5                  ;save address of channel name
+                   MOVE.L   #$A0,D1                ;default size for a microdrive channel
+                   JSR      MM_ALCHP(PC)           ;allocate the space,A0 points at area on
+                   BNE      L03594                 ;and exit if out of memory
+
+   All the channel definition blocks for the directory device drivers are
+   connected together in a linked list for each drive.
+
+                   ADDA.W   #FS.NEXT,A0            ;A0 points at link to next entry in list
+                   LEA      SV.FSLST(A6),A1        ;A1 points at pointer to start of list
+                   JSR      UT_LINK(PC)            ;link channel into list
+                   LEA      (A5),A1                ;A1 points at channel name
+                   JSR      CHK_DD(PC)             ;check the device name
+                   BNE      L03578                 ;and exit if not found
+
+   A2 now points at the start of the linkage block for this device driver and D1
+   the drive number. Scan through all the physical definition blocks until
+   the correct one has been found for this device.
+
+                   MOVEQ    #15,D2                 ;16 pointers to physical definitions
+                   MOVEQ    #-1,D0
+                   LEA      SV.FSLST(A6),A4        ;A4 points at last pointer + 1
+34A0 L034A0        MOVE.L   -(A4),D3               ;then D3 points at physical definition b
+                   BNE.S    L034A8                 ;jump forward if there is a block
+                   MOVE.W   D2,D0
+                   BRA.S    L034B6
+
+34A8 L034A8        MOVEA.L  D3,A1                  ;A1 points at start of list
+                   CMP.B    FS.DRIVN(A1),D1        ;correct drive number ?
+                   BNE.S    L034B6                 ;check next definition block if not
+                   CMPA.L   FS.DRIVR(A1),A2        ;correct device driver ?
+                   BEQ.S    L034E6                 ;jump forward if so otherwise check
+34B6 L034B6        DBF      D2,L034A0              ;next physical definition block
+
+   number physical definition block block exists so create one.
+
+                   MOVE.W   D0,D2
+                   BLT      L03576
+                   MOVEM.L  D1-2/A0/A2,-(A7)
+                   MOVE.L   DEV.PDLE(A2),D1        ;get length of physical definition
+                   JSR      MM_ALCHP(PC)           ;find the space,A0 points at area on exi
+                   MOVEM.L  (A7)+,D1-2/A1-2
+                   EXG      A0,A1
+                   BNE      L03578                 ;and exit if out of memory
+                   MOVE.L   A2,FS.DRIVR(A1)        ;set the address of the device driver
+                   MOVE.B   D1,FS.DRIVN(A1)        ;and of the drive number
+                   MOVE.W   D2,D0                  ;then form the pointer number
+                   LSL.W    #2,D0
+                   ADDA.W   D0,A4
+                   MOVE.L   A1,(A4)                ;and set pointer to new definition block
+
+   The correct device driver has been found and a physical definition block
+   exists.
+
+34E6 L034E6        MOVE.B   D2,5(A0)
+                   MOVE.B   11(A7),4(A0)
+                   LEA      $1A(A0),A4
+                   MOVE.W   (A5)+,D0
+                   MOVE.W   $24(A2),D3
+                   ADDQ.W   #2,D3
+                   ADDA.W   D3,A5
+                   SUB.W    D3,D0
+                   BLT.S    L0356A
+                   CMPI.W   #$24,D0
+                   BGT.S    L0356A
+                   MOVE.W   D0,(A4)+
+                   BRA.S    L0350E
+
+350C L0350C        MOVE.B   (A5)+,(A4)+
+350E L0350E        DBF      D0,L0350C
+                   MOVEA.L  A1,A5
+                   MOVEA.L  A0,A1
+3516 L03516        MOVEA.L  (A1),A1
+                   MOVE.L   A1,D0
+                   BEQ.S    L0355C
+                   CMP.B    5(A1),D2
+                   BNE.S    L03516
+                   MOVEQ    #1,D0
+                   MOVEA.W  #$1A,A6
+                   JSR      UT_CSTR(PC)
+                   MOVEA.L  $24(A7),A6
+                   BNE.S    L03516
+                   CMPI.B   #2,4(A0)
+                   BEQ.S    L0356E
+                   CMPI.B   #1,4(A0)
+                   BNE.S    L03572
+                   CMPI.B   #1,4(A1)
+                   BNE.S    L03572
+                   MOVE.W   6(A1),6(A0)
+                   MOVE.L   12(A1),12(A0)
+                   MOVE.W   #$40,10(A0)
+355C L0355C        MOVEA.L  A5,A1
+                   TST.W    6(A0)
+                   BEQ.S    L0359A
+                   SUBA.W   #$18,A0
+                   BRA.S    L0358E
+
+356A L0356A        MOVEQ    #-12,D0
+                   BRA.S    L03578
+
+356E L0356E        MOVEQ    #-8,D0
+                   BRA.S    L03578
+
+3572 L03572        MOVEQ    #-9,D0
+                   BRA.S    L03578
+
+3576 L03576        MOVEQ    #-6,D0
+3578 L03578        LEA      $140(A6),A1
+                   JSR      UT.UNLNK(PC)
+                   SUBA.W   #$18,A0
+                   MOVE.L   D0,D4
+                   JSR      L02F70(PC)
+                   MOVE.L   D4,D0
+                   BRA.S    L03594
+
+358E L0358E        ADDQ.B   #1,$22(A1)
+                   MOVEQ    #0,D0
+3594 L03594        MOVEM.L  (A7)+,D1-6/A3-6
+                   RTS
+
+359A L0359A        SUBA.W   #$18,A0
+                   MOVE.L   A1,-(A7)
+                   MOVE.L   A2,-(A7)
+                   LEA      -$18(A2),A3
+                   MOVEA.L  8(A2),A4
+                   JSR      (A4)
+                   MOVEA.L  (A7)+,A2
+                   MOVEA.L  (A7)+,A1
+                   TST.B    $1C(A0)
+                   BLT.S    L035BA
+                   TST.L    D0
+                   BEQ.S    L0358E
+35BA L035BA        ADDA.W   #$18,A0
+                   BRA.S    L03578
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=IO_FORMT        FORMAT A MEDIUM                                              ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A0.L     pointer to medium name                              ³
+³                                                                              ³
+³EXIT:            D1.W     number of good sectors                              ³
+³                 D2.W     total number of sectors on media                    ³
+³                 A0       corrupted                                           ³
+³                 D3,A1,A2 and A3 preserved                                    ³
+³                                                                              ³
+³ERRORS:          ERR.OM   out of memory                                       ³
+³                 ERR.NF   device not found                                    ³
+³                 ERR.IU   device in use                                       ³
+³                 ERR.FF   format failed                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   The actual formatting of the medium is done by the device driver and all
+   this routine does is find the correct driver to use if any.
+   TRAP handler alters registers so that A6 now points at QDOS system variables.
+
+35C0 IO_FORMT      MOVEM.L  D3-7/A1-5,-(A7)        ;save the registers
+                   MOVEA.L  A0,A1                  ;A1 points at medium name
+                   JSR      CHK_DD(PC)             ;check the device name
+                   BLT.S    L035D6                 ;and exit if device not found
+                   LEA      -$18(A2),A3            ;A3 points at assumed start of linkage b
+                   MOVEA.L  DEV.FORM(A2),A4        ;get the address of the format routine
+                   JSR      (A4)                   ;and call it
+35D6 L035D6        MOVEM.L  (A7)+,D3-7/A1-5        ;restore the registers
+                   BRA      CHKSBIT
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=CHK_DD          CHECK DIRECTORY DEVICE DRIVERS LINKED LIST                   ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     pointer to medium name string                       ³
+³                 A6.L     QDOS system variables                               ³
+³                                                                              ³
+³EXIT:            D1.B     Drive number from medium name in binary             ³
+³                 A2.L     start of directory device linkage block             ³
+³                                                                              ³
+³ERRORS:          ERR.NF   device not found                                    ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   The medium name should be something along the lines of "MDV1_MEDIUMNAME"
+   or maybe "FLP2_MEDIUMNAME" etc.
+
+   Check through the directory device drivers linked list until the driver
+   corresponding to the medium name has been found or the end of the list
+   has been reached.
+
+35DE CHK_DD        MOVEM.L  A1/A4,-(A7)
+                   MOVEA.L  SV.DDLST(A6),A2        ;A2 points at directory device drivers l
+35E6 NXT_DD        LEA      DEV.NAME(A2),A4        ;A4 points at device name string
+                   MOVE.W   (A4)+,D0               ;get the device name length
+                   MOVEA.L  (A7),A1                ;A1 points at medium name
+                   ADDQ.W   #2,A1                  ;step over length word at start of name
+35F0 CHK_NAME      MOVE.B   (A1)+,D1               ;get character of medium name proper
+                   BCLR     #5,D1                  ;change to upper case
+                   CMP.B    (A4)+,D1               ;same as equivalent in device name ?
+                   BNE.S    BAD_DEV                ;exit if not as wrong device type
+                   SUBQ.W   #1,D0                  ;reduce character count
+                   BGT.S    CHK_NAME               ;check next character until end of name
+                   BRA.S    DD_OK                  ;match found so jump forward
+
+   Device name does not match the medium name so try the next driver in the
+   linked list.
+
+3600 BAD_DEV       MOVEA.L  (A2),A2                ;A2 points at next entry in list
+                   MOVE.L   A2,D0
+                   BNE.S    NXT_DD                 ;check this driver unless end of list
+                   BRA.S    IO_ERRNF               ;in which case we have failed
+
+   The correct device driver has been found and A1 now points at the character a
+   the device name characters which should be the drive number.
+
+3608 DD_OK         MOVEQ    #0,D1                  ;prepare D1
+                   MOVE.B   (A1)+,D1               ;get the drive number
+                   SUBI.B   #"0",D1                ;and convert it to binary
+                   BLE.S    IO_ERRNF               ;exit if it was too small
+                   CMPI.B   #9,D1                  ;only 8 drives are allowed
+                   BGE.S    IO_ERRNF               ;exit if drive number to large
+                   CMPI.B   #"_",(A1)              ;followed by underscore character ?
+                   BNE.S    IO_ERRNF               ;exit if not
+                   MOVEQ    #0,D0                  ;signal "no errors"
+                   BRA.S    EXIT_DD
+
+3622 IO_ERRNF      MOVEQ    #ERR.NF,D0             ;signal "device not found"
+3624 EXIT_DD       MOVEM.L  (A7)+,A1/A4
+                   RTS
+
+362A L0362A        MOVE.L   A2,D2
+                   ADDQ.L   #1,D2
+                   BCLR     #0,D2
+                   MOVEA.L  D2,A2
+                   RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=IO_NAME         DECODE DEVICE NAME                  (VECTOR $122)            ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A0.L     start of name                                       ³
+³                 A3.L     pointer to parameter block for results              ³
+³                                                                              ³
+³EXIT:            D1,D2,D3,A1 and A2 corrupted                                 ³
+³                 A0 and A3 preserved                                          ³
+³                                                                              ³
+³ERRORS:          ERR.NF   device not found                                    ³
+³                 ERR.BN   bad device name parameters                          ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+3636 IO_NAME       MOVEA.L  (A7),A2
+                   ADDQ.W   #6,A2
+                   MOVEM.L  D4/D7/A0/A3,-(A7)
+                   MOVEQ    #0,D7
+                   MOVE.W   (A0)+,D7
+                   ADD.L    A0,D7
+                   MOVE.W   (A2)+,D2
+3646 L03646        BSR.S    L036C0
+                   CMP.B    (A2)+,D1
+                   BNE.S    L036B0
+                   SUBQ.B   #1,D2
+                   BNE.S    L03646
+                   BSR.S    L0362A
+                   MOVE.W   (A2)+,D4
+                   BRA.S    L0369A
+
+3656 L03656        BSR.S    L0362A
+                   MOVE.B   (A2)+,D1
+                   BEQ.S    L03682
+                   BLT.S    L0366A
+                   BSR.S    L036C0
+                   CMP.B    (A2)+,D1
+                   BEQ.S    L0366C
+                   SUBQ.W   #1,A0
+                   MOVE.W   (A2)+,(A3)+
+                   BRA.S    L0369A
+
+366A L0366A        ADDQ.W   #1,A2
+366C L0366C        MOVEA.L  A7,A1
+                   MOVE.W   (A2)+,-(A7)
+                   SUBA.L   A6,A0
+                   SUBA.L   A6,A1
+                   SUB.L    A6,D7
+                   JSR      CN_DTOI(PC)
+                   ADDA.L   A6,A0
+                   ADD.L    A6,D7
+                   MOVE.W   (A7)+,(A3)+
+                   BRA.S    L0369A
+
+3682 L03682        MOVE.B   (A2)+,D2
+                   EXT.W    D2
+                   ADDA.W   D2,A2
+                   MOVE.L   A2,-(A7)
+                   BSR.S    L036C0
+368C L0368C        CMP.B    -(A2),D1
+                   BEQ.S    L03696
+                   SUBQ.W   #1,D2
+                   BNE.S    L0368C
+                   SUBQ.W   #1,A0
+3696 L03696        MOVE.W   D2,(A3)+
+                   MOVEA.L  (A7)+,A2
+369A L0369A        DBF      D4,L03656
+                   CMP.L    A0,D7
+                   BNE.S    L036A6
+                   MOVEQ    #4,D1
+                   BRA.S    L036B8
+
+36A6 L036A6        MOVEM.L  (A7)+,D4/D7/A0/A3
+                   ADDQ.L   #2,(A7)
+                   MOVEQ    #ERR.BN,D0             ;signal "bad device name"
+                   RTS
+
+36B0 L036B0        MOVEM.L  (A7)+,D4/D7/A0/A3
+                   MOVEQ    #ERR.NF,D0             ;signal "device not found"
+                   RTS
+
+36B8 L036B8        MOVEM.L  (A7)+,D4/D7/A0/A3
+                   ADDQ.L   #4,(A7)
+                   RTS
+
+36C0 L036C0        MOVEQ    #0,D1
+                   CMP.L    A0,D7
+                   BEQ.S    L036D2
+                   MOVE.B   (A0),D1
+                   CMPI.B   #$60,D1
+                   BLT.S    L036D2
+                   SUBI.B   #$20,D1
+36D2 L036D2        ADDQ.W   #1,A0
+                   RTS
+
+2.14 Queue handling.
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=IO_SERQ         DIRECT QUEUE HANDLING               (VECTOR $E8)             ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           none                                                         ³
+³                                                                              ³
+³EXIT:            A0.L     channel definition block                            ³
+³                 D4,D5,A2,A3 and A4 corrupted                                 ³
+³                 D3 preserved                                                 ³
+³                                                                              ³
+³ERRORS:          ERR.BO   buffer overflow                                     ³
+³                 ERR.BP   illegal operation                                   ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+36D6 IO_SERQ       LEA      $18(A0),A2
+                   CMPI.B   #3,D0
+                   BLS.S    L036E2
+                   ADDQ.W   #4,A2
+36E2 L036E2        TST.L    (A2)
+                   BEQ.S    L036FA
+                   MOVEA.L  (A2),A2
+                   JSR      IO_SERIO(PC)
+                   DC.L     IO_QTEST
+                   DC.L     IO_QOUT
+                   DC.L     IO_QIN
+                   RTS
+
+36FA L036FA        MOVEQ    #ERR.BP,D0             ;signal "bad parameter"
+                   RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=IO_QSET         SET UP A QUEUE HEADER               (VECTOR $DC)             ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D1.L     queue length                                        ³
+³                 A2.L     location of queue header                            ³
+³                                                                              ³
+³EXIT:            A3.L     start of actual queue                               ³
+³                 D1,D2,D3,A0,A1 and A2 preserved                              ³
+³                                                                              ³
+³ERRORS:          none                                                         ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+36FE IO_QSET       LEA      16(A2,D1.W),A3
+                   CLR.L    (A2)+
+                   MOVE.L   A3,(A2)+
+                   SUBQ.W   #1,A3
+                   MOVE.L   A3,(A2)+
+                   MOVE.L   A3,(A2)+
+                   SUBA.L   #16,A2
+                   RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=IO_QTEST        TEST QUEUE STATUS                   (VECTOR $DE)             ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A2.L     location of queue header                            ³
+³                                                                              ³
+³EXIT:            D1.B     next byte to be read                                ³
+³                 D2.L     free space in queue                                 ³
+³                 A3.L     front of queue                                      ³
+³                                                                              ³
+³ERRORS:          ERR.NC   queue is empty                                      ³
+³                 ERR.EF   queue is at EOF                                     ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+3714 IO_QTEST      MOVEQ    #-$11,D2
+                   ADD.L    4(A2),D2
+                   SUB.L    A2,D2
+                   MOVE.L   8(A2),D0
+                   MOVEA.L  12(A2),A3
+                   MOVE.B   (A3),D1
+                   SUB.L    A3,D0
+                   BGT.S    L0373C
+                   BLT.S    L03738
+                   TST.B    (A2)
+                   BLT.S    L03734
+                   MOVEQ    #ERR.NC,D0             ;signal "not complete"
+                   RTS
+
+3734 L03734        MOVEQ    #ERR.EF,D0             ;signal "end of file"
+                   RTS
+
+3738 L03738        ADD.L    D2,D0
+                   ADDQ.L   #1,D0
+373C L0373C        SUB.L    D0,D2
+                   MOVEQ    #0,D0                  ;signal "no errors"
+                   RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=IO_QIN          PUT BYTE INTO QUEUE                 (VECTOR $E0)             ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D1.B     byte to insert in queue                             ³
+³                 A2.L     pointer to queue header                             ³
+³                                                                              ³
+³EXIT:            A3       corrupted                                           ³
+³                 D1,D2,D3,A0,A1 and A2 preserved                              ³
+³                                                                              ³
+³ERRORS:          ERR.NC   queue is full                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+3742 IO_QIN        TST.B    (A2)
+                   BNE.S    L03764
+                   MOVEA.L  8(A2),A3
+                   MOVE.B   D1,(A3)+
+                   CMPA.L   4(A2),A3
+                   BLT.S    L03756
+                   LEA      $10(A2),A3
+3756 L03756        CMPA.L   12(A2),A3
+                   BNE.S    L03760
+                   MOVEQ    #ERR.NC,D0             ;signal "not complete"
+                   RTS
+
+3760 L03760        MOVE.L   A3,8(A2)
+3764 L03764        MOVEQ    #0,D0                  ;signal "no errors"
+                   RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=IO_QOUT         GET BYTE FROM QUEUE                 (VECTOR $E2)             ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A2.L     pointer to queue header                             ³
+³                                                                              ³
+³EXIT:            D1.B     byte read                                           ³
+³                 A3.L     corrupted                                           ³
+³                 D2,D3,A0,A1 and A2 preserved                                 ³
+³                                                                              ³
+³ERRORS:          ERR.NC   queue is empty                                      ³
+³                 ERR.EF   queue is full (end of file)                         ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+3768 IO_QOUT       MOVEA.L  12(A2),A3
+                   CMPA.L   8(A2),A3
+                   BNE.S    L0377E
+                   TST.B    (A2)
+                   BLT.S    L0377A
+                   MOVEQ    #ERR.NC,D0             ;signal "not complete"
+                   RTS
+
+377A L0377A        MOVEQ    #ERR.EF,D0             ;signal "end of file"
+                   RTS
+
+377E L0377E        MOVE.B   (A3)+,D1
+                   CMPA.L   4(A2),A3
+                   BLT.S    L0378A
+                   LEA      16(A2),A3
+378A L0378A        MOVE.L   A3,12(A2)
+                   MOVEQ    #0,D0
+                   RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=IO_QEOF         PUT EOF MARKER IN QUEUE             (VECTOR $E4)             ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:                                                                        ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+3792 IO_QEOF       TAS      (A2)
+                   RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=IO_QEOF         PUT EOF MARKER IN QUEUE             (VECTOR $E4)             ³
+³=IO_SERIO        GENERAL I/O HANDLING                (VECTOR $EA)             ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D0       function number                                     ³
+³                 D1.B     byte to be sent                                     ³
+³                 D2.W     count or buffer length                              ³
+³                 A0.L     channel definition block                            ³
+³                 A1.L     Queue                                               ³
+³                 A6.L     QDOS system variables                               ³
+³                                                                              ³
+³EXIT:            D3,D4,D5,A2,A3 and A4 corrupted                              ³
+³                 A0 preserved                                                 ³
+³                                                                              ³
+³ERRORS:          ERR.BO   buffer overflow                                     ³
+³                 ERR.BP   illegal operation                                   ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   Normally called by a sequence such as:
+
+     "             JSR      (A?)
+                   DC.L     test pending operation routine address
+                   DC.L     fetch a byte routine address
+                   DC.L     send a byte routine address
+                   RTS                                              "
+
+3796 IO_SERIO      ADDI.L   #12,(A7)               ;set up correct return address
+                   MOVEA.L  (A7),A4                ;A4 points at "RTS" instruction or following code
+                   MOVE.L   D2,D4
+                   MOVE.L   D1,D5
+                   CMPI.W   #FS.MDINF,D0           ;is it a file system operation ?
+                   BHI.S    L037BC                 ;jump forward if so
+                   CMPI.W   #IO.SSTRNG,D0          ;is it a simple I/O operation ? 
+                   BHI.S    IO_EDLIN               ;jump forward if not
+                   ANDI.L   #$FFFF,D4              ;clear top word of D4, D0 already clear by TRAP #3 handler
+                   MOVE.B   IO_TABLE1 - IO.PEND(PC,D0.W),D0
+                   JMP      IO_TABLE1(PC,D0.W)
+
+37BC L037BC        CMPI.B   #FS.SAVE,D0            ;is it a valid function at all ?
+                   BHI.S    IO_EDLIN               ;jump forward if not
+                   MOVE.B   IO_TABLE2 - FS.HEADS(PC,D0.W),D0
+                   JMP      IO_TABLE2(PC,D0.W)
+
+37CA IO_TABLE1     DC.B     IO_PEND - IO_TABLE1    ;test pending input
+                   DC.B     IO_FBYTE - IO_TABLE1   ;fetch a byte
+                   DC.B     IO_FLINE - IO_TABLE1   ;fetch a line
+                   DC.B     IO_FSTRG - IO_TABLE1   ;fetch a string of bytes
+                   DC.B     IO_EDLIN - IO_TABLE1   ;edit a line (not implemented)
+                   DC.B     IO_SBYTE - IO_TABLE1   ;send a byte
+                   DC.B     IO_EDLIN - IO_TABLE1   ;(not implemented)
+                   DC.B     IO_SSTRG - IO_TABLE1   ;send a string of bytes
+
+37D2 IO_TABLE2     DC.B     IO_HEADS - IO_TABLE1   ;set file header
+                   DC.B     IO_HEADR - IO_TABLE1   ;read file header
+                   DC.B     IO_LOAD - IO_TABLE1    ;load a file
+                   DC.B     IO_SSTRG - IO_TABLE1   ;save a file
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=IO_FLINE        FETCH A LINE                                                 ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D4.W     byte to be sent                                     ³
+³                 D5.W     count or buffer length                              ³
+³                 A0.L     channel definition block                            ³
+³                 A1.L     Queue                                               ³
+³                 A6.L     QDOS system variables                               ³
+³                                                                              ³
+³EXIT:            D3,D4,D5,A2,A3 and A4 corrupted                              ³
+³                 A0 preserved                                                 ³
+³                                                                              ³
+³ERRORS:          ERR.BO   buffer overflow                                     ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+37D6 IO_FLINE      MOVEA.L  -8(A4),A4              ;get "fetch" routine address
+37DA IO_LNXTB      CMP.L    D5,D4                  ;room in buffer ?
+                   BLS.S    IO_ERRBO               ;exit with error if not
+                   BSR.S    IO_CALLF               ;otherwise call the function
+                   BNE.S    IO_GEXIT               ;and exit if any error occured
+                   MOVE.B   D1,(A1)+               ;copy byte to queue
+                   ADDQ.L   #1,D5                  ;increment buffer byte count
+                   CMPI.B   #10,D1                 ;line feed ?
+                   BNE.S    IO_LNXTB               ;get another byte if not
+                   BRA.S    IO_GEXIT               ;use general exit if so
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=IO_SSTRG        SEND A STRING OF BYTES (OR SAVE A FILE)                      ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D4.W     byte to be sent                                     ³
+³                 D5.W     count or buffer length                              ³
+³                 A0.L     channel definition block                            ³
+³                 A1.L     Queue                                               ³
+³                 A6.L     QDOS system variables                               ³
+³                                                                              ³
+³EXIT:            D3,D4,D5,A2,A3 and A4 corrupted                              ³
+³                 A0 preserved                                                 ³
+³                                                                              ³
+³ERRORS:          ERR.BO   buffer overflow                                     ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+37EE IO_SSTRG      MOVEA.L  -4(A4),A4              ;get "send" routine address
+37F2 IO_SNXTB      CMP.L    D5,D4                  ;room in buffer ?
+                   BLS.S    IO_ERROK
+                   MOVE.B   (A1),D1                ;get a byte from the queue
+                   BSR.S    IO_CALLF               ;call function
+                   BNE.S    IO_GEXIT               ;and exit if the buffer was full
+                   ADDQ.W   #1,A1                  ;increment buffer pointer
+                   ADDQ.L   #1,D5                  ;and buffer byte count
+                   BRA.S    IO_SNXTB               ;get another byte
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=IO_LOAD         LOAD A FILE                                                  ³
+³=IO_FSTRG        FETCH A STRING OF BYTES                                      ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D4.W     byte to be sent                                     ³
+³                 D5.W     count or buffer length                              ³
+³                 A0.L     channel definition block                            ³
+³                 A1.L     Queue                                               ³
+³                 A6.L     QDOS system variables                               ³
+³                                                                              ³
+³EXIT:            D3,D4,D5,A2,A3 and A4 corrupted                              ³
+³                 A0 preserved                                                 ³
+³                                                                              ³
+³ERRORS:          ERR.BO   buffer overflow                                     ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+3802 IO_LOAD       MOVEA.L  -8(A4),A4              ;get "fetch" routine address
+3806 IO_FNXTB      CMP.L    D5,D4                  ;room in buffer ?
+3808 IO_FSTRG      BLS.S    IO_ERROK
+                   BSR.S    IO_CALLF               ;call function
+                   BNE.S    IO_GEXIT               ;and exit if the buffer was empty
+                   MOVE.B   D1,(A1)+               ;put byte into the queue
+                   ADDQ.L   #1,D5                  ;increment buffer byte count
+                   BRA.S    IO_FNXTB               ;put next byte if room in queue
+
+   It may not be immediately obvious what the next sequence of four instructions
+   does but in fact the pointer, A4, is being adjusted at each entry point so
+   that the third instruction extracts the correct address for each entry point.
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=IO_PEND         TEST PENDING INPUT                                           ³
+³=IO_FBYTE        FETCH A BYTE                                                 ³
+³=IO_SBYTE        SEND A BYTE                                                  ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D4.W     byte to be sent                                     ³
+³                 D5.W     count or buffer length                              ³
+³                 A0.L     channel definition block                            ³
+³                 A1.L     Queue                                               ³
+³                 A6.L     QDOS system variables                               ³
+³                                                                              ³
+³EXIT:            D3,D4,D5,A2,A3 and A4 corrupted                              ³
+³                 A0 preserved                                                 ³
+³                                                                              ³
+³ERRORS:          ERR.BO   buffer overflow                                     ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+3814 IO_PEND       SUBQ.W   #4,A4                  ;point at "send" routine address
+3816 IO_FBYTE      SUBQ.W   #4,A4                  ;point at "send" or "fetch" routine address
+3818 IO_SBYTE      MOVEA.L  -4(A4),A4              ;get the "previous" routine address
+                   BRA.S    IO_CALLF               ;and do the function
+
+381E IO_EDLIN      MOVEQ    #ERR.BP,D0             ;signal "bad parameter"
+                   BRA.S    IO_EEXIT               ;use the error exit
+
+3822 IO_ERRBO      MOVEQ    #ERR.BO,D0             ;signal "buffer overflow"
+                   BRA.S    IO_GEXIT               ;use the general exit
+
+3826 IO_ERROK      MOVEQ    #0,D0                  ;signal "no errors"
+3828 IO_GEXIT      MOVE.L   D5,D1
+                   BRA.S    IO_EEXIT               ;use the error exit
+
+382C IO_CALLF      MOVEM.L  D4-5/A1/A4,-(A7)       ;save the most used registers
+                   JSR      (A4)                   ;call the I/O routine
+                   MOVEM.L  (A7)+,D4-5/A1/A4       ;and restore the registers
+3836 IO_EEXIT      TST.L    D0                     ;set the flags ready for testing on return
+                   RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=IO_HEADS        SET FILE HEADER                                              ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D4.W     byte to be sent                                     ³
+³                 D5.W     count or buffer length                              ³
+³                 A0.L     channel definition block                            ³
+³                 A1.L     Queue                                               ³
+³                 A6.L     QDOS system variables                               ³
+³                                                                              ³
+³EXIT:            D3,D4,D5,A2,A3 and A4 corrupted                              ³
+³                 A0 preserved                                                 ³
+³                                                                              ³
+³ERRORS:          ERR.BO   buffer overflow                                     ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+383A IO_HEADS      MOVEA.L  -4(A4),A4
+                   MOVEQ    #15,D4
+                   TST.W    D5
+                   BGT.S    IO_SNXTB
+                   ST       D1
+                   BSR.S    IO_CALLF
+                   BNE.S    IO_GEXIT
+                   MOVEQ    #1,D5
+                   BRA.S    IO_SNXTB
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=IO_HEADR        READ FILE HEADER                                             ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D4.W     byte to be sent                                     ³
+³                 D5.W     count or buffer length                              ³
+³                 A0.L     channel definition block                            ³
+³                 A1.L     Queue                                               ³
+³                 A6.L     QDOS system variables                               ³
+³                                                                              ³
+³EXIT:            D3,D4,D5,A2,A3 and A4 corrupted                              ³
+³                 A0 preserved                                                 ³
+³                                                                              ³
+³ERRORS:          ERR.BO   buffer overflow                                     ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+384E IO_HEADR      MOVEQ    #15,D4
+                   TST.W    D5
+                   BGT.S    IO_LOAD
+                   MOVEA.L  -12(A4),A4
+                   BSR.S    IO_CALLF
+                   BNE.S    IO_GEXIT
+                   ADDQ.B   #1,D1
+                   BNE.S    IO_EDLIN
+                   MOVEA.L  (A7),A4
+                   BSR.S    IO_FBYTE
+                   MOVEQ    #1,D5
+                   BRA.S    IO_FNXTB
+
+2.15 System utilities.
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=UT_ERR0         SEND ERROR MESSAGE TO CHANNEL 0     (VECTOR $CA)             ³
+³=UT_ERR          SEND ERROR MESSAGE TO CHANNEL       (VECTOR $CC)             ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D0.L     error code                                          ³
+³                 A0.L     channel ID if UT.ERR                                ³
+³                                                                              ³
+³EXIT:            D0-D3,A0-3 preserved                                         ³
+³                                                                              ³
+³ERRORS:          none                                                         ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+3868 UT_ERR0       MOVE.L   A0,-(A7)               ;save and clear A0
+                   SUBA.L   A0,A0
+                   BSR.S    UT_ERR                 ;print to channel ID 0
+                   MOVEA.L  (A7)+,A0
+                   RTS
+
+3872 UT_ERR        TST.L    D0                     ;valid error code ?
+                   BGE.S    ERR_EXIT               ;exit if not
+                   MOVEM.L  D0-3/A1,-(A7)
+                   MOVEA.L  D0,A1                  ;save D0 temporarily
+                   ADD.L    D0,D0                  ;form offset into first table
+                   BVS.S    PRNT_ERR               ;jump forward if it's user defined
+                   NEG.W    D0                     ;otherwise form address of message
+
+   The address of the message is found by first finding the offset into
+   the table of messages and then adding this to the address of the table.
+   number check is made as to the validity of the -ve error code so if this is
+   less than -21 the routine will print an erroneously long message.
+
+                   MOVE.W   ERR_OFST - $02(PC,D0.W),D0
+                   LEA      ERR_MSGE - $2A(PC,D0.W),A1
+
+   Now print the message whose address is in A1.
+
+388A PRNT_ERR      JSR      UT_MTEXT(PC)           ;print message
+                   MOVEM.L  (A7)+,D0-3/A1
+3892 ERR_EXIT      RTS
+
+   The first table is a list of word offsets into the second table. The
+   second table is a list of error messages normally used by SuperBASIC.
+
+3894 ERR_OFST      DC.W     $2A,$3A,$48,$59,$68,$76,$8A,$96,$A8,$B2,$C0,$CE,$DA,$E8
+                   DC.W     $F8,$108,$120,$136,$142,$154,$160
+
+38BE ERR_MSGE      DC.B     0,13,'not complete',10,0
+                   DC.B     0,12,'invalid Job',10
+                   DC.B     0,14,'out of memory',10
+                   DC.B     0,13,'out of range',10,0
+                   DC.B     0,12,'buffer full',10
+                   DC.B     0,17,'channel not open',10,0
+                   DC.B     0,10,'not found',10
+                   DC.B     0,15,'already exists',10,0
+                   DC.B     0,7,'in use',10,0
+                   DC.B     0,12,'end of file',10
+                   DC.B     0,11,'drive full',10,0
+                   DC.B     0,9,'bad name',10,0
+                   DC.B     0,11,'Xmit error',10,0
+                   DC.B     0,14,'format failed',10
+                   DC.B     0,14,'bad parameter',10
+                   DC.B     0,22.'bad or changed medium',10
+                   DC.B     0,20,'error in expression',10
+                   DC.B     0,9,'overflow',10,0
+                   DC.B     0,16,'not implemented',10
+                   DC.B     0,10,'read only',10
+                   DC.B     0,9,'bad line',10,0
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=UT_MINT         PRINT DECIMAL NUMBER ON CHANNEL     (VECTOR $CE)             ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D1.W     value to print                                      ³
+³                 A0.L     channel ID                                          ³
+³                                                                              ³
+³EXIT:            D1,D2,D3,A1,A2 and A3 corrupted                              ³
+³                 A0       preserved                                           ³
+³                                                                              ³
+³ERRORS:          none                                                         ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+3A00 UT_MINT       SUBA.L   A6,A6
+                   MOVEA.L  A7,A1
+                   SUBQ.W   #8,A7
+                   MOVE.L   A0,-(A7)
+                   LEA      4(A7),A0
+                   MOVE.W   D1,-(A1)
+3A10 L03A10        JSR      CN_ITOD(PC)
+3A14 L03A14        MOVEA.L  (A7)+,A0
+3A16 L03A16        MOVEA.L  A7,A1
+                   MOVE.W   D1,D2
+3A1A L03A1A        BSR.S    L03A24
+                   ADDQ.W   #8,A7
+                   MOVEA.L  (A7)+,A6
+                   RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=UT_MTEXT        SEND MESSAGE TO CHANNEL             (VECTOR $D0)             ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A0.L     channel ID                                          ³
+³                 A1.L     start of message                                    ³
+³                                                                              ³
+³EXIT:            D1,D2,D3 and A1 corrupted                                    ³
+³                 A0,A2 and A3 preserved                                       ³
+³                                                                              ³
+³ERRORS:          none                                                         ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+3A22 UT_MTEXT      MOVE.W   (A1)+,D2
+3A24 L03A24        MOVEQ    #IO.SSTRG,D0           ;TRAP to send a string of bytes
+                   MOVE.L   A0,D3                  ;copy ID to set flags
+                   BEQ.S    L03A2E                 ;jump forward if channel #0
+                   MOVEQ    #-1,D3                 ;use an infinite timeout
+                   BRA.S    L03A34                 ;send the message
+
+3A2E L03A2E        SF       SV_SCRST               ;ensure screen enabled
+3A34 L03A34        TRAP     #3                     ;do the TRAP
+                   CMPI.W   #-1,D0                 ;not complete ?
+                   BNE.S    L03A48                 ;exit if so
+                   MOVEA.L  #$00010001,A0          ;channel ID for channel #1
+                   MOVEQ    #IO.SSTRG,D0           ;TRAP to send a string of bytes
+                   TRAP     #3                     ;send the message
+                   SUBA.L   A0,A0                  ;clear A0
+3A48 L03A48        RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=UT_LINK         LINK ITEM INTO LIST                 (VECTOR $D2)             ³
+³=UT_UNLNK        UNLINK ITEM FROM LIST               (VECTOR $D4)             ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A0.L     location of link                                    ³
+³                 A1.L     location of pointer to list                         ³
+³                                                                              ³
+³EXIT:            A1       corrupted                                           ³
+³                 D1,D2,D3,A0,A2 and A3 preserved                              ³
+³                                                                              ³
+³ERRORS:          none                                                         ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+3A4A UT_LINK       MOVE.L   (A1),(A0)
+                   MOVE.L   A0,(A1)
+                   RTS
+
+3A50 UT_UNLNK      CMPA.L   (A1),A0
+                   BEQ.S    L03A5C
+                   TST.L    (A1)
+                   BEQ.S    L03A5E
+                   MOVEA.L  (A1),A1
+                   BRA.S    UT.UNLNK
+
+3A5C L03A5C        MOVE.L   (A0),(A1)
+3A5E L03A5E        RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=UT_WINDW        CREATE WINDOW CHANNEL               (VECTOR $C4)             ³
+³=UT_CON          CREATE CONSOLE CHANNEL              (VECTOR $C6)             ³
+³=UT_SCR          CREATE SCREEN CHANNEL               (VECTOR $C8)             ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A0.L     pointer to name if UT.WINDW                         ³
+³                 A1.L     pointer to parameter block                          ³
+³                                                                              ³
+³EXIT:            A0.L     channel ID                                          ³
+³                 D1,D2,D3,A1,A2 and A3 corrupted                              ³
+³                                                                              ³
+³ERRORS:          ERR.OM   out of memory                                       ³
+³                 ERR.OR   out of range                                        ³
+³                 ERR.NO   too many channels                                   ³
+³                 ERR.BN   bad name                                            ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+3A60 UT_WINDW      BSR.S    L03A98
+                   BRA.S    L03A7A
+
+3A64 UT_CON        LEA      L03AB2(PC),A0
+                   BRA.S    L03A6E
+
+3A6A UT_SCR        LEA      L03AB8(PC),A0
+3A6E L03A6E        BSR.S    L03A98
+                   ADDQ.W   #4,A1
+                   MOVEQ    #SD.WDEF,D0            ;TRAP to re-define window
+                   MOVEQ    #0,D2                  ;use zero border width
+                   BSR.S    L03AA4
+                   SUBQ.W   #4,A1
+3A7A L03A7A        MOVEQ    #SD.BORDR,D0           ;TRAP to set window border
+                   MOVE.B   (A1)+,D1               ;get border colour and width from the
+                   MOVE.B   (A1)+,D2               ;parameter block
+                   BSR.S    L03AA4
+                   MOVEQ    #SD.SETPA,D0           ;TRAP to set paper colour
+                   MOVE.B   (A1),D1                ;get paper colour from parameter block
+                   BSR.S    L03AA4
+                   MOVEQ    #SD.SETST,D0           ;TRAP to set strip colour
+                   MOVE.B   (A1)+,D1               ;get strip colour from parameter block
+                   BSR.S    L03AA4
+                   MOVEQ    #SD.SETIN,D0           ;TRAP to set ink colour
+                   MOVE.B   (A1),D1                ;get ink colour from parameter block
+                   BSR.S    L03AA4
+                   MOVEQ    #SD.CLEAR,D0           ;TRAP to clear window
+                   BRA.S    L03AA4
+
+3A98 L03A98        MOVE.L   A1,-(A7)
+3A9A L03A9A        MOVEQ    #IO.OPEN,D0            ;TRAP to open a channel
+                   MOVEQ    #-1,D1
+                   MOVEQ    #0,D3                  ;open type
+                   TRAP     #2                     ;open the channel
+                   BRA.S    L03AA8
+
+3AA4 L03AA4        MOVE.L   A1,-(A7)
+3AA6 L03AA6        TRAP     #3
+3AA8 L03AA8        MOVEA.L  (A7)+,A1
+                   TST.L    D0                     ;any errors ?
+                   BEQ.S    L03AB0                 ;exit if not otherwise
+                   ADDQ.W   #4,A7                  ;restore stack
+3AB0 L03AB0        RTS
+
+3AB2 L03AB2        DC.W     3,'CON'                ;console device name
+                   DC.W     3,"SCR"                ;screen device name
+
+3ABE L03ABE        MOVEQ    #0,D4
+                   MOVE.B   D0,D4
+                   ROR.L    #1,D4
+                   SUBQ.B   #2,D4
+                   MOVE.W   0(A6,A0.L),D0
+                   ADDQ.W   #2,A0
+                   LEA      0(A0,D0.W),A2
+                   MOVE.W   0(A6,A1.L),D1
+                   ADDQ.W   #2,A1
+                   LEA      0(A1,D1.W),A3
+                   RTS
+
+3ADC L03ADC        MOVEM.L  D4/A0-4,-(A7)
+                   BSR.S    L03ABE
+                   LEA      0(A1,D0.W),A4
+                   EXG      A4,A3
+                   MOVEQ    #0,D1
+3AEA L03AEA        CMPA.L   A4,A3
+                   BGT.S    L03AFA
+                   ADDQ.L   #1,D1
+                   BSR.S    L03B04
+                   BEQ.S    L03AFE
+                   ADDQ.W   #1,A1
+                   ADDQ.W   #1,A3
+                   BRA.S    L03AEA
+
+3AFA L03AFA        MOVEQ    #0,D1
+3AFC L03AFC        MOVEQ    #0,D0
+3AFE L03AFE        MOVEM.L  (A7)+,D4/A0-4
+                   RTS
+
+3B04 L03B04        MOVEM.L  D1-5/A0-3,-(A7)
+3B08 L03B08        BRA.S    L03B10
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=UT_CSTR         STRING COMPARISON                   (VECTOR $E6)             ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D0.B     type of comparison                                  ³
+³                 A0.L     start of first string (relative to A6)              ³
+³                 A1.L     start of second string (relative to A6)             ³
+³                                                                              ³
+³EXIT:            D0.L     result of comparison                                ³
+³                                                                              ³
+³ERRORS:          none                                                         ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+3B0A UT_CSTR       MOVEM.L  D1-5/A0-3,-(A7)
+3B0E L03B0E        BSR.S    L03ABE
+3B10 L03B10        CMPA.L   A2,A0
+                   BNE.S    L03B1A
+                   CMPA.L   A3,A1
+                   BNE.S    L03B36
+                   BRA.S    L03B3A
+
+3B1A L03B1A        CMPA.L   A3,A1
+3B1C L03B1C        BEQ.S    L03B3E
+                   BSR.S    L03B56
+                   CMP.B    D4,D0
+                   BEQ.S    L03B9A
+                   CMP.B    D3,D2
+                   BNE.S    L03B34
+                   TST.B    D0
+                   BLE.S    L03B10
+                   TST.L    D4
+                   BLT.S    L03B10
+                   CMPI.B   #2,D0
+3B34 L03B34        BGT.S    L03B3E
+3B36 L03B36        MOVEQ    #-1,D0
+                   BRA.S    L03B40
+
+3B3A L03B3A        MOVEQ    #0,D0
+3B3C L03B3C        BRA.S    L03B40
+
+3B3E L03B3E        MOVEQ    #1,D0
+3B40 L03B40        MOVEM.L  (A7)+,D1-5/A0-3
+3B44 L03B44        RTS
+
+3B46 L03B46        DC.W     $0000
+                   DC.W     $0000
+                   DC.W     $00FF
+                   DC.W     $0000
+                   DC.W     $0000
+                   DC.W     $0001
+                   DC.W     $0000
+
+3B54 L03B54        BTST     D1,D0
+3B56 L03B56        EXG      A1,A0
+                   EXG      A3,A2
+                   BSR.S    L03B72
+                   EXG      A1,A0
+                   EXG      A3,A2
+                   MOVE.B   D0,D1
+                   MOVE.B   D2,D3
+                   BSR.S    L03B72
+                   LSL.B    #2,D0
+                   ADD.B    D1,D0
+                   EXT.W    D0
+                   MOVE.B   L03B46(PC,D0.W),D0
+                   RTS
+
+3B72 L03B72        MOVE.B   0(A6,A0.L),D2
+3B76 L03B76        ADDQ.W   #1,A0
+                   BSR      L03C68
+                   CMPI.B   #$CE,D2
+                   BNE.S    L03B98
+                   CMPA.L   A2,A0
+                   BEQ.S    L03B96
+                   CMPI.B   #$30,0(A6,A0.L)
+                   BLT.S    L03B96
+                   CMPI.B   #$39,0(A6,A0.L)
+                   BLE.S    L03B98
+3B96 L03B96        CLR.B    D0
+3B98 L03B98        RTS
+
+3B9A L03B9A        BSR.S    L03C04
+3B9C L03B9C        MOVE.W   D3,D2
+                   MOVE.W   D1,D3
+                   EXG      A1,A0
+                   EXG      A3,A2
+                   BSR.S    L03C04
+                   CMP.W    D1,D3
+3BA8 L03BA8        BNE.S    L03B34
+                   SUBA.W   D1,A0
+                   SUBA.W   D1,A1
+                   BRA.S    L03BBE
+
+3BB0 L03BB0        MOVE.B   0(A6,A1.L),D5
+3BB4 L03BB4        ADDQ.W   #1,A1
+                   CMP.B    0(A6,A0.L),D5
+                   ADDQ.W   #1,A0
+                   BNE.S    L03BA8
+3BBE L03BBE        DBF      D1,L03BB0
+                   BSR.S    L03C3A
+                   MOVE.W   D3,-(A7)
+                   MOVE.W   D1,-(A7)
+                   EXG      A1,A0
+                   EXG      A3,A2
+                   BSR.S    L03C3A
+                   MOVE.W   (A7)+,D0
+                   MOVE.W   (A7)+,D2
+                   SUB.W    D2,D3
+                   BGT.S    L03BD8
+                   ADD.W    D3,D2
+3BD8 L03BD8        TST.W    D2
+                   BEQ.S    L03BFA
+                   SUBA.W   D1,A0
+                   SUBA.W   D0,A1
+                   SUB.W    D2,D1
+                   SUB.W    D2,D0
+3BE4 L03BE4        MOVE.B   0(A6,A0.L),D5
+                   ADDQ.W   #1,A0
+                   CMP.B    0(A6,A1.L),D5
+                   ADDQ.W   #1,A1
+                   BNE.S    L03BA8
+                   SUBQ.W   #1,D2
+                   BNE.S    L03BE4
+                   ADDA.W   D1,A0
+                   ADDA.W   D0,A1
+3BFA L03BFA        TST.W    D3
+                   BNE      L03B34
+                   BRA      L03B10
+
+3C04 L03C04        MOVEQ    #0,D1
+3C06 L03C06        CMPI.B   #$D0,D2
+3C0A L03C0A        BNE.S    L03C1E
+                   CMPA.L   A2,A0
+                   BEQ.S    L03C38
+                   MOVE.B   0(A6,A0.L),D2
+                   ADDQ.W   #1,A0
+                   BSR.S    L03C68
+                   SUBQ.B   #1,D0
+                   BNE.S    L03C36
+                   BRA.S    L03C06
+
+3C1E L03C1E        CMPI.B   #$CE,D2
+3C22 L03C22        BEQ.S    L03C36
+                   ADDQ.W   #1,D1
+                   CMPA.L   A2,A0
+                   BEQ.S    L03C38
+                   MOVE.B   0(A6,A0.L),D2
+                   ADDQ.W   #1,A0
+                   BSR.S    L03C68
+                   SUBQ.B   #1,D0
+                   BEQ.S    L03C1E
+3C36 L03C36        SUBQ.W   #1,A0
+3C38 L03C38        RTS
+
+3C3A L03C3A        MOVEQ    #0,D1
+3C3C L03C3C        MOVEQ    #0,D3
+3C3E L03C3E        CMPA.L   A2,A0
+                   BEQ.S    L03C66
+                   MOVE.B   0(A6,A0.L),D2
+                   BSR.S    L03C68
+                   SUBQ.B   #1,D0
+                   BNE.S    L03C66
+                   CMPI.B   #$CE,D2
+                   BNE.S    L03C58
+                   TST.L    D1
+                   BNE.S    L03C66
+                   MOVEQ    #-1,D1
+3C58 L03C58        ADDQ.W   #1,A0
+                   ADDQ.W   #1,D1
+                   CMPI.B   #$D0,D2
+                   BEQ.S    L03C3E
+                   MOVE.W   D1,D3
+                   BRA.S    L03C3E
+
+3C66 L03C66        RTS
+
+3C68 L03C68        MOVE.B   D2,D0
+3C6A L03C6A        BLT.S    L03C82
+                   CMPI.B   #$2E,D0
+                   BEQ.S    L03C86
+                   EXT.W    D0
+                   ADDI.W   #$2E,D0
+                   MOVE.B   L03C68(PC,D0.W),D0
+                   BEQ.S    L03C82
+                   SUBQ.B   #2,D0
+                   BLE.S    L03C86
+3C82 L03C82        CLR.B    D0
+                   RTS
+
+3C86 L03C86        MOVE.B   D2,D0
+3C88 L03C88        ADDI.B   #$A0,D2
+                   BCC.S    L03C92
+                   SUBI.B   #$20,D2
+3C92 L03C92        LSR.B    #5,D0
+                   RTS
+
+3C96 L03C96        DC.W     $0000,$0000
+                   DC.W     $0000,$0000
+                   DC.W     $0000,$0000
+                   DC.W     $0000,$0000
+                   DC.W     $0000,$0000
+                   DC.W     $0000,$0000
+                   DC.W     $0000,$0000
+                   DC.W     $0000,$0000
+                   DC.W     $2003,$0000
+                   DC.W     $2425,$0003
+                   DC.W     $0000,$0000
+                   DC.W     $0300,$0000
+                   DC.W     $0202,$0202
+                   DC.W     $0202,$0202
+                   DC.W     $0202,$0003
+                   DC.W     $0000,$0000
+                   DC.W     $0001,$0101
+                   DC.W     $0101,$0101
+                   DC.W     $0101,$0101
+                   DC.W     $0101,$0101
+                   DC.W     $0101,$0101
+                   DC.W     $0101,$0101
+                   DC.W     $0101,$0100
+                   DC.W     $0000,$0001
+                   DC.W     $0001,$0101
+                   DC.W     $0101,$0101
+                   DC.W     $0101,$0101
+                   DC.W     $0101,$0101
+                   DC.W     $0101,$0101
+                   DC.W     $0101,$0101
+                   DC.W     $0101,$0100
+                   DC.W     $0000,$0000
+
+3D16 L03D16        CMP.L    A0,D7
+                   BEQ.S    L03D38
+                   ADDQ.W   #1,A0
+3D1C L03D1C        CMPI.B   #$20,0(A6,A0.L)
+                   BEQ.S    L03D16
+                   MOVEQ    #0,D5
+                   MOVEQ    #$2B,D6
+                   SUB.B    0(A6,A0.L),D6
+                   BEQ.S    L03D36
+                   ADDQ.B   #2,D6
+                   BNE.S    L03D38
+                   BSET     #$1F,D5
+3D36 L03D36        ADDQ.W   #1,A0
+3D38 L03D38        RTS
+
+3D3A L03D3A        MOVEQ    #0,D6
+3D3C L03D3C        CMP.L    A0,D7
+                   BEQ.S    L03D58
+                   MOVE.B   0(A6,A0.L),D6
+                   SUBI.W   #$30,D6
+                   BLT.S    L03D54
+                   CMPI.W   #9,D6
+                   BGT.S    L03D54
+                   ADDQ.L   #2,(A7)
+                   BRA.S    L03D58
+
+3D54 L03D54        ADDI.W   #$30,D6
+3D58 L03D58        ADDQ.W   #1,A0
+3D5A L03D5A        RTS
+
+3D5C L03D5C        BSR.S    L03D1C
+3D5E L03D5E        BSR.S    L03D3A
+                   BRA.S    L03D76
+
+3D62 L03D62        MOVE.L   D6,D3
+3D64 L03D64        BSR.S    L03D3A
+                   BRA.S    L03D7A
+
+3D68 L03D68        MULU     #10,D3
+                   ADD.L    D6,D3
+                   CMPI.L   #$7FFF,D3
+                   BLE.S    L03D64
+3D76 L03D76        MOVEQ    #-17,D0
+                   RTS
+
+3D7A L03D7A        TST.L    D5
+3D7C L03D7C        BPL.S    L03D80
+                   NEG.W    D3
+3D80 L03D80        MOVEQ    #0,D0
+                   RTS
+
+2.16 Conversion routines.
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=CN_DTOF         CONVERT ASCII TO FLOATING POINT     (VECTOR $100)            ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D7.L     relative pointer to end of buffer + 1               ³
+³                 A0.L     relative pointer to buffer of characters            ³
+³                 A1.L     relative pointer to top of maths stack              ³
+³                                                                              ³
+³EXIT:            A1.L     new TOS                                             ³
+³                 D1,D2,A2 and A3 corrupted                                    ³
+³                 D3,D7 and A0 preserved                                       ³
+³                                                                              ³
+³ERRORS:          ERR.EX   error in expression                                 ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+3D84 CN_DTOF       MOVEM.L  D3-6/A0-1,-(A7)
+                   MOVEQ    #0,D4
+                   BSR.S    L03D1C
+                   SUBQ.W   #6,A1
+                   CLR.L    2(A6,A1.L)
+                   CLR.W    0(A6,A1.L)
+3D96 L03D96        BSR.S    L03D3A
+                   BRA.S    L03DB6
+
+3D9A L03D9A        MOVE.B   #$DF,D5
+                   TST.W    D4
+                   BEQ.S    L03DA4
+                   ADDQ.W   #1,D4
+3DA4 L03DA4        BSR.S    L03E24
+                   JSR      L04966(PC)
+                   BNE.S    L03E1E
+                   MOVE.L   D6,D1
+                   BSR.S    L03E26
+                   JSR      L048D2(PC)
+                   BRA.S    L03D96
+
+3DB6 L03DB6        CMPI.B   #$2E,D6
+3DBA L03DBA        BNE.S    L03DC4
+                   TST.W    D4
+                   BNE.S    L03E1C
+                   MOVEQ    #1,D4
+                   BRA.S    L03D96
+
+3DC4 L03DC4        TST.B    D5
+3DC6 L03DC6        BEQ.S    L03E1C
+                   TST.L    D5
+                   BPL.S    L03DD0
+                   JSR      L04A90(PC)
+3DD0 L03DD0        MOVEQ    #0,D3
+                   AND.B    D5,D6
+                   CMPI.B   #$45,D6
+                   BNE.S    L03DDE
+                   BSR.S    L03D5C
+                   BNE.S    L03E1E
+3DDE L03DDE        TST.W    D4
+                   BEQ.S    L03DE4
+                   SUBQ.W   #1,D4
+3DE4 L03DE4        SUB.W    D3,D4
+                   BVS.S    L03E1C
+                   BEQ.S    L03E10
+                   SGE      D5
+                   BGE.S    L03DF0
+                   NEG.W    D4
+3DF0 L03DF0        BSR.S    L03E24
+                   SUBQ.W   #2,A1
+                   MOVE.W   D4,0(A6,A1.L)
+                   JSR      L04876(PC)
+                   BNE.S    L03E1E
+                   TST.B    D5
+                   BEQ.S    L03E0A
+                   JSR      L049FE(PC)
+                   BNE.S    L03E1E
+                   BRA.S    L03E10
+
+3E0A L03E0A        JSR      L04966(PC)
+3E0E L03E0E        BNE.S    L03E1E
+3E10 L03E10        MOVEM.L  (A7)+,D3-6
+                   SUBQ.W   #1,A0
+                   ADDQ.W   #8,A7
+                   MOVEQ    #0,D0
+                   RTS
+
+3E1C L03E1C        MOVEQ    #-17,D0
+3E1E L03E1E        MOVEM.L  (A7)+,D3-6/A0-1
+3E22 L03E22        RTS
+
+3E24 L03E24        MOVEQ    #10,D1
+3E26 L03E26        MOVE.L   #$81F,D0
+3E2C L03E2C        JMP      L048CC(PC)
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=CN_DTOI         CONVERT ASCII TO INTEGER            (VECTOR $102)            ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D7.L     relative pointer to end of buffer + 1               ³
+³                 A0.L     relative pointer to buffer of characters            ³
+³                 A1.L     relative pointer to top of maths stack              ³
+³                                                                              ³
+³EXIT:            A1.L     new TOS                                             ³
+³                 D1,D2,A2 and A3 corrupted                                    ³
+³                 D3,D7 and A0 preserved                                       ³
+³                                                                              ³
+³ERRORS:          ERR.EX   error in expression                                 ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+3E30 CN_DTOI       MOVEM.L  D3-6/A0-1,-(A7)
+3E34 L03E34        BSR      L03D5C
+                   BNE.S    L03E1E
+                   SUBQ.W   #2,A1
+                   MOVE.W   D3,0(A6,A1.L)
+                   BRA.S    L03E10
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=CN_HTOIB        CONVERT ASCII TO HEX BYTE           (VECTOR $10A)            ³
+³=CN_HTOIW        CONVERT ASCII TO HEX WORD           (VECTOR $10C)            ³
+³=CN_HTOIL        CONVERT ASCII TO HEX LONG           (VECTOR $10E)            ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D7.L     relative pointer to end of buffer or 0              ³
+³                 A0.L     relative pointer to buffer of characters            ³
+³                 A1.L     relative pointer to top of maths stack              ³
+³                                                                              ³
+³EXIT:            A1.L     new TOS                                             ³
+³                 D1,D2,A2 and A3 corrupted                                    ³
+³                 D3,D7 and A0 preserved                                       ³
+³                                                                              ³
+³ERRORS:          ERR.EX   error in expression                                 ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+3E42 CN_HTOIB      MOVEQ    #2,D0
+                   BRA.S    L03E4C
+
+3E46 CN_HTOIW      MOVEQ    #4,D0
+                   BRA.S    L03E4C
+
+3E4A CN_HTOIL      MOVEQ    #8,D0
+3E4C L03E4C        MOVEM.L  D3-6/A0-1,-(A7)
+                   MOVE.L   D0,D4
+                   LSR.B    #1,D4
+                   SUBQ.W   #2,A1
+                   MOVE.B   D4,1(A6,A1.L)
+                   MOVE.B   #15,0(A6,A1.L)
+                   MOVEQ    #4,D4
+3E62 L03E62        MOVE.L   D0,D6
+                   MOVE.L   D0,D5
+                   MOVEQ    #0,D3
+3E68 L03E68        BSR      L03D3A
+                   BRA.S    L03E70
+
+3E6E L03E6E        BRA.S    L03E7E
+
+3E70 L03E70        ANDI.B   #$DF,D0
+3E74 L03E74        SUBI.B   #$41,D0
+                   BLT.S    L03E8E
+                   ADDI.B   #10,D0
+3E7E L03E7E        CMP.B    0(A6,A1.L),D0
+                   BHI.S    L03E8E
+                   LSL.L    D4,D3
+                   ADD.L    D0,D3
+                   DBF      D5,L03E68
+                   BRA.S    L03EA0
+
+3E8E L03E8E        MOVE.B   1(A6,A1.L),D4
+3E92 L03E92        ADDQ.L   #2,A1
+                   MOVE.L   D3,-4(A6,A1.L)
+                   SUBA.L   D4,A1
+                   CMP.W    D5,D6
+                   BGT      L03E10
+3EA0 L03EA0        BRA      L03E1E
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=CN_BTOIB        CONVERT ASCII TO BINARY BYTE        (VECTOR $104)            ³
+³=CN_BTOIW        CONVERT ASCII TO BINARY WORD        (VECTOR $106)            ³
+³=CN_BTOIL        CONVERT ASCII TO BINARY LONG        (VECTOR $108)            ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D7.L     relative pointer to end of buffer or 0              ³
+³                 A0.L     relative pointer to buffer of characters            ³
+³                 A1.L     relative pointer to top of maths stack              ³
+³                                                                              ³
+³EXIT:            A1.L     new TOS                                             ³
+³                 D1,D2,A2 and A3 corrupted                                    ³
+³                 D3,D7 and A0 preserved                                       ³
+³                                                                              ³
+³ERRORS:          ERR.EX   error in expression                                 ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+3EA4 CN_BTOIB      MOVEQ    #8,D0
+                   BRA.S    L03EAE
+
+3EA8 CN_BTOIW      MOVEQ    #16,D0
+                   BRA.S    L03EAE
+
+3EAC CN_BTOIL      MOVEQ    #32,D0
+3EAE L03EAE        MOVEM.L  D3-6/A0-1,-(A7)
+                   MOVE.L   D0,D4
+                   LSR.B    #4,D4
+                   SUBQ.W   #2,A1
+                   MOVE.B   D4,1(A6,A1.L)
+                   MOVEQ    #1,D4
+                   MOVE.B   D4,0(A6,A1.L)
+                   BRA.S    L03E62
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=CN_ITOD         CONVERT INTEGER TO ASCII            (VECTOR $F2)             ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A0.L     relative pointer to buffer for result               ³
+³                 A1.L     relative pointer to top of maths stack              ³
+³                                                                              ³
+³EXIT:            D1.L     length of result                                    ³
+³                 A0.L     end of buffer + 1 (relative)                        ³
+³                 A1.L     new TOS                                             ³
+³                 D2,D3,A2 and A3 preserved                                    ³
+³                                                                              ³
+³ERRORS:          none                                                         ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+3EC4 CN_ITOD       MOVE.L   A2,-(A7)
+3EC6 L03EC6        MOVE.L   A0,-(A7)
+                   MOVEQ    #0,D0
+                   MOVE.W   0(A6,A1.L),D0
+                   ADDQ.W   #2,A1
+                   BGE.S    L03EDC
+                   MOVE.B   #$2D,0(A6,A0.L)
+                   ADDQ.W   #1,A0
+                   NEG.W    D0
+3EDC L03EDC        MOVE.L   A0,-(A7)
+                   ADDQ.W   #5,A0
+3EE0 L03EE0        DIVU     #10,D0
+                   SWAP     D0
+                   ADDI.B   #$30,D0
+                   SUBQ.W   #1,A0
+                   MOVE.B   D0,0(A6,A0.L)
+                   CLR.W    D0
+                   SWAP     D0
+                   BNE.S    L03EE0
+                   MOVE.L   (A7)+,D1
+                   SUB.L    A0,D1
+                   MOVE.W   D1,D0
+                   ADDQ.W   #4,D0
+3EFE L03EFE        LEA      0(A0,D1.W),A2
+                   MOVE.B   0(A6,A0.L),0(A6,A2.L)
+                   ADDQ.W   #1,A0
+                   DBF      D0,L03EFE
+                   ADD.L    A0,D1
+                   MOVEA.L  D1,A0
+                   SUB.L    (A7)+,D1
+                   MOVEA.L  (A7)+,A2
+                   RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=CN_ITOHL        CONVERT HEX LONG TO ASCII           (VECTOR $FE)             ³
+³=CN_ITOHW        CONVERT HEX WORD TO ASCII           (VECTOR $FC)             ³
+³=CN_ITOIB        CONVERT HEX BYTE TO ASCII           (VECTOR $FA)             ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A0.L     relative pointer to buffer for result               ³
+³                 A1.L     relative pointer to top of maths stack              ³
+³                                                                              ³
+³EXIT:            A0.L     end of buffer + 1 (relative)                        ³
+³                 A1.L     new TOS                                             ³
+³                 D1,D2,D3 and A2  preserved                                   ³
+³                                                                              ³
+³ERRORS:          none                                                         ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+3F18 CN_ITOHL      BSR      CN_ITOHW
+3F1C CN_ITOHW      BSR      CN_ITOHB
+3F20 CN_ITOHB      MOVE.B   0(A6,A1.L),D0
+                   LSR.B    #4,D0
+                   BSR.S    L03F30
+                   MOVEQ    #15,D0
+                   AND.B    0(A6,A1.L),D0
+                   ADDQ.W   #1,A1
+3F30 L03F30        ADDI.B   #$30,D0
+                   CMPI.B   #$39,D0
+                   BLS.S    L03F3C
+                   ADDQ.B   #7,D0
+3F3C L03F3C        MOVE.B   D0,0(A6,A0.L)
+                   ADDQ.W   #1,A0
+                   RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=CN_ITOBL        CONVERT BINARY LONG TO ASCII        (VECTOR $F8)             ³
+³=CN_ITOBW        CONVERT BINARY WORD TO ASCII        (VECTOR $F6)             ³
+³=CN_ITOBB        CONVERT BINARY BYTE TO ASCII        (VECTOR $F4)             ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A0.L     relative pointer to buffer for result               ³
+³                 A1.L     relative pointer to top of maths stack              ³
+³                                                                              ³
+³EXIT:            A0.L     end of buffer + 1 (relative)                        ³
+³                 A1.L     new TOS                                             ³
+³                 D1,D2,D3 and A2 preserved                                    ³
+³                                                                              ³
+³ERRORS:          none                                                         ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+3F44 CN_ITOBL      BSR      CN_ITOBW
+3F48 CN_ITOBW      BSR      CN_ITOBB
+3F4C CN_ITOBB      MOVEQ    #7,D0
+3F4E L03F4E        BTST     D0,0(A6,A1.L)
+                   SEQ      0(A6,A0.L)
+                   ADDI.B   #$31,0(A6,A0.L)
+                   ADDQ.W   #1,A0
+                   DBF      D0,L03F4E
+                   ADDQ.W   #1,A1
+                   RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=CN_FTOD         CONVERT FLOATING POINT TO ASCII     (VECTOR $F0)             ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A0.L     relative pointer to buffer for result               ³
+³                 A1.L     relative pointer to top of maths stack              ³
+³                                                                              ³
+³EXIT:            D1.L     length of result                                    ³
+³                 A0.L     end of buffer + 1 (relative)                        ³
+³                 A1.L     new TOS                                             ³
+³                 D2,D3,A2 and A3 preserved                                    ³
+³                                                                              ³
+³ERRORS:          none                                                         ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+3F66 CN_FTOD       MOVEM.L  D2-5,-(A7)
+                   MOVE.L   A0,-(A7)
+                   TST.L    2(A6,A1.L)
+                   BEQ      L04070
+                   MOVEQ    #6,D4
+                   TST.B    2(A6,A1.L)
+                   BGE.S    L03F88
+                   MOVE.B   #$2D,0(A6,A0.L)
+                   ADDQ.W   #1,A0
+                   JSR      L04A90(PC)
+3F88 L03F88        CMPI.L   #$081B5F60,0(A6,A1.L)
+                   BLT.S    L03F9C
+                   ADDQ.W   #1,D4
+                   BSR.S    L03FB0
+                   JSR      L049FE(PC)
+                   BRA.S    L03F88
+
+3F9C L03F9C        CMPI.L   #$08184C4C,0(A6,A1.L)
+3FA4 L03FA4        BGE.S    L03FDC
+                   SUBQ.W   #1,D4
+                   BSR.S    L03FB0
+                   JSR      L04966(PC)
+                   BRA.S    L03F9C
+
+3FB0 L03FB0        SUBQ.W   #6,A1
+3FB2 L03FB2        MOVE.L   #$08045000,0(A6,A1.L)
+                   CLR.W    4(A6,A1.L)
+                   RTS
+
+3FC0 L03FC0        MOVEQ    #0,D0
+3FC2 L03FC2        SWAP     D1
+                   MOVE.W   D1,D0
+                   DIVU     #10,D0
+                   SWAP     D0
+                   MOVE.W   D0,D1
+                   SWAP     D1
+                   DIVU     #10,D1
+                   MOVE.W   D1,D0
+                   SWAP     D1
+                   EXG      D0,D1
+                   RTS
+
+3FDC L03FDC        MOVEQ    #$1F,D0
+3FDE L03FDE        SUB.W    0(A6,A1.L),D0
+                   MOVE.L   2(A6,A1.L),D1
+                   LSR.L    D0,D1
+                   ADDQ.W   #6,A1
+3FEA L03FEA        ADDQ.L   #5,D1
+                   BSR.S    L03FC0
+                   ADDQ.W   #1,D4
+                   CMPI.L   #$00989680,D1
+                   BGE.S    L03FEA
+                   ADDQ.W   #8,A0
+                   MOVEQ    #6,D2
+3FFC L03FFC        BSR.S    L03FC0
+                   ADDI.B   #$30,D0
+                   SUBQ.W   #1,A0
+                   MOVE.B   D0,0(A6,A0.L)
+                   DBF      D2,L03FFC
+                   CMPI.W   #5,D4
+                   BGT.S    L0401C
+                   CMPI.W   #$FFFF,D4
+                   BLT.S    L0401C
+                   MOVEQ    #0,D5
+                   BRA.S    L04020
+
+401C L0401C        MOVE.L   D4,D5
+401E L0401E        MOVEQ    #0,D4
+4020 L04020        ADDQ.W   #1,D4
+                   MOVE.L   A0,D2
+                   BRA.S    L0402E
+
+4026 L04026        MOVE.B   0(A6,A0.L),-1(A6,A0.L)
+402C L0402C        ADDQ.W   #1,A0
+402E L0402E        DBF      D4,L04026
+                   MOVE.B   #$2E,-1(A6,A0.L)
+                   MOVEA.L  D2,A0
+                   ADDQ.W   #7,A0
+403C L0403C        SUBQ.W   #1,A0
+                   CMPI.B   #$30,0(A6,A0.L)
+                   BEQ.S    L0403C
+                   CMPI.B   #$2E,0(A6,A0.L)
+                   BEQ.S    L04050
+                   ADDQ.W   #1,A0
+4050 L04050        TST.W    D5
+                   BEQ.S    L04066
+                   MOVE.B   #$45,0(A6,A0.L)
+                   ADDQ.W   #1,A0
+                   SUBQ.W   #2,A1
+                   MOVE.W   D5,0(A6,A1.L)
+                   JSR      CN_ITOD(PC)
+4066 L04066        MOVE.L   A0,D1
+                   SUB.L    (A7)+,D1
+                   MOVEM.L  (A7)+,D2-5
+                   RTS
+
+4070 L04070        MOVE.B   #$30,0(A6,A0.L)
+4076 L04076        ADDQ.W   #1,A0
+                   ADDQ.W   #6,A1
+                   BRA.S    L04066
+
+407C L0407C        MOVEM.L  D0/D5,-(A7)
+4080 L04080        CMPI.W   #10,D0
+                   BGE.S    L040A4
+4086 L04086        SUBQ.W   #1,D5
+                   BLE.S    L04094
+                   MOVE.B   #$30,0(A6,A1.L)
+                   ADDQ.L   #1,A1
+                   BRA.S    L04086
+
+4094 L04094        ADDI.W   #$30,D0
+4098 L04098        MOVE.B   D0,0(A6,A1.L)
+                   ADDQ.L   #1,A1
+                   MOVEM.L  (A7)+,D0/D5
+                   RTS
+
+40A4 L040A4        ANDI.L   #$FFFF,D0
+40AA L040AA        DIVU     #10,D0
+                   SUBQ.W   #1,D5
+                   BSR.S    L0407C
+                   SWAP     D0
+                   BRA.S    L04094
+
+40B6 L040B6        BSR.S    L0407C
+40B8 L040B8        MOVE.B   #$20,0(A6,A1.L)
+                   ADDQ.L   #1,A1
+                   RTS
+
+40C2 L040C2        BSR.S    L0407C
+40C4 L040C4        MOVE.B   #$3A,0(A6,A1.L)
+                   ADDQ.L   #1,A1
+                   RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=CN_DATE         GET DATE STRING                     (VECTOR $EC)             ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D1.L     time in seconds                                     ³
+³                 A1.L     pointer to maths stack (relative to A6)             ³
+³                                                                              ³
+³EXIT:            A1.L     new stack                                           ³
+³                 D1,D2,D3,A0,A2 and A3 preserved                              ³
+³                                                                              ³
+³ERRORS:          none                                                         ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+40CE CN_DATE       MOVEM.L  D1-5/A2,-(A7)
+                   BSR      L04188
+                   SUBA.L   #$16,A1
+                   MOVE.W   #$14,0(A6,A1.L)
+                   ADDQ.L   #2,A1
+                   MOVE.W   D2,D0
+                   MOVEQ    #4,D5
+                   BSR.S    L040B6
+                   MULU     #3,D4
+                   LEA      L04163(PC,D4.W),A2
+                   BSR.S    L04140
+                   MOVE.B   #$20,0(A6,A1.L)
+                   ADDQ.L   #1,A1
+                   MOVEQ    #2,D5
+                   MOVE.W   D1,D0
+                   BSR.S    L040B6
+                   SWAP     D2
+                   MOVE.W   D2,D0
+                   BSR.S    L040C2
+                   MOVE.W   D3,D0
+                   BSR.S    L040C2
+                   SWAP     D3
+                   MOVE.W   D3,D0
+                   BSR      L0407C
+                   SUBA.L   #$16,A1
+411A L0411A        MOVEM.L  (A7)+,D1-5/A2
+                   MOVEQ    #0,D0
+                   RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=CN_DAY          GET DAY STRING                      (VECTOR $EE)             ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D1.L     time in seconds                                     ³
+³                 A1.L     pointer to maths stack (relative to A6)             ³
+³                                                                              ³
+³EXIT:            A1.L     new stack (position of NOS)                         ³
+³                 D1,D2,D3,A0,A2 and A3 preserved                              ³
+³                                                                              ³
+³ERRORS:          none                                                         ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+4122 CN_DAY        MOVEM.L  D1-5/A2,-(A7)
+                   BSR.S    L04188
+                   SUBQ.L   #6,A1
+                   MOVE.W   #3,0(A6,A1.L)
+                   ADDQ.L   #2,A1
+                   MULU     #3,D0
+                   LEA      L0414E(PC,D0.W),A2
+                   BSR.S    L04140
+                   SUBQ.L   #5,A1
+                   BRA.S    L0411A
+
+4140 L04140        MOVEQ    #2,D0
+4142 L04142        MOVE.B   (A2)+,0(A6,A1.L)
+4146 L04146        ADDQ.L   #1,A1
+                   DBF      D0,L04142
+                   RTS
+
+414E L0414E        DC.B     'Sun','Mon','Tue','Wed','Thu','Fri','Sat'
+                   DC.B     'Jan','Feb','Mar','Apr','May','Jun','Jul'
+                   DC.B     'Aug','Sep','Oct','Nov','Dec',0
+
+4188 L04188        MOVE.W   #$3C,D2
+                   BSR      L04210
+                   MOVE.W   D0,D3
+                   SWAP     D3
+                   BSR.S    L04210
+                   MOVE.W   D0,D3
+                   DIVU     #$18,D1
+                   MOVE.L   D1,D2
+                   ANDI.L   #$FFFF,D1
+                   MOVE.L   D1,D0
+                   DIVU     #7,D0
+                   SWAP     D0
+                   DIVU     #$5B5,D1
+                   MOVE.W   D1,D2
+                   ASL.W    #2,D2
+                   ADDI.W   #$7A9,D2
+                   CLR.W    D1
+                   SWAP     D1
+                   DIVU     #$16D,D1
+41C0 L041C0        MOVEQ    #0,D4
+41C2 L041C2        CMPI.W   #4,D1
+                   BNE.S    L041CE
+                   SUBQ.W   #1,D1
+                   MOVE.W   #$16D,D4
+41CE L041CE        ADD.W    D1,D2
+                   SWAP     D1
+                   ADD.W    D4,D1
+41D4 L041D4        MOVEQ    #0,D5
+                   MOVE.W   D2,D4
+                   ANDI.W   #3,D4
+                   BNE.S    L041E0
+41DE L041DE        MOVEQ    #1,D5
+41E0 L041E0        MOVE.W   D5,D4
+                   ADDI.W   #$3A,D4
+                   CMP.W    D4,D1
+                   BLE.S    L041EE
+                   ADDQ.W   #2,D1
+                   SUB.W    D5,D1
+41EE L041EE        MOVE.W   D1,D5
+                   ADDI.W   #$5C,D5
+                   MULU     #$64,D5
+                   DIVU     #$BEF,D5
+                   MOVE.W   D5,D4
+                   ADDI.W   #$5C,D1
+                   MULU     #$BEF,D5
+                   DIVU     #$64,D5
+                   SUB.W    D5,D1
+                   SUBQ.W   #3,D4
+                   RTS
+
+4210 L04210        MOVEQ    #0,D0
+4212 L04212        SWAP     D1
+                   MOVE.W   D1,D0
+                   DIVU     D2,D0
+                   SWAP     D0
+                   MOVE.W   D0,D1
+                   SWAP     D1
+                   DIVU     D2,D1
+                   MOVE.W   D1,D0
+                   SWAP     D1
+                   EXG      D0,D1
+                   RTS
+

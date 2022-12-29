@@ -1,0 +1,1012 @@
+
+*********************************************************
+* Trap #1 definitions : memory management & job control *
+*********************************************************
+
+MT.INF   EQU $00           get system information
+MT.CJOB  EQU $01           create job
+MT.JINF  EQU $02           get job information
+MT.RJOB  EQU $04           remove a job
+MT.FRJOB EQU $05           force remove a job
+MT.FREE  EQU $06           find omount of free space
+MT.TRAPV EQU $07           set RAM exception table
+MT.SUSJB EQU $08           suspend job
+MT.RELJB EQU $09           release a suspended job
+MT.ACTIV EQU $0A           activate a job
+MT.PRIOR EQU $0B           change job priority
+MT.ALLOC EQU $0C           allocate heap space
+MT.LNKFR EQU $0D           release heap space
+MT.ALRES EQU $0E           allocate resident procedure space
+MT.RERES EQU $0F           release resident procedure area
+MT.DMODE EQU $10           set or read display mode
+MT.IPCOM EQU $11           send IPC command
+MT.BAUD  EQU $12           set serial port baud rate
+MT.RCLCK EQU $13           read clock
+MT.SCLCK EQU $14           set clock
+MT.ACLCK EQU $15           adjust clock
+MT.ALBAS EQU $16           allocate SUPERBASIC area
+MT.REBAS EQU $17           release SUPERBASIC area
+MT.ALCHP EQU $18           allocate common heap space
+MT.RECHP EQU $19           release common heap space
+MT.LXINT EQU $1A           link in external interrupt handler
+MT.RXINT EQU $1B           unlink external interrupt handler
+MT.LPOLL EQU $1C           link in polled task
+MT.RPOLL EQU $1D           unlink polled task
+MT.LSCHD EQU $1E           link in scheduler task
+MT.RSCDH EQU $1F           unlink scheduler task
+MT.LIOD  EQU $20           link in I/O driver
+MT.RIOD  EQU $21           unlink I/O driver
+MT.LDD   EQU $22           link in directory driver
+MT.RDD   EQU $23           unlink directory driver
+
+****************************************
+* Trap #2 definitions : I/O allocation *
+****************************************
+
+IO.OPEN  EQU $01           open a channel
+IO.CLOSE EQU $02           close a channel
+IO.FORMT EQU $03           format a medium
+IO.DELET EQU $04           delete a file
+
+***********************************************
+* Trap #3 definitions : actual I/O & graphics *
+***********************************************
+
+IO.PEND  EQU $00           test pending input
+IO.FBYTE EQU $01           fetch a byte
+IO.FLINE EQU $02           fetch a line
+IO.FSTRG EQU $03           fetch a string of bytes
+IO.EDLIN EQU $04           edit a line
+IO.SBYTE EQU $05           send a byte
+IO.SSTRG EQU $07           send a string of bytes
+SD.EXTOP EQU $09           external operation
+SD.PXENQ EQU $0A           read window size/cursor position (pixel)
+SD.CHENQ EQU $0B           read window size/cursor position (character)
+SD.BORDR EQU $0C           set window border
+SD.WDEF  EQU $0D           re-define window
+SD.CURE  EQU $0E           enable cursor
+SD.CURS  EQU $0F           disable cursor
+SD.POS   EQU $10           set cursor position
+SD.TAB   EQU $11           set horizontal position
+SD.NL    EQU $12           do newline
+SD.PCOL  EQU $13           set to previous column
+SD.NCOL  EQU $14           set to next colomn
+SD.PROW  EQU $15           set to previous row
+SD.NROW  EQU $16           set to next row
+SD.PIXP  EQU $17           set pixel position
+SD.SCROL EQU $18           scroll entire window
+SD.SCRTP EQU $19           scroll top of window
+SD.SCRBT EQU $1A           scroll bottom of window
+SD.PAN   EQU $1B           pan whole window
+SD.PANLN EQU $1E           pan cursor line
+SD.PANRT EQU $1F           pan righthand side of cursor line
+SD.CLEAR EQU $20           clear whole window
+SD.CLRTP EQU $21           clear top of window
+SD.CLRBT EQU $22           clear bottom of window
+SD.CLRLN EQU $23           clear cursor line
+SD.CLRRT EQU $24           clear to right of cursor
+SD.FOUNT EQU $25           set character fonts
+SD.RECOL EQU $26           recolour a window
+SD.SETPA EQU $27           set paper colour
+SD.SETST EQU $28           set strip colour
+SD.SETIN EQU $29           set ink colour
+SD.SETFL EQU $2A           set flash mode
+SD.SETUL EQU $2B           set underline mode
+SD.SETMD EQU $2C           set write mode
+SD.SETSZ EQU $2D           set character size
+SD.FILL  EQU $2E           fill a block
+SD.DONL  EQU $2F           do pending newline
+SD.POINT EQU $30           plot point
+SD.LINE  EQU $31           draw line
+SD.ARC   EQU $32           plot arc
+SD.ELIPS EQU $33           draw circle/ellipse
+SD.SCALE EQU $34           set graphic scale and origin
+SD.FLOOD EQU $35           set fill mode/user vectors
+SD.GCUR  EQU $36           set text cursor with graphic co-ordinates
+FS.CHECK EQU $40           check pending operations
+FS.FLUSH EQU $41           flush all buffers
+FS.POSAB EQU $42           position absolute file pointer
+FS.POSRE EQU $43           position relative file pointer
+FS.MDINF EQU $45           get information about medium
+FS.HEADS EQU $46           set file header
+FS.HEADR EQU $47           read file header
+FS.LOAD  EQU $48           load a file
+FS.SAVE  EQU $49           save a file
+
+*********************************************************
+* Channel definition block for the serial device driver *
+*********************************************************
+
+CH.LEN   EQU $00  long     length of this definition block
+CH.DRIVR EQU $04  long     pointer to linkage block of device driver
+CH.OWNER EQU $08  long     ID of owner job
+CH.RFLAG EQU $0C  long     location to be set when space released
+CH.TAG   EQU $10  word     channel tag
+CH.STAT  EQU $12  byte     status:
+
+*                          0   = ok
+*                          -1  = A1 passed absolute
+*                          $80 = A1 passed relative to A6
+*                          -ve = waiting
+
+CH.ACTN  EQU $13  byte     action required for waiting job (value of D0)
+CH.JOBWT EQU $14  long     ID of job waiting for I/O
+CH.END   EQU $18           end of standard definition block
+
+SER.CHNO EQU $18  byte     port number: 1 or 2
+SER.PAR  EQU $1A  byte     parity:
+
+*                          0   = none
+*                          1   = odd
+*                          2   = even
+*                          3   = mark
+*                          4   = space
+
+SER.TXHS EQU $1C  word     transmit handshake flag:
+
+*                          -1  = ignore
+*                          0   = handshake
+
+SER.PROT EQU $1E  word     protocol flag:
+
+*                          -1  = raw
+*                          0   = CTRL Z
+*                          1   = convert
+
+SER.RXQ  EQU $20           receive queue header followed by queue
+SER.TXQ  EQU $82           transmit queue header followed by queue
+SER.END  EQU $E4           end of serial device definition block
+
+*******************************************************
+* Channel definition block for the pipe device driver *
+*******************************************************
+
+CH.LEN   EQU $00  long     length of this definition block
+CH.DRIVR EQU $04  long     pointer to linkage block of device driver
+CH.OWNER EQU $08  long     ID of owner job
+CH.RFLAG EQU $0C  long     location to be set when space released
+CH.TAG   EQU $10  word     channel tag
+CH.STAT  EQU $12  byte     status:
+
+*                          0   = ok
+*                          -1  = A1 passed absolute
+*                          $80 = A1 passed relative to A6
+*                          -ve = waiting
+
+CH.ACTN  EQU $13  byte     action required for waiting job (value of D0)
+CH.JOBWT EQU $14  long     ID of job waiting for I/O
+CH.END   EQU $18           end of standard definition block
+
+CH.QIN   EQU $18  long     pointer to I/P queue (0 if O/P pipe)
+CH.QOUT  EQU $1C  long     pointer to O/P queue (0 if I/P pipe)
+CH.QEND  EQU $20           end of pipe device definition block or queue
+*                          header followed by queue if O/P pipe
+
+*****************************************************************
+* Channel definition block for the console/screen device driver *
+*****************************************************************
+
+CH.LEN   EQU $00  long     length of this definition block
+CH.DRIVR EQU $04  long     pointer to linkage block of device driver
+CH.OWNER EQU $08  long     ID of owner job
+CH.RFLAG EQU $0C  long     location to be set when space released
+CH.TAG   EQU $10  word     channel tag
+CH.STAT  EQU $12  byte     status:
+
+*                          0   = ok
+*                          -1  = A1 passed absolute
+*                          $80 = A1 passed relative to A6
+*                          -ve = waiting
+
+CH.ACTN  EQU $13  byte     action required for waiting job (value of D0)
+CH.JOBWT EQU $14  long     ID of job waiting for I/O
+CH.END   EQU $18           end of standard definition block
+
+SD.XMIN  EQU $18  word     top left hand position of window
+SD.YMIN  EQU $1A  word
+SD.XSIZE EQU $1C  word     window size
+SD.YSIZE EQU $1E  word
+SD.BORWD EQU $20  word     border width
+SD.XPOS  EQU $22  word     current cursor position within window
+SD.YPOS  EQU $24  word
+SD.XINC  EQU $26  word     cursor & character size
+SD.YINC  EQU $28  word
+SD.FOUNT EQU $2A  2 long   address of character fonts
+SD.SCRB  EQU $32  long     start of screen memory
+SD.PMASK EQU $36  long     paper colour mask
+SD.SMASK EQU $3A  long     strip colour mask
+SD.IMASK EQU $3E  long     ink colour mask
+SD.CATTR EQU $42  byte     character attributes:
+
+*                          bit 0 = underline
+*                          bit 1 = flash
+*                          bit 2 = transparent background
+*                          bit 3 = XOR printing
+*                          bit 4 = double height
+*                          bit 5 = extended width
+*                          bit 6 = double width
+*                          bit 7 = graphics positioned characters
+
+SD.CURF  EQU $43  byte     cursor status: 0 = suppressed , +ve = visible
+SD.PCOLR EQU $44  byte     paper colour byte
+SD.SCOLR EQU $45  byte     strip colour byte
+SD.ICOLR EQU $46  byte     ink colour byte
+SD.BCOLR EQU $47  byte     border colour byte
+SD.NLSTA EQU $48  byte     newline status: 0 = none pending , 1 = pending 
+SD.FMOD  EQU $49  byte     fill mode: 0 = off , 1 = on
+SD.YORG  EQU $4A  f.p.     graphics window origin
+SD.XORG  EQU $50  f.p.
+SD.SCAL  EQU $56  f.p.     scale factor for graphics
+SD.FBUF  EQU $5C  long     location of fill buffer
+SD.FUSE  EQU $60  long     pointer to user defined fill vectors (0 if none)
+SD.KBD   EQU $64  long     start of keyboard queue header if console
+*                          channel or 0 if screen channel
+SD.END   EQU $68           end of screen device definition block
+
+******************************************************
+* Channel definition block for network device driver *
+******************************************************
+
+CH.LEN   EQU $00  long     length of this definition block
+CH.DRIVR EQU $04  long     pointer to linkage block of device driver
+CH.OWNER EQU $08  long     ID of owner job
+CH.RFLAG EQU $0C  long     location to be set when space released
+CH.TAG   EQU $10  word     channel tag
+CH.STAT  EQU $12  byte     status:
+
+*                          0   = ok
+*                          -1  = A1 passed absolute
+*                          $80 = A1 passed relative to A6
+*                          -ve = waiting
+
+CH.ACTN  EQU $13  byte     action required for waiting job (value of D0)
+CH.JOBWT EQU $14  long     ID of job waiting for I/O
+CH.END   EQU $18           end of standard definition block
+
+NET.HEDR EQU $18  byte     destination station no
+NET.SELF EQU $19  byte     this station no
+NET.BLKL EQU $1A  byte     least significant byte of data block no
+NET.BLKH EQU $1B  byte     most significant byte of data block no
+NET.TYPE EQU $1C  byte     packet type:
+
+*                          0   = data packet
+*                          1   = EOF packet
+*                          -ve = O/P
+*                          +ve = I/P
+
+NET.NBYT EQU $1D  byte     number of bytes in data block
+NET.DCHK EQU $1E  byte     data checksum
+NET.HCHK EQU $1F  byte     header checksum
+NET.DATA EQU $20  255      data block
+NET.RPNT EQU $11F byte     pointer to current position in data block
+NET.END  EQU $120          end of network device definition block
+
+*********************************************************
+* Channel definition block for microdrive device driver *
+*********************************************************
+
+CH.LEN   EQU $00  long     length of this definition block
+CH.DRIVR EQU $04  long     pointer to linkage block of device driver
+CH.OWNER EQU $08  long     ID of owner job
+CH.RFLAG EQU $0C  long     location to be set when space released
+CH.TAG   EQU $10  word     channel tag
+CH.STAT  EQU $12  byte     status:
+
+*                          0   = ok
+*                          -1  = A1 passed absolute
+*                          $80 = A1 passed relative to A6
+*                          -ve = waiting
+
+CH.ACTN  EQU $13  byte     action required for waiting job (value of D0)
+CH.JOBWT EQU $14  long     ID of job waiting for I/O
+CH.END   EQU $18           end of standard definition block
+
+FS.NEXT  EQU $18  long     link to next channel for this file system
+FS.ACCES EQU $1C  byte     access mode defined when opened:
+
+*                          0   = old exclusive device
+*                          1   = old shared device
+*                          3   = new overwrite file
+*                          4   = open directory
+*                          -ve = delete
+
+FS.DRIVE EQU $1D  byte     drive ID (index to table of pointers to the
+*                          physical definition blocks)
+FS.FILNR EQU $1E  word     file number on drive
+FS.NBLOK EQU $20  word     block number containing next byte
+FS.NBYTE EQU $22  word     next byte number from block
+FS.EBLOK EQU $24  word     block number containing byte after EOF
+FS.EBYTE EQU $26  word     byte number after EOF
+FS.CBLOK EQU $28  long     pointer to slave block table for current slave
+*                          block which may hold current/next byte
+FS.UPDT  EQU $2C  byte     set when file is updated
+FS.FNAME EQU $32  38 bytes length of name followed by filename
+FS.SPARE EQU $58  72 bytes spare workspace used by OS
+FS.END   EQU $A0           end of microdrive device definition block
+
+**********************************************************
+* Physical definition block for microdrive device driver *
+**********************************************************
+
+CH.LEN   EQU $00  long     length of this definition block
+CH.DRIVR EQU $04  long     pointer to linkage block of device driver
+CH.OWNER EQU $08  long     ID of owner job
+CH.RFLAG EQU $0C  long     location to be set when space released
+
+FS.DRIVR EQU $10  long     pointer to access layer link for driver
+FS.DRIVN EQU $14  byte     drive no
+FS.MNAME EQU $16  12 bytes length followed by medium name
+FS.FILES EQU $22  byte     number of files open
+FS.BADM  EQU $23  byte     unofficial: 0 = medium ok , -1 = medium bad 
+MD.FAIL  EQU $24  byte     failure count:
+
+*                          4   = write/verify operations
+*                          8   = read
+
+MD.MAP   EQU $28  510      microdrive map in pairs for each sector:
+
+*                          even byte:        -1 = bad
+*                                            -2 = unused
+*                                            -3 = deletion pending
+
+*                          odd byte:         block no
+
+MD.LSECT EQU $226 word     last sector allocated
+MD.PENDG EQU $228 512      map of pending operations, one word/sector
+MD.END   EQU $428          end of physical definition block
+
+****************
+* Queue header *
+****************
+
+Q.NEXTQ  EQU $00  long     link to next queue (bit 31 used to mark EOF)
+Q.END    EQU $04  long     pointer to physical end of queue
+Q.NEXTIN EQU $08  long     pointer to location to insert next character
+Q.NXTOUT EQU $0C  long     pointer to location to remove next character
+Q.QUEUE  EQU $10           physical start of queue
+
+***************
+* File header *
+***************
+
+* Non-directory device file header.
+
+FH.LEN   EQU $00  long     file length
+FH.ACCES EQU $04  byte     file access key (0 in QDOS 1.03)
+FH.TYPE  EQU $05  byte     file type:
+
+*                          0   = basic program or ordinary data file
+*                          1   = executable program
+
+FH.DATA  EQU $06  long     default data space for executable files
+
+* Extended definition for directory device drivers.
+
+FH.NAME  EQU $0E  38 bytes length followed by file name
+FH.UPDT  EQU $34  long     date of last update
+FH.CREA  EQU $38  long     date of creation
+FH.BACK  EQU $3A  long     date of last backup
+
+****************************
+* Microdrive Sector Header *
+****************************
+
+SH.INV   EQU $00  byte     invisible $FF byte
+SH.SECT  EQU $01  word     sector number
+SH.NAME  EQU $03  10 bytes file name (no length)
+SH.RAND  EQU $0D  word     random number as set when medium formatted
+
+***************************
+* Slave block table entry *
+***************************
+
+BT.STAT  EQU $00  byte     status byte:
+
+*                          0   = unavailable to OS
+*                          1   = empty block
+*                          $X3 = block is true representation of file
+*                          $X7 = block is updated (awaiting write)
+*                          $X9 = block is awaiting read
+*                          $XB = block is awaiting verify
+
+*                          X is drive ID for this file
+
+BT.PRIOR EQU $01  byte     available for fancy slaving algorithm
+BT.SECTR EQU $02  word     physical sector on medium
+BT.FILNR EQU $04  word     file no
+BT.BLOCK EQU $06  word     block number of contents of this slave block
+
+*********************************
+* User heap or free space block *
+*********************************
+
+UH.LEN   EQU $00  long     length of this block
+UH.NEXT  EQU $04  long     relative pointer to next block or 0 if end of
+*                          linked list
+
+**********************************
+* SUPERBASIC channel table block *
+**********************************
+
+CH.ID    EQU $00  long     QDOS channel ID (-1 if closed)
+CH.CCPY  EQU $04  f.p.     current graphics y co-ordinate
+CH.CCPX  EQU $0A  f.p.     current graphics x co-ordinate
+CH.ANGLE EQU $10  f.p.     turtle angle
+CH.PEN   EQU $16  byte     pen position: 0 = up , 1 = down
+CH.CHPOS EQU $20  word     cursor position across line on printer
+CH.WIDTH EQU $22  word     number of characters per line on printer
+CH.SPARE EQU $24  long     currently unused
+CH.LENCH EQU $28           end of channel block
+
+*******************************
+* Device driver linkage block *
+*******************************
+
+* Definition for simple device drivers.
+
+DEV.LINK EQU $00  long     link to next entry
+DEV.IO   EQU $04  long     I/O routine address
+DEV.OPEN EQU $08  long     open routine address
+DEV.CLOS EQU $0C  long     close routine address
+
+* Extended definition for directory device drivers.
+
+DEV.SLAV EQU $10  long     forced slaving routine address
+DEV.RENA EQU $14  long     rename routine address
+DEV.TRUN EQU $18  long     truncate routine address
+DEV.FORM EQU $1C  long     format routine address
+DEV.PDLE EQU $20  long     length of physical definition block
+DEV.NAME EQU $24  long     name length followed by device name 
+
+*********************
+* Job control block *
+*********************
+
+JB.LEN   EQU $00  long     total length of job control block + job area
+JB.START EQU $04  long     start address of actual job on activation
+JB.OWNER EQU $08  long     job ID of this job's owner (0 if independent)
+JB.HOLD  EQU $0C  long     location to be cleared when job released
+*                          (from suspension if SUPERBASIC)
+JB.TAG   EQU $10  word     tag for job as allocated by MT.CJOB
+JB.PRIOR EQU $12  byte     current accumulated priority. This increments
+*                          when a job is active but not executing.
+*                          It is set to zero when the job is executing.
+*                          The scheduler allows the job with the highest
+*                          accumulated priority to execute.
+JB.PRINC EQU $13  byte     initial priority of job (0 if inactive)
+JB.STAT  EQU $14  word     job status:
+
+*                          0   = not suspended & is possibly active
+*                          +ve = number of scheduler frames before release
+*                                from suspension 
+*                          -1  = suspended
+*                          -2  = waiting for another job to finish
+
+JB.RELA6 EQU $16  byte     set if next TRAP has relative addressing
+JB.WFLAG EQU $17  byte     set if a job is waiting for this one to finish
+JB.WJOB  EQU $18  long     ID of above job waiting for this one
+JB.TRAPV EQU $1C  long     pointer to RAM exception vector table
+JB.D0    EQU $20  long     saved value of D0
+JB.D1    EQU $24  long     saved value of D1
+JB.D2    EQU $28  long     saved value of D2
+JB.D3    EQU $2C  long     saved value of D3
+JB.D4    EQU $30  long     saved value of D4
+JB.D5    EQU $34  long     saved value of D5
+JB.D6    EQU $38  long     saved value of D6
+JB.D7    EQU $3C  long     saved value of D7
+JB.A0    EQU $40  long     saved value of A0
+JB.A1    EQU $44  long     saved value of A1
+JB.A2    EQU $48  long     saved value of A2
+JB.A3    EQU $4C  long     saved value of A3
+JB.A4    EQU $50  long     saved value of A4
+JB.A5    EQU $54  long     saved value of A5
+JB.A6    EQU $58  long     saved value of A6
+JB.A7    EQU $5C  long     saved value of A7 (USP)
+JB.SR    EQU $60  word     saved value of status register
+JB.PC    EQU $62  long     saved value of program counter
+JB.END   EQU $68           end of job control block
+
+JB.BRNCH EQU $68  6        branch instruction for code start
+JB.IDENT EQU $6E  word     $4AFB identification word
+JB.NAME  EQU $70           length of name followed by job name
+
+*************************
+* QDOS system variables *
+*************************
+
+SV_BASE  EQU $28000        base of system variables
+
+SV.IDENT EQU $00  long     identification word $D254
+SV.CHEAP EQU $04  long     start of common heap area
+SV.CHPFR EQU $08  long     relative pointer to first free space in common
+*                          heap area
+SV.FREE  EQU $0C  long     start of free area (slave blocks)
+SV.BASIC EQU $10  long     start of SUPERBASIC job header
+SV.TRNSP EQU $14  long     start of transient program area (TRNSP)
+SV.TRNFR EQU $18  long     relative pointer to first free space in TRNSP
+SV.RESPR EQU $1C  long     start of resident procedure area (RESPR)
+SV.RAMT  EQU $20  long     end of RAM + 1
+SV.RAND  EQU $2E  word     pseudo random number
+SV.POLLM EQU $30  word     number of poll interrupts missed
+SV.TVMOD EQU $32  byte     display mode: 0 = monitor , 1 = TV
+SV.SCRST EQU $33  byte     screen status: 0 = active , -1 = inactive
+*                          toggled by pressing CTRL F5
+SV.MCSTA EQU $34  byte     copy of master chip status register:
+
+*                          bit 1 : 0 = display on , 1 = display off
+*                          bit 3 : 0 = mode 4 , 1 = mode 8
+*                          bit 7 : 0 = screen #0 , 1 = screen #1
+
+SV.PCINT EQU $35  byte     copy of interrupt register:
+
+*                          bit 0 = gap interrupt
+*                          bit 1 = interface interrupt
+*                          bit 2 = transmit interrupt
+*                          bit 3 = frame interrupt
+*                          bit 4 = external interrupt
+
+SV.NETNR EQU $37  byte     self network station number
+SV.I2LST EQU $38  long     start of external interrupt linked list
+SV.PLIST EQU $3C  long     start of polled tasks linked list
+SV.SHLST EQU $40  long     start of scheduler tasks linked list
+SV.DRLST EQU $44  long     start of simple device driver's linked list
+SV.DDLST EQU $48  long     start of directory device driver's linked list
+SV.KEYQ  EQU $4C  long     pointer to current keyboard queue (0 if none)
+SV.TRAPV EQU $50  long     current RAM exception vector table
+
+* Pointers to resource management tables.
+
+SV.BTPNT EQU $54  long     current entry in slave block table
+SV.BTBAS EQU $58  long     start of slave block table
+SV.BTTOP EQU $5C  long     end of slave block table + 1
+SV.JBTAG EQU $60  word     current value of job tag
+SV.JBMAX EQU $62  word     maximum job number to date
+SV.JBPNT EQU $64  long     current entry in job table
+SV.JBBAS EQU $68  long     start of job table
+SV.JBTOP EQU $6C  long     end of job table + 1
+SV.CHTAG EQU $70  word     current value of channel tag
+SV.CHMAX EQU $72  word     maximum channel number to date
+SV.CHPNT EQU $74  long     current entry in channel table (last entry used
+*                          by the "do waiting I/O" scheduler routine)
+SV.CHBAS EQU $78  long     start of channel table
+SV.CHTOP EQU $7C  long     end of channel table + 1
+SV.CAPS  EQU $88  byte     capslock status: 0 = off , -1 = on
+SV.ARBUF EQU $8A  word     auto key repeat buffer (last key pressed)
+SV.ARDEL EQU $8C  word     auto key repeat delay  (normally 30)
+SV.ARFRQ EQU $8E  word     auto key repeat 1/frequency (normally 4)
+SV.ARCNT EQU $90  word     auto key repeat counter
+SV.CQCH  EQU $92  word     change keyboard queue code (normally CTRL C)
+SV.WP    EQU $94  byte     write protect status: 0 = no : -1 = yes
+SV.SOUND EQU $96  byte     sound status: 0 = off , -1 = on
+SV.SER1C EQU $98  long     start of serial port 1 input queue
+SV.SER2C EQU $9C  long     start of serial port 2 input queue
+SV.TMODE EQU $A0  byte     transmit control register ULA mode:
+
+*                          bit 0 to 2 : baud rate no
+*                          bit 3 : 0 = port 1 , 1 = port 2
+*                          bit 4 = microdrive turning
+
+SV.CSUB  EQU $A2  long     address of capslock subroutine (0 if none)
+SV.TIMO  EQU $A6  word     serial output timeout counter (switching mode)
+SV.TIMOV EQU $A8  word     timeout for above counter (1200/baud rate + 1)
+SV.FSTAT EQU $AA  word     cursor flash counter
+SV.MDRUN EQU $EE  byte     currently turning microdrive number (0 if none)
+SV.MDCNT EQU $EF  byte     microdrive run-up/run-down counter
+SV.MDDID EQU $F0  8 byte   drive ID for each drive ( = drive number * 4)
+SV.MDSTA EQU $F8  8 byte   pending operation status for each drives:
+
+*                          0   = no pending operations
+*                          -1  = pending operations
+
+SV.FSDEF EQU $100 16 long  pointer to physical definition block for each of
+*                          the above drives
+SV.FSLST EQU $140 16 long  pointer to the linked list of file channel
+*                          definitions for each drive
+SV.STACB EQU $180 192 long lowest position for SSP
+SV.STACT EQU $480          highest position for SSP
+
+*******************************
+* SUPERBASIC system variables *
+*******************************
+
+BV.START EQU $00           start of pointers
+
+BV.BFBAS EQU $00  long     buffer base
+BV.BFP   EQU $04  long     buffer running pointer
+BV.TKBAS EQU $08  long     token list base
+BV.TKP   EQU $0C  long     token list running pointer
+BV.PFBAS EQU $10  long     program file base
+BV.PFP   EQU $14  long     program file running pointer
+BV.NTBAS EQU $18  long     name table base
+BV.NTP   EQU $1C  long     name table running pointer
+BV.NLBAS EQU $20  long     name list base
+BV.NLP   EQU $24  long     name list running pointer
+BV.VVBAS EQU $28  long     variable value area base
+BV.VVP   EQU $2C  long     variable values  running pointer
+BV.CHBAS EQU $30  long     start of SUPERBASIC channel table 
+BV.CHP   EQU $34  long     channel table running pointer
+BV.RTBAS EQU $38  long     return stack base
+BV.RTP   EQU $3C  long     return stack running pointer
+BV.LNBAS EQU $40  long     line number table base
+BV.LNP   EQU $44  long     line number table running pointer
+BV.BTP   EQU $48  long     top of backtrack stack used during parsing
+
+BV.CHANG EQU $48           change of direction marker
+
+BV.BTBAS EQU $4C  long     back track stack base
+BV.TGP   EQU $50  long     top of temporary graph stack used during parsing
+BV.TGBAS EQU $54  long     temporary graph stack base
+BV.RIP   EQU $58  long     top of maths stack ( running pointer )
+BV.RIBAS EQU $5C  long     base of maths stack
+BV.SSP   EQU $60  long     top of system stack ( running pointer )
+BV.SSBAS EQU $64  long     system stack base
+
+BV.ENDPT EQU $64           end of pointers
+
+BV.LINUM EQU $68  word     current line number
+BV.LNGTH EQU $6A  word     current length
+BV.STMNT EQU $6C  byte     current statement on line
+BV.CONT  EQU $6D  byte     process status: 0 = stop , $80 = continue
+BV.INLIN EQU $6E  byte     clause status: 0 = no , 1 = loop , -1 = other
+BV.SING  EQU $6F  byte     single line (immediate) mode: 0 = off , -1 = on
+BV.INDEX EQU $70  word     name table row of last inline loop index read
+BV.VVFRE EQU $72  long     first free space in variable value table
+BV.SSSAV EQU $76  long     SP value to go to if out of memory error occurs
+BV.RAND  EQU $80  long     random number
+BV.COMCH EQU $84  long     command (input) channel ID
+BV.NXLIN EQU $88  word     which line number to start after
+BV.NXSTM EQU $8A  byte     which statement to start after
+BV.COMLN EQU $8B  byte     command line status: 0 = not saved , -1 = saved
+BV.STOPN EQU $8C  word     which STOP number set
+BV.EDIT  EQU $8E  byte     edit marker: 0 = not edited , -1 = edited
+BV.BRK   EQU $8F  byte     break status: 0 = yes , $80 = no
+BV.UNRVL EQU $90  byte     unravel status: 0 = no need , -1 = yes need to
+BV.CNSTM EQU $91  byte     statement to CONTINUE after
+BV.CNLNO EQU $92  word     line number to CONTINUE after
+BV.DALNO EQU $94  word     current DATA line number
+BV.DASTM EQU $96  byte     current DATA statement number
+BV.DAITM EQU $97  byte     next DATA item to read
+BV.CNIND EQU $98  word     inline loop index to CONTINUE with
+BV.CNINL EQU $9A  byte     inline loop flag for CONTINUE
+BV.LSANY EQU $9B  byte     checking list staus: 0 = no , -1 = yes
+BV.LSBEF EQU $9C  word     invisible top line number
+BV.LSBAS EQU $9E  word     bottom line number in window
+BV.LSAFT EQU $A0  word     invisible bottom line number
+BV.LENLN EQU $A2  word     length of window line
+BV.MAXLN EQU $A4  word     maximum number of lines in window
+BV.TOTLN EQU $A6  word     number of window lines so far
+BV.AUTO  EQU $AA  byte     EDIT/AUTO mode: 0 = off , -1 = on
+BV.PRINT EQU $AB  byte     token status: 0 = leave in buffer , -1 = print
+BV.EDLIN EQU $AC  word     next editable line number
+BV.EDINC EQU $AE  word     AUTO line number increment
+BV.TKPOS EQU $B0  long     location of A4 in token list when starting PROC
+BV.PTEMP EQU $B4  long     temporary pointer for GO_PROC
+BV.UNDO  EQU $B8  byte     undo return stack then redo procedure or not
+BV.ARROW EQU $B9  byte     arrow status: 0 = enter or none , 1 = up , -1 = down
+BV.LSFIL EQU $BA  word     line number to fill window to when relisting
+BV.END   EQU $100          end of SUPERBASIC system variables
+
+***************
+* Error codes *
+***************
+
+ERR.NC   EQU -1            not complete
+ERR.NJ   EQU -2            invalid job
+ERR.OM   EQU -3            out of memory
+ERR.OR   EQU -4            out of range
+ERR.BO   EQU -5            buffer full
+ERR.NO   EQU -6            channel not open
+ERR.NF   EQU -7            not found
+ERR.EX   EQU -8            already exists
+ERR.IU   EQU -9            in use
+ERR.EF   EQU -10           end of file
+ERR.DF   EQU -11           drive full
+ERR.BN   EQU -12           bad name
+ERR.TE   EQU -13           Xmit error
+ERR.FF   EQU -14           format failed
+ERR.BP   EQU -15           bad parameter
+ERR.FE   EQU -16           bad or changed medium
+ERR.XP   EQU -17           error in expression
+ERR.OV   EQU -18           overflow
+ERR.NI   EQU -19           not implemented (yet)
+ERR.RO   EQU -20           read only
+ERR.BL   EQU -21           bad line
+
+**************************************
+* Arithmetic package operation codes *
+**************************************
+
+RI.TERM  EQU $00           terminate execution
+RI.LOAD  EQU $00           load operand key if even   (bit 0 clear)
+RI.STORE EQU $01           load operand key if odd    (bit 0 set)
+RI.NINT  EQU $02           find nearest word integer to TOS
+RI.INT   EQU $04           truncate TOS to word integer
+RI.NLINT EQU $06           find nearest long integer to TOS
+RI.FLOAT EQU $08           convert TOS word integer to floating point
+RI.ADD   EQU $0A           add TOS to NOS
+RI.SUB   EQU $0C           subtract TOS from NOS
+RI.MULT  EQU $0E           multiply TOS by NOS
+RI.DIV   EQU $10           divide TOS into NOS
+RI.ABS   EQU $12           take positive value of TOS
+RI.NEG   EQU $14           negate TOS
+RI.DUP   EQU $16           duplicate TOS
+RI.COS   EQU $18           take cosine of TOS
+RI.SIN   EQU $1A           take sine of TOS
+RI.TAN   EQU $1C           take tangent of TOS
+RI.COT   EQU $1E           take cotangent of TOS
+RI.ASIN  EQU $20           take arcsine of TOS
+RI.ACOS  EQU $22           take arccosine of TOS
+RI.ATAN  EQU $24           take arctangent of TOS
+RI.ACOT  EQU $26           take arccotangent of TOS
+RI.SQRT  EQU $28           take square root of TOS
+RI.LN    EQU $2A           take natural logarithm (base e) of TOS
+RI.LOG10 EQU $2C           take common logarithm (base 10) of TOS
+RI.EXP   EQU $2E           take exponential of TOS
+RI.POWFP EQU $30           take NOS to the power of TOS
+
+***************
+* Token types *
+***************
+
+SPC.B    EQU $80           space (followed by number of spaces) {1 byte}
+KEY.B    EQU $81           keyword
+BIP.B    EQU $82           built in procedure
+BIF.B    EQU $83           built in function
+SYM.B    EQU $84           symbol
+OPS.B    EQU $85           operation symbol
+MON.B    EQU $86           mono-operation symbol
+SYV.B    EQU $87           system variable
+NAM.W    EQU $8800         name (followed by word offset into name table)
+SHI.B    EQU $89           short integer
+LGI.B    EQU $8A           long integer
+STR.B    EQU $8B           string (followed by code of quote used)
+TXT.W    EQU $8C00         text (followed by text length word)
+LNO.W    EQU $8D00         line number (followed by line number word)
+SEP.B    EQU $8E           seperator
+FP.B     EQU $F0           floating point number (only top nibble relevant)
+
+******************
+* Keyword tokens *
+******************
+
+KEY.END  EQU $8101         End
+KEY.FOR  EQU $8102         For
+KEY.IF   EQU $8103         If
+KEY.REP  EQU $8104         Repeat
+KEY.SEL  EQU $8105         Select
+KEY.WHEN EQU $8106         When
+KEY.DEF  EQU $8107         Define
+KEY.PROC EQU $8108         Procedure
+KEY.FUNC EQU $8109         Function
+KEY.GO   EQU $810A         Go
+KEY.TO   EQU $810B         To
+KEY.SUB  EQU $810C         Sub
+KEY.ERR  EQU $810E         Error
+KEY.EOF  EQU $810F         Eof      (not normally used)
+KEY.INP  EQU $8110         Input    (not normally used)
+KEY.REST EQU $8111         Restore
+KEY.NEXT EQU $8112         Next
+KEY.EXIT EQU $8113         exit
+KEY.ELSE EQU $8114         Else
+KEY.ON   EQU $8115         On
+KEY.RET  EQU $8116         Return
+KEY.RMND EQU $8117         Remainder
+KEY.DATA EQU $8118         Data
+KEY.DIM  EQU $8119         Dim
+KEY.LOCL EQU $811A         Local
+KEY.LET  EQU $811B         Let
+KEY.THEN EQU $811C         Then
+KEY.STEP EQU $811D         Step
+KEY.RMRK EQU $811E         Remark
+KEY.MIST EQU $811F         Mistake
+
+*****************
+* Symbol tokens *
+*****************
+
+SYM.EQ   EQU $8401         =
+SYM.COL  EQU $8402         :        colon
+SYM.HASH EQU $8403         #        channel
+SYM.COM  EQU $8404         ,        comma
+SYM.LBKT EQU $8405         (        left bracket
+SYM.RBKT EQU $8406         )        right bracket
+SYM.LCRL EQU $8407         {        left curly bracket
+SYM.RCRL EQU $8408         }        right curly bracket
+SYM.FSPC EQU $8409                  forced space
+SYM.LF   EQU $840A                  line feed
+
+***************************
+* Operation symbol tokens *
+***************************
+
+OPS.ADD  EQU $8501         +        addition
+OPS.SUB  EQU $8502         -        subtraction
+OPS.MULT EQU $8503         *        multiplication
+OPS.DIVD EQU $8504         /        division
+OPS.GE   EQU $8505         >=       greater than or equal to   (type 2)
+OPS.GT   EQU $8506         >        greater than               (type 2)
+OPS.EQUV EQU $8507         ==       equivalent                 (type 3)
+OPS.EQ   EQU $8508         =        equal to                   (type 2)
+OPS.NEQ  EQU $8509         <>       not equal to               (type 3)
+OPS.LE   EQU $850A         <=       less than or equal to      (type 2)
+OPS.LT   EQU $850B         <        less than                  (type 2)
+OPS.BOR  EQU $850C         ||       bitwise OR
+OPS.BAND EQU $850D         &&       bitwise AND
+OPS.BXOR EQU $850E         ^^       bitwise exclusive OR
+OPS.POWR EQU $850F         ^        raise to the power
+OPS.CONC EQU $8510         &        concatenation
+OPS.OR   EQU $8511         OR       logical OR
+OPS.AND  EQU $8512         AND      logical AND
+OPS.XOR  EQU $8513         XOR      logical exclusive OR
+OPS.MOD  EQU $8514         MOD      modulus
+OPS.DIV  EQU $8515         DIV      integer division
+OPS.INST EQU $8516         INSTR    string comparison          (type 1)
+
+********************************
+* Mono-operation symbol tokens *
+********************************
+
+MON.NEG  EQU $8601         -        negate (unary minus)
+MON.POS  EQU $8602         +        positive (unary plus)
+MON.BNOT EQU $8603         ~~       bitwise NOT
+MON.NOT  EQU $8604         NOT      logical NOT
+
+********************
+* Separator tokens *
+********************
+
+SEP.COM  EQU $8E01         ,        comma (tabulate)
+SEP.SEM  EQU $8E02         ;        semi-colon
+SEP.NL   EQU $8E03         \        backslash (force newline)
+SEP.SSPC EQU $8E04         !        exclamation (special space)
+SEP.TO   EQU $8E05         TO       general tabulation
+
+*****************************
+* SUPERBASIC variable types *
+*****************************
+
+VT.STRUD EQU $0001         undefined string variable
+VT.FPUD  EQU $0002         undefined floating point number
+VT.INTUD EQU $0003         undefined integer
+VT.STRXP EQU $0101         string expression
+VT.FPXP  EQU $0102         flaoting point expression
+VT.INTXP EQU $0103         integer expression
+VT.STRVA EQU $0201         string variable
+VT.FPVA  EQU $0202         floating point variable
+VT.INTVA EQU $0203         integer variable
+VT.STRSB EQU $0300         substring
+VT.STRAR EQU $0301         string array
+VT.FPAR  EQU $0302         flaoting point array
+VT.INTAR EQU $0303         integer array
+VT.SBPRO EQU $0400         SUPERBASIC procedure
+VT.STRFN EQU $0501         string function
+VT.FPFN  EQU $0502         floating point function
+VT.INTFN EQU $0503         integer function
+VT.RPTLP EQU $0602         REPeat loop name
+VT.FORLP EQU $0702         FOR loop counter
+VT.MCPRO EQU $0800         machine code procedure
+VT.MCFUN EQU $0900         machine code function 
+
+**************************
+* Peripheral I/O devices *
+**************************
+
+PC_CLOCK EQU $18000        real time clock long word write only register
+PC.CLOCK EQU $00
+PC_TCTRL EQU $18002        transmit control register byte
+PC.TCTRL EQU $02
+PC_IPCWR EQU $18003        IPC write only port
+PC.IPCWR EQU $03
+PC_IPCRD EQU $18020        IPC read only port
+PC.IPCRD EQU $20
+*                          bit 0 = network port
+*                          bit 1 = microdrive buffer full
+*                          bit 4 = port 1 handshake line not ready (DTR)
+*                          bit 5 = port 2 handshake line not ready (CTS)
+
+PC_MCTRL EQU $18020        microdrive control write only register
+PC.MCTRL EQU $20
+PC_INTR  EQU $18021        interrupt register
+PC.INTR  EQU $21
+PC_TDATA EQU $18022        transmit write only register for serial O/P
+PC.TDATA EQU $22
+PC_TRAK1 EQU $18022        microdrive read track 1
+PC.TRAK1 EQU $22
+PC_TRAK2 EQU $18023        microdrive read track 2
+PC.TRAK2 EQU $23
+MC_STAT  EQU $18063        master chip write only status register
+MC.STAT  EQU $63
+*                          bit 1 = screen display off if set
+*                          bit 3 = 8 colour mode if set, 4 colour mode if reset
+*                          bit 7 = screen #0 if reset, screen #1 if set
+
+
+****************
+* IPC commands *
+****************
+
+IPC_0    EQU 0             processor reset
+IPC_1    EQU 1             report input status
+IPC_2    EQU 2             open serial port 1
+IPC_3    EQU 3             open serial port 2
+IPC_4    EQU 4             close serial port 1
+IPC_5    EQU 5             close serial port 2
+IPC_6    EQU 6             read serial port 1
+IPC_7    EQU 7             read serial port 2
+IPC_8    EQU 8             read keyboard
+IPC_9    EQU 9             keyboard direct read
+IPC_10   EQU 10            initiate sound process
+IPC_11   EQU 11            kill sound process
+IPC_12   EQU 12            microdrive reduced sensitivity
+IPC_13   EQU 13            change baud rate
+IPC_14   EQU 14            random number generator
+IPC_15   EQU 15            processor test
+
+********************
+* Name table entry *
+********************
+
+NTB.TYPE EQU 0    byte     name type
+NTB.STVT EQU 1    byte     separator type and variable type { MSN, LSN }
+NTB.OFFN EQU 2    word     pointer to offset of name in namelist or a copy of
+*                          the entry
+NTB.OFFV EQU 4    long     This can be one of the following things:
+
+* 1. A pointer to offset of value of the variable in the variables area.
+*
+* 2. The offset of the array descriptor.
+*
+* 3. The address of the machine code procedure or function.
+*
+* 4. The line number of the SUPERbasic procedure or function.
+
+***********************************************
+* The variable values area entry for an array *
+***********************************************
+
+RA.OFSTV EQU 0    long     offset in variable values area of values
+RA.NUMIN EQU 4    word     
+
+****************************************************
+* The variable values area entry for a REPeat loop *
+****************************************************
+
+RL.INDEX EQU 0     6 bytes
+RL.REPLN EQU 6     word    line number of the line containing the REPeat
+RL.ENDLN EQU 8     word    line number of the line containing the END REPeat
+RL.RELST EQU 10    byte    statement number of the REPeat statement
+RL.ENDST EQU 11    byte    statement number of the END REPeat statement
+
+*************************************************
+* The variable values area entry for a FOR loop *
+*************************************************
+
+FL.INDEX EQU 0     6 bytes
+FL.FORLN EQU 6     word
+FL.ENDLN EQU 8     word
+FL.FORST EQU 10    byte
+FL.ENDST EQU 11    byte
+FL.ENDV  EQU 12    6 bytes 
+FL.STEPV EQU 18    6 bytes
+FL.POSRN EQU 24    word
+
+*********************************
+* SUPERbasic return stack entry *
+*********************************
+
+RS.ONTPE EQU 0     long
+RS.ONTLE EQU 4     long
+RS.TNTLE EQU 8     long
+RS.DEFLN EQU 12    word
+RS.FNTYP EQU 14    byte
+RS.SWAP  EQU 15    byte
+RS.TYPE  EQU 16    byte    type:
+
+*                          0 = GO SUB
+*                          1 = PROCedure
+*                          2 and 3 = FUNction
+
+RS.STMNT EQU 17    byte
+RS.LINEN EQU 18    word
+RS.STATS EQU 20    long
+

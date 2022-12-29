@@ -1,0 +1,785 @@
+2.26 Low level device routines.
+
+2.26.1 Microdrive low level routines
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=MD_FORMT        FORMAT A MICRODRIVE MEDIUM (TRAP #2 WITH D0 = $03)           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A0.L     pointer to medium name                              ³
+³                                                                              ³
+³EXIT:            D1.W     number of good sectors                              ³
+³                 D2.W     total number of sector on media                     ³
+³                 A0       corrupted                                           ³
+³                 D3,A1,A2 and A3 preserved                                    ³
+³                                                                              ³
+³ERRORS:          ERR.OM   out of memory                                       ³
+³                 ERR.NF   device not found                                    ³
+³                 ERR.IU   device in use                                       ³
+³                 ERR.FF   format failed                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   TRAP handler alters registers so that A6 now points at system variables.
+   A1 points at channel defintion block. D1 = drive no.
+
+A77A MD_FORMT      TST.B    SV.MDRUN(A6)           ;any microdrives already turning ?
+                   BEQ.S    L0A784                 ;jump forward if not
+                   MOVEQ    #ERR.IU,D0             ;signal "in use"
+                   RTS
+
+A784 L0A784        MOVE.L   D1,D7                  ;copy drive number to D7
+A786 L0A786        MOVEA.L  A1,A4                  ;A4 points at medium name string
+                   MOVE.L   #$480,D1               ;length of format definition block
+                   JSR      MM_ALCHP               ;find the space,A0 points at header on e
+                   BEQ.S    L0A798                 ;jump forward if number errors
+                   RTS
+
+   Note that the allocate heap space call clears the area allocated.
+   First, build up the sector header. This consists of 14 bytes which
+   contain the following information :-
+
+   1.     "invisible" $FF byte
+   2.     sector number byte
+   3.     10 bytes of cartridge name
+   4.     random number word
+   5.     two bytes of checksum
+
+A798 L0A798        LEA      16(A0),A0              ;A0 points at start of area after header
+A79C L0A79C        MOVEA.L  A0,A5                  ;and copy to A5
+                   MOVEQ    #-1,D0                 ;"invisible" $FF  and sector number
+                   MOVE.W   D0,(A0)+
+
+   Set up the area for the medium name by filling with space characters.
+
+                   MOVEQ    #9,D1                  ;10 bytes to set
+A7A4 L0A7A4        MOVE.B   #" ",(A0)+             ;set to ascii space
+                   DBF      D1,L0A7A4
+
+   Then set up the random no.
+   The medium name is usually given in a the form such as a word then:
+
+        "MDV1_MEDIUMNAME"
+
+   So copy the actual name after the underscore to the header only.
+
+                   MOVE.W   SV.RAND(A6),(A0)       ;copy system random number to header
+                   SUBA.W   #10,A0                 ;point back at start of medium name
+                   MOVE.W   (A4)+,D1               ;get name length
+                   ADDQ.W   #5,A4                  ;A4 points at medium name string
+                   SUBQ.W   #5,D1                  ;ignore device name,drive number and "_"
+                   CMPI.W   #10,D1                 ;length ok ?
+                   BLS.S    L0A7C2                 ;jump forward if so otherwise
+                   MOVEQ    #10,D1                 ;use the first ten characters only
+A7C2 L0A7C2        MOVE.B   (A4)+,(A0)+            ;copy to header character by character
+                   SUBQ.W   #1,D1                  ;reduce length count
+                   BGT.S    L0A7C2
+
+   Now set up the 4 byte block header. This consists of the following:-
+
+   1.     file number byte               = $FD "unused sector"
+   2.     block number byte              = 0
+   3.     two bytes of checksum
+
+                   LEA      14(A5),A0              ;A0 points at end of header defined abov
+                   MOVE.L   #$FD000C10,(A0)+       ;set all four bytes in one go
+
+   Then the 606 byte long dummy sector. This is slightly longer then the
+   normal sector length to allow for timing inaccuracies.
+   $AA55 in binary is %1010101001010101.
+
+                   ADDQ.W   #6,A0                  ;step past file length,access and type
+                   MOVE.W   D0,(A0)+
+                   MOVE.W   #$012A,D1              ;299 words to set
+A7DA L0A7DA        MOVE.W   #$AA55,(A0)+           ;set to alternate one's and zero's
+                   DBF      D1,L0A7DA
+
+                   MOVE.W   #$0F0E,$021A(A5)       ;finally set the two checksum bytes.
+                   MOVE.W   D7,D1                  ;get drive number
+                   LEA      PC_MCTRL,A3            ;A3 points at microdrive control registe
+                   MOVEQ    #%00010000,D0          ;mask for ?
+                   JSR      TIMER1
+                   ORI.W    #$0700,SR              ;disable interrupts
+                   JSR      MD_SELCT               ;switch on the microdrive motor
+
+   Wait until the microdrive gets up to speed.
+
+                   MOVE.L   #$1E848,D0             ;allow ????? ms
+A808 L0A808        SUBQ.L   #1,D0                  ;decrement count
+                   BNE.S    L0A808                 ;try again unless finished
+
+   Now send out the dummy sector headers,blocks and sectors one by one
+   until 256 sectors have been written to the cartridge.
+
+                   MOVE.B   #%00001010,(A3)        ;signal "?"
+A810 L0A810        MOVEA.L  A5,A1                  ;A1 points at sector header
+                   MOVEQ    #13,D1                 ;length of sector header - 1
+
+   Wait for the interblock gap to pass.
+
+                   MOVE.W   #$479,D0
+A818 L0A818        DBF      D0,L0A818
+
+   Now send the sector header.
+
+                   JSR      MD_SENDH(PC)           ;send the sector header
+                   MOVE.W   #$0261,D1              ;length of block header + sector
+
+   Wait for the header block/sector gap to pass.
+
+                   MOVE.W   #$047B,D0
+A828 L0A828        DBF      D0,L0A828
+
+   Finnally send the actual dummy sector.
+
+                   JSR      MD_SENDH(PC)           ;send the sector
+                   SUBQ.B   #1,-$026F(A1)          ;decrement sector count
+                   BCC.S    L0A810                 ;try next sector if greater than 0
+
+   All the sectors have been written to the cartridge so try to read them
+   back and find out which one's are faulty.
+
+                   MOVE.B   #%00000010,(A3)        ;signal "?"
+                   CLR.L    -(A7)
+                   MOVEQ    #0,D5                  ;prepare D5
+A83E L0A83E        MOVE.W   #$00FF,D5              ;set up byte pair for microdrive map
+A842 L0A842        MOVEA.L  A5,A1                  ;1 points at start of sector header buff
+                   JSR      MD_SECTR(PC)           ;read in the sector header
+
+   These are the return points for the three read sector header errors.
+
+                   BRA.S    L0A860                 ;branch if bad medium
+                   BRA.S    L0A85C                 ;branch if bad header
+                   JSR      L0AA16(PC)
+                   BRA.S    L0A85C
+
+A852 L0A852        ADD.W    D7,D7
+                   SUBQ.B   #1,0(A1,D7.W)
+                   TST.W    D7
+                   BEQ.S    L0A864
+A85C L0A85C        DBF      D5,L0A842
+A860 L0A860        BRA      L0A8FA
+
+A864 L0A864        TST.L    D5
+A866 L0A866        BLT.S    L0A86C
+                   MOVEQ    #-1,D5
+                   BRA.S    L0A83E
+
+A86C L0A86C        MOVEQ    #0,D5
+A86E L0A86E        SUBQ.B   #1,(A1)
+A870 L0A870        CMPI.B   #$FE,(A1)
+                   BGT.S    L0A882
+                   BEQ.S    L0A87A
+                   ADDQ.W   #1,(A7)
+A87A L0A87A        MOVE.B   D5,3(A7)
+                   MOVE.B   (A1),D4
+                   MOVEA.L  A1,A4
+A882 L0A882        ADDQ.W   #2,A1
+                   ADDQ.B   #1,D5
+                   BCC.S    L0A86E
+                   ST       (A4)
+                   ADDQ.B   #2,D4
+                   BEQ.S    L0A890
+                   SUBQ.W   #1,(A7)
+A890 L0A890        CMPI.W   #$C8,(A7)
+                   BLT.S    L0A8FA
+                   LEA      14(A5),A1
+                   MOVEQ    #0,D0
+A89C L0A89C        CLR.L    (A1)+
+                   ADDQ.B   #1,D0
+                   BPL.S    L0A89C
+                   LEA      $270(A5),A1
+                   MOVE.B   #$F8,(A1)
+                   MOVE.L   (A7),D1
+                   ADD.W    D1,D1
+                   SUBI.W   #16,D1
+A8B2 L0A8B2        SUBQ.W   #2,D1
+                   CMPI.B   #$FD,0(A1,D1.W)
+                   BNE.S    L0A8B2
+                   CLR.B    0(A1,D1.W)
+                   MOVE.W   D1,$1FE(A1)
+                   LSR.W    #1,D1
+                   MOVE.B   D1,(A7)
+                   MOVEQ    #0,D2
+                   JSR      L0A99C(PC)
+                   BRA.S    L0A8FA
+
+A8D0 L0A8D0        LEA      $270(A5),A1
+                   MOVE.W   (A1),-(A7)
+                   JSR      MD_WRITE(PC)
+                   ADDQ.W   #2,A7
+                   MOVE.B   (A7),D2
+                   JSR      L0A99C(PC)
+                   BRA.S    L0A8FA
+
+A8E4 L0A8E4        LEA      14(A5),A1
+                   MOVE.L   #64,(A1)
+                   CLR.W    -(A7)
+                   JSR      MD_WRITE(PC)
+                   ADDQ.W   #2,A7
+                   MOVEQ    #0,D7
+                   BRA.S    L0A8FC
+
+A8FA L0A8FA        MOVEQ    #-14,D7
+A8FC L0A8FC        JSR      MD_DESEL               ;switch all the microdrive motors off
+A902 L0A902        LEA      -$0010(A5),A0
+                   JSR      MM_RECHP               ;release the space
+                   JSR      CLRTMODE
+                   ANDI.W   #$F0FF,SR              ;enable interrupts
+                   CLR.B    (A7)
+                   MOVE.W   (A7)+,D1
+                   MOVE.W   (A7)+,D2
+                   MOVE.L   D7,D0
+                   RTS
+
+A920 MD_SENDH      LEA      L0A926(PC),A4
+A924 L0A924        BRA.S    L0A95E
+
+A926 L0A926        MOVEQ    #10,D4
+A928 L0A928        BRA.S    L0A954
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=MD_WRITE        WRITE A MICRODRIVE SECTOR           (VECTOR $126)            ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     start of buffer containing sector                   ³
+³                 A3.L     address of microdrive control register              ³
+³                                                                              ³
+³EXIT:            A1.L     updated pointer to buffer                           ³
+³                 D1-6,A0,A2 and A4 corrupted                                  ³
+³                 A3.L     preserved                                           ³
+³                                                                              ³
+³ERRORS:          none                                                         ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   The stack should contain a word with the following information:-
+
+   1.     high byte = file number
+   2.     low byte  = block number
+
+A92A MD_WRITE      MOVE.B   #%00001010,(A3)
+A92E L0A92E        MOVE.W   #$5C9,D0
+A932 L0A932        DBF      D0,L0A932
+                   MOVEA.L  A1,A0
+                   LEA      4(A7),A1
+                   MOVEQ    #1,D1
+                   LEA      L0A944(PC),A4
+                   BRA.S    L0A95E
+
+A944 L0A944        MOVEA.L  A0,A1
+A946 L0A946        MOVE.W   #$1FF,D1
+                   MOVEQ    #5,D5
+                   LEA      L0A952(PC),A4
+                   BRA.S    L0A96C
+
+A952 L0A952        MOVEQ    #2,D4
+A954 L0A954        MOVEQ    #$30,D0
+A956 L0A956        DBF      D0,L0A956
+A95A L0A95A        MOVE.B   D4,(A3)
+                   RTS
+
+A95E L0A95E        MOVEQ    #14,D0
+A960 L0A960        MOVE.B   D0,(A3)
+                   MOVE.B   D0,(A3)
+                   MOVEQ    #1,D6
+                   LEA      2(A3),A2
+                   MOVEQ    #9,D5
+A96C L0A96C        MOVEQ    #0,D4
+A96E L0A96E        BSR.S    L0A994
+                   SUBQ.B   #1,D5
+                   BGE.S    L0A96E
+                   MOVEQ    #-1,D4
+                   BSR.S    L0A994
+                   BSR.S    L0A994
+                   MOVE.W   #$F0F,D3
+                   MOVEQ    #0,D4
+A980 L0A980        MOVE.B   (A1)+,D4
+                   ADD.W    D4,D3
+                   BSR.S    L0A994
+                   DBF      D1,L0A980
+                   MOVE.W   D3,D4
+                   BSR.S    L0A994
+                   LSR.W    #8,D4
+                   BSR.S    L0A994
+                   JMP      (A4)
+
+A994 L0A994        BTST     D6,(A3)
+A996 L0A996        BNE.S    L0A994
+                   MOVE.B   D4,(A2)
+                   RTS
+
+A99C L0A99C        MOVEQ    #0,D5
+A99E L0A99E        MOVEA.L  A5,A1
+A9A0 L0A9A0        BSR.S    MD_SECTR
+                   RTS
+
+A9A4 L0A9A4        BRA.S    L0A99E
+
+A9A6 L0A9A6        CMP.B    D7,D2
+                   BEQ.S    L0A9B0
+                   ADDQ.B   #1,D5
+                   BCC.S    L0A99E
+                   RTS
+
+A9B0 L0A9B0        ADDQ.L   #2,(A7)
+A9B2 L0A9B2        RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=MD_SECTR        READ A MICRODRIVE SECTOR HEADER     (VECTOR $12A)            ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     start of buffer for header                          ³
+³                 A3.L     address of microdrive control register              ³
+³                                                                              ³
+³EXIT:            D7.B     sector number                                       ³
+³                 A1.L     one past end of buffer                              ³
+³                 D1-6,A0,A2 and A4 corrupted                                  ³
+³                 A3       preserved                                           ³
+³                                                                              ³
+³ERRORS:          none     multiple returns (3) are used instead               ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+A9B4 MD_SECTR      JSR      L0AA94(PC)
+A9B8 L0A9B8        RTS
+
+A9BA L0A9BA        ADDQ.L   #2,(A7)
+                   MOVEQ    #13,D1
+                   BSR.S    L0AA3E
+                   BRA.S    L0A9D2
+
+A9C2 L0A9C2        CMPI.B   #$FF,-14(A1)
+                   BNE.S    L0A9D2
+                   MOVEQ    #0,D7
+                   MOVE.B   -13(A1),D7
+                   ADDQ.L   #2,(A7)
+A9D2 L0A9D2        RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=MD_READ         READ A MICRODRIVE SECTOR            (VECTOR $124)            ³
+³=MD_VERIN        VERIFY A MICRODRIVE SECTOR          (VECTOR $128)            ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A1.L     start of buffer for header                          ³
+³                 A3.L     address of microdrive control register              ³
+³                                                                              ³
+³EXIT:            D1.L     file number                                         ³
+³                 D2.L     block number                                        ³
+³                 D7.B     sector number                                       ³
+³                 A1.L     updated pointer                                     ³
+³                 D3-6,A0,A2 and A4 corrupted                                  ³
+³                 A3       preserved                                           ³
+³                                                                              ³
+³ERRORS:          none     multiple returns (2) are used instead               ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+A9D4 MD_READ       LEA      L0AA3E(PC),A0
+                   BRA.S    L0A9DE
+
+A9DA MD_VERIN      LEA      L0AA5A(PC),A0
+A9DE L0A9DE        JSR      L0AA94(PC)
+                   RTS
+
+A9E4 L0A9E4        MOVE.L   A1,-(A7)
+                   CLR.W    -(A7)
+                   MOVEA.L  A7,A1
+                   MOVEQ    #1,D1
+                   BSR.S    L0AA3E
+                   BRA.S    L0AA08
+
+A9F0 L0A9F0        MOVE.B   #2,D1
+                   MOVE.B   D1,(A3)
+                   MOVE.B   D1,(A3)
+                   MOVE.W   #$1FF,D1
+                   MOVEA.L  2(A7),A1
+                   JSR      (A0)
+                   BRA.S    L0AA08
+
+AA04 L0AA04        ADDQ.L   #2,6(A7)
+AA08 L0AA08        MOVEQ    #0,D1
+                   MOVEQ    #0,D2
+                   MOVE.B   1(A7),D2
+                   MOVE.B   (A7)+,D1
+                   ADDQ.W   #4,A7
+                   RTS
+
+AA16 L0AA16        JSR      L0AA94(PC)
+AA1A L0AA1A        RTS
+
+AA1C L0AA1C        MOVE.W   #$261,D1
+                   BSR.S    L0AA5A
+                   RTS
+
+AA24 L0AA24        ADDQ.L   #2,(A7)
+                   RTS
+
+AA28 L0AA28        MOVE.W   #$100,D0
+AA2C L0AA2C        MOVE.W   #$F0F,D3
+                   MOVEQ    #0,D4
+                   MOVEQ    #2,D6
+                   LEA      2(A3),A4
+                   LEA      3(A3),A2
+                   RTS
+
+AA3E L0AA3E        BSR.S    L0AA28
+AA40 L0AA40        BTST     D6,(A3)
+AA42 L0AA42        DBNE     D0,L0AA40
+                   EXG      A2,A4
+                   MOVE.B   (A2),D4
+                   MOVE.B   D4,(A1)+
+                   ADD.W    D4,D3
+                   TST.W    D0
+                   BLT.S    L0AA92
+                   MOVEQ    #$14,D0
+                   SUBQ.W   #1,D1
+                   BGE.S    L0AA40
+                   BRA.S    L0AA76
+
+AA5A L0AA5A        BSR.S    L0AA28
+AA5C L0AA5C        BTST     D6,(A3)
+AA5E L0AA5E        DBNE     D0,L0AA5C
+                   EXG      A2,A4
+                   MOVE.B   (A2),D4
+                   CMP.B    (A1)+,D4
+                   BNE.S    L0AA92
+                   ADD.W    D4,D3
+                   TST.W    D0
+                   BLT.S    L0AA92
+                   MOVEQ    #$14,D0
+                   SUBQ.W   #1,D1
+                   BGE.S    L0AA5C
+AA76 L0AA76        BTST     D6,(A3)
+                   DBNE     D0,L0AA76
+                   EXG      A2,A4
+                   MOVE.B   (A2),D4
+                   ROR.W    #8,D4
+                   TST.W    D0
+                   BLT.S    L0AA92
+                   MOVEQ    #$14,D0
+                   ADDQ.W   #1,D1
+                   BEQ.S    L0AA76
+                   CMP.W    D4,D3
+                   BNE.S    L0AA92
+                   ADDQ.L   #2,(A7)
+AA92 L0AA92        RTS
+
+AA94 L0AA94        MOVEQ    #0,D1
+AA96 L0AA96        SUBQ.W   #1,D1
+AA98 L0AA98        BEQ.S    L0AABC
+                   BTST     #3,(A3)
+                   BEQ.S    L0AA96
+                   MOVEQ    #0,D1
+AAA2 L0AAA2        SUBQ.W   #1,D1
+                   BEQ.S    L0AABC
+                   MOVEQ    #$17,D0
+AAA8 L0AAA8        BTST     #3,(A3)
+                   BNE.S    L0AAA2
+                   DBF      D0,L0AAA8
+                   MOVE.B   #2,D1
+                   MOVE.B   D1,(A3)
+                   MOVE.B   D1,(A3)
+                   ADDQ.L   #2,(A7)
+AABC L0AABC        RTS
+
+2.26.2 Keyboard low level routines.
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=                                                                             ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D2.?                                                         ³
+³                                                                              ³
+³EXIT:            D1.W     high byte = ASCII code of key press                 ³
+³                           low byte = $FF if the ALT key pressed also         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+AABE L0AABE        MOVEQ    #1,D0
+                   BTST     #2,D2
+                   BEQ.S    L0AACA
+                   ADDI.B   #$3D,D1
+AACA L0AACA        EXT.W    D1
+                   MOVE.B   L0AB47(PC,D1.W),D1
+                   CMPI.B   #32,D1
+                   BHI.S    L0AAFA
+                   BEQ.S    L0AAF6
+                   CMPI.B   #31,D1
+                   BNE.S    L0AAE6
+                   BTST     D0,D2
+                   BEQ.S    L0AAE6
+                   MOVE.B   #$80,D1
+AAE6 L0AAE6        BTST     #0,D2
+                   BEQ.S    L0AAF2
+                   LSL.W    #8,D1
+                   MOVE.B   #$FF,D1
+AAF2 L0AAF2        ADDQ.L   #2,(A7)
+AAF4 L0AAF4        RTS
+
+AAF6 L0AAF6        BTST     D0,D2
+AAF8 L0AAF8        BNE.S    L0AAF4
+AAFA L0AAFA        CMPI.B   #$5F,D1
+                   BHI.S    L0AB0A
+                   BTST     D0,D2
+                   BEQ.S    L0AAE6
+                   ADDI.B   #$60,D1
+                   BRA.S    L0AAE6
+
+AB0A L0AB0A        CMPI.B   #$7F,D1
+AB0E L0AB0E        BHI.S    L0AB32
+                   BTST     D0,D2
+                   BEQ.S    L0AB1A
+                   SUBI.B   #$60,D1
+                   BRA.S    L0AAE6
+
+AB1A L0AB1A        TST.B    $88(A6)
+AB1E L0AB1E        BEQ.S    L0AAE6
+                   LEA      L03C96,A3
+                   CMP.B    0(A3,D1.W),D0
+                   BNE.S    L0AAE6
+                   BCLR     #5,D1
+                   BRA.S    L0AAE6
+
+AB32 L0AB32        CMPI.B   #$E7,D1
+AB36 L0AB36        BHI.S    L0AB3C
+                   ADD.B    D2,D1
+                   BRA.S    L0AAF2
+
+AB3C L0AB3C        CMPI.B   #$FB,D1
+AB40 L0AB40        BHI.S    L0AAE6
+                   BTST     D0,D2
+                   BEQ.S    L0AAE6
+                   ADDQ.B   #1,D1
+                   BRA.S    L0AAE6
+
+AB4C L0AB4C        DC.B     '/','n',',','8','2','6','q','e'
+                   DC.B     '0','t','u','9','w','i',$09,'r'
+                   DC.B     '-','y','o','l','3','h','1','a'
+                   DC.B     'p','d','j','[',$E0,'k','s','f'
+                   DC.B     '=','g',';',']','z','.','c','b'
+                   DC.B     '`','m',''',$0A,$C0,$D0,$1B,$C8
+                   DC.B     '\',' ',$D8,$F4,$E8,'5',$EC,$F0
+                   DC.B     $F8,'4','7','X','V','?','N','<'
+
+                   DC.B     '*','at','^','Q','E',')','T','U'
+                   DC.B     '(','W','I',$FD,'R','_','Y','O'
+                   DC.B     'L','#','H','!','A','P','D','J'
+                   DC.B     '{',$E0,'K','S','F','+','G',':'
+                   DC.B     '}','Z','>','C','B','~','M','"'
+                   DC.B     $FE,$C0,$D0,'',$C8,'|',$FC,$D8
+                   DC.B     $F6,$EA,'%',$EE,$F2,$FA,'$','&'
+
+2.26.3 Network low level routines.
+
+ABC4 L0ABC4        BTST     #4,$A0(A6)
+                   BNE.S    L0ABE6
+ABCC L0ABCC        LEA      L18020,A3
+                   LEA      -30(A3),A2
+                   MOVEQ    #24,D0
+                   JSR      L0040E
+                   ORI.W    #$0700,SR              ;disable interrupts
+                   MOVEQ    #0,D7
+                   RTS
+
+ABE6 L0ABE6        ADDQ.W   #4,A7
+                   MOVEQ    #-1,D0
+                   BRA      L0ACF2
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=NT_RPCKT        RECEIVE A NETWORK PACKET                                     ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:                                                                        ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+ABEE L0ABEE        MOVEM.L  D4-7,-(A7)
+                   CLR.W    $1C(A0)
+                   BSR.S    L0ABC4
+ABF8 L0ABF8        MOVE.W   #$16E2,D4
+ABFC L0ABFC        MOVE.W   #$01B5,D0
+AC00 L0AC00        BTST     D7,(A3)
+                   BEQ.S    L0AC0A
+                   DBF      D4,L0ABFC
+                   BRA.S    L0AC7C
+
+AC0A L0AC0A        DBF      D0,L0AC00
+AC0E L0AC0E        MOVE.W   #$C34,D0
+AC12 L0AC12        BTST     D7,(A3)
+                   BNE.S    L0AC1C
+                   DBF      D0,L0AC12
+                   BRA.S    L0AC7C
+
+AC1C L0AC1C        MOVE.W   #$DA,D0
+AC20 L0AC20        DBF      D0,L0AC20
+AC24 L0AC24        LEA      $20(A0),A1
+                   MOVEQ    #8,D1
+                   BSR      L0ACFE
+                   BLT.S    L0ABF8
+                   SUB.B    -(A1),D3
+                   CMP.B    (A1),D3
+                   BNE.S    L0ABF8
+                   SUBQ.W   #7,A1
+                   MOVE.W   $18(A0),D3
+                   ROR.W    #8,D3
+                   TST.B    D3
+                   BEQ.S    L0AC4C
+                   CMP.B    $19(A0),D3
+                   BEQ.S    L0AC4C
+                   CMP.W    (A1),D3
+                   BRA.S    L0AC4E
+
+AC4C L0AC4C        CMP.B    (A1),D3
+AC4E L0AC4E        BNE.S    L0AC7C
+AC50 L0AC50        MOVE.W   2(A1),D6
+                   SUB.W    $1A(A0),D6
+                   BNE.S    L0AC60
+                   MOVE.L   4(A1),$1C(A0)
+AC60 L0AC60        BSR      L0AD84
+                   MOVE.B   $1D(A0),D1
+                   BSR      L0ACFE
+                   BNE.S    L0AC7C
+                   CMP.B    $1E(A0),D3
+                   BNE.S    L0AC7C
+                   BSR      L0AD84
+                   TST.W    D6
+                   BEQ.S    L0ACDC
+AC7C L0AC7C        CLR.W    $1C(A0)
+                   BRA.S    L0ACEA
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=NT_SPCKT        SEND A NETWORK PACKET                                        ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:                                                                        ³
+³                                                                              ³
+³EXIT:                                                                         ³
+³                                                                              ³
+³ERRORS:                                                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+AC82 L0AC82        MOVEM.L  D4-7,-(A7)
+                   BSR      L0ABC4
+                   MOVE.B   $1D(A0),D1
+                   MOVEQ    #0,D3
+                   LEA      $20(A0),A1
+AC94 L0AC94        ADD.B    (A1)+,D3
+                   SUBQ.B   #1,D1
+                   BNE.S    L0AC94
+                   MOVE.B   D3,$001E(A0)
+                   MOVEQ    #7,D1
+                   MOVEQ    #0,D3
+                   LEA      $18(A0),A1
+ACA6 L0ACA6        ADD.B    (A1)+,D3
+                   SUBQ.B   #1,D1
+                   BNE.S    L0ACA6
+                   MOVE.B   D3,(A1)
+                   SUBQ.W   #7,A1
+                   BSR      L0AD3C
+                   BNE.S    L0ACEC
+                   MOVEQ    #8,D1
+                   MOVEQ    #1,D5
+ACBA L0ACBA        BSR      L0AD92
+                   MOVEQ    #1,D1
+                   LEA      $1F(A0),A1
+                   BSR.S    L0ACFE
+                   BEQ.S    L0ACD0
+                   TST.B    $18(A0)
+                   BNE.S    L0ACEA
+                   MOVEQ    #1,D3
+ACD0 L0ACD0        SUBQ.B   #1,D3
+                   BNE.S    L0ACEA
+                   MOVE.B   $1D(A0),D1
+                   DBF      D5,L0ACBA
+ACDC L0ACDC        ADDQ.B   #1,$1A(A0)
+                   BCC.S    L0ACE6
+                   ADDQ.B   #1,$1B(A0)
+ACE6 L0ACE6        MOVEQ    #0,D0
+                   BRA.S    L0ACEC
+
+ACEA L0ACEA        MOVEQ    #-1,D0                 ;signal "not complete"
+ACEC L0ACEC        JSR      CLRTMODE
+ACF2 L0ACF2        ANDI.W   #$F8FF,SR              ;enable interrupts
+ACF6 L0ACF6        MOVEM.L  (A7)+,D4-7
+                   TST.L    D0
+                   RTS
+
+ACFE L0ACFE        MOVE.W   #$18F,D0
+AD02 L0AD02        MOVEQ    #0,D3
+AD04 L0AD04        BTST     D7,(A3)
+                   BEQ.S    L0AD0A
+                   BRA.S    L0AD10
+
+AD0A L0AD0A        DBF      D0,L0AD04
+AD0E L0AD0E        BRA.S    L0AD38
+
+AD10 L0AD10        MOVEQ    #$46,D0
+AD12 L0AD12        BTST     D7,(A3)
+AD14 L0AD14        DBEQ     D4,L0AD12
+                   BNE.S    L0AD38
+                   MOVEQ    #7,D4
+                   MOVEQ    #$13,D0
+AD1E L0AD1E        ROR.B    D0,D7
+                   MOVE.B   (A3),D0
+                   ROXR.B   #1,D0
+                   ROXR.B   #1,D2
+                   MOVEQ    #6,D0
+                   DBF      D4,L0AD1E
+                   MOVE.B   D2,(A1)+
+                   ADD.B    D2,D3
+                   SUBQ.B   #1,D1
+                   BNE.S    L0AD10
+AD34 L0AD34        MOVEQ    #0,D0
+                   RTS
+
+AD38 L0AD38        MOVEQ    #ERR.NC,D0             ;signal "not complete"
+AD3A L0AD3A        RTS
+
+AD3C L0AD3C        MOVEQ    #$73,D0
+AD3E L0AD3E        MULU     $2E(A6),D0
+                   MOVE.W   D0,$2E(A6)
+                   EXT.W    D0
+                   ADDI.W   #$297,D0
+AD4C L0AD4C        BTST     D7,(A3)
+                   BNE.S    L0AD38
+                   DBF      D0,L0AD4C
+                   MOVE.B   $19(A0),D4
+                   NOT.B    D4
+                   MOVE.B   $A0(A6),D2
+                   MOVEQ    #9,D1
+AD60 L0AD60        LSL.B    #1,D4
+                   ROL.B    #1,D2
+                   ROXR.B   #1,D2
+                   MOVE.B   D2,(A2)
+                   BMI.S    L0AD78
+                   MOVEQ    #5,D0
+AD6C L0AD6C        BTST     D7,(A3)
+                   BEQ.S    L0AD72
+                   BRA.S    L0AD38
+
+AD72 L0AD72        DBF      D0,L0AD6C
+AD76 L0AD76        BRA.S    L0AD7E
+
+AD78 L0AD78        MOVEQ    #$10,D0
+AD7A L0AD7A        DBF      D0,L0AD7A
+AD7E L0AD7E        DBF      D1,L0AD60
+AD82 L0AD82        BRA.S    L0AD34
+
+AD84 L0AD84        TST.B    $18(A0)
+AD88 L0AD88        BEQ.S    L0AD34
+                   MOVEQ    #1,D1
+                   MOVE.W   #$FF01,D4
+                   BRA.S    L0AD96
+
+AD92 L0AD92        MOVEQ    #-1,D4
+AD94 L0AD94        MOVE.B   (A1)+,D4
+AD96 L0AD96        LSL.W    #1,D4
+AD98 L0AD98        ROL.W    #2,D4
+                   MOVEQ    #12,D3
+                   MOVE.B   $A0(A6),D0
+ADA0 L0ADA0        ASR.W    #1,D4
+                   ROL.B    #1,D0
+                   ROXR.B   #1,D0
+                   MOVEQ    #0,D7
+                   MOVE.B   D0,(A2)
+                   SUBQ.W   #1,D3
+                   BGE.S    L0ADA0
+                   SUBQ.B   #1,D1
+                   BNE.S    L0AD94
+                   MOVE.B   $A0(A6),(A2)
+
+   AND THE REST ...

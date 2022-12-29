@@ -1,0 +1,1928 @@
+
+                                  THE DISASSEMBLY
+
+2. The Disassembly proper.
+
+2.1 Initialisation and Exception Handlers.
+
+2.1.1 Switch-on Or Reset Values.
+
+      Computers are like people in more ways than one. When they are woken up
+   after a good nights rest, they tend to be a bit confused and in a dishevelled
+   condition. When power is first applied to a microprocessor, you can liken it
+   then to an Army barracks.
+
+    "The sun rises, the cock crows and the buggle sounds. The men quickly rise
+     from there beds and get ready for another days hard graft. All of a sudden
+     the Army Major walks in and informs the men that there is about to be an
+     inspection by the General. The men start rushing around, bumping into each
+     other as they try to clear up the mess. The General walks in and all of a
+     sudden, at a deafening shout from the Major, the men stand by their beds
+     and all is orderly..."
+
+   In a microprocessor, the part of the Major is played by the Reset line which
+   is connected to the chip. On power up, just like the men, the registers and
+   other internal switches are in a random state. The hardware is designed in
+   such a way that, on receipt of the RESET signal, The processor should take on
+   an orderly set of values. In the 68000 range of microprocessors the reset
+   signal causes the Program Counter and the Stack pointer to be set to the
+   values stored in the first two long words in memory. Thereafter, it is up to
+   the machine code stored at the location pointed to by the program counter to
+   set up the rest of the machine in an orderly manner and ready for action.
+
+   First of all then, we have the two reset vectors used by the CPU as the cold
+   start or warmstart stack pointer and program counter respectively.
+
+   These are the first two of a set of 256 long words taking up a 1K byte long
+   table which defines the addresses of the different exception handlers used by
+   the MC68000 series devices. All of these processors are upwards compatable so
+   that in theory this listing could be assembled and run on an MC68020 based
+   machine. For the QL however this would crash the machine as many of these
+   vectors have meaningless values due to the presence of data and machine code
+   instructions in this area.
+
+0000 RESETSSP      DC.L     $30000                 ;reset value of stack pointer (temporary)
+0004 RESETPC       DC.L     MEMTEST                ;reset value of program counter
+
+2.1.2 System Exception Vectors.
+
+   The following eight, long words, specify the addresses for the first of the
+   redirectable exceptions. The first one, the bus error, is ignored as it would
+   normally only occur if memory management hardware was in use as it signifies
+   that an unsuccessfull memory read or memory write cycle was attempted.
+
+0008 XVECTOR       DC.L     EXIT_HAN               ;bus error
+                   DC.L     XBRANCH                ;address error
+                   DC.L     XBRANCH + 2            ;illegal instruction
+                   DC.L     XBRANCH + 4            ;division by zero
+                   DC.L     XBRANCH + 6            ;chk instruction
+                   DC.L     XBRANCH + 8            ;TRAPV instruction
+                   DC.L     XBRANCH + 10           ;privilege violation error
+                   DC.L     XBRANCH + 12           ;instruction trace
+
+   This is a table of branch instructions used for the redirectable exceptions.
+   The BSR.S instructions are used so that the exception handler can deduce the
+   exception number from the return address and hence the RAM exception vector
+   number to be used instead. This is the first case of code where it should not
+   have been placed.
+
+0028 XBRANCH       BSR.S    XHANDLER               ;normally line 1010 emulator vector
+                   BSR.S    XHANDLER
+                   BSR.S    XHANDLER               ;normally line 1111 emulator vector
+                   BSR.S    XHANDLER
+                   BSR.S    XHANDLER               ;normally unassigned vector
+                   BSR.S    XHANDLER
+                   BSR.S    XHANDLER               ;normally co-processor protocol violation
+
+   Branch instructons for interrupts and user traps.
+
+                   BSR.S    XHANDLER
+                   BSR.S    XHANDLER               ;normally Format error
+                   BSR.S    XHANDLER
+                   BSR.S    XHANDLER               ;normally Uninitialised Interrupt vector
+                   BSR.S    XHANDLER
+                   BSR.S    XHANDLER               ;normally unassigned vector
+                   BSR.S    XHANDLER
+                   BSR.S    XHANDLER               ;normally unassigned vector
+                   BSR.S    XHANDLER
+                   BSR.S    XHANDLER               ;normally unassigned vector
+                   BSR.S    XHANDLER
+                   BSR.S    XHANDLER               ;normally unassigned vector
+                   DC.W     0                      ;align the following code on a long word
+
+   The following piece of code sits where the remaining unassigned vectors would
+   sit but as these are un-defined even for the MC68020, it is relatively safe
+   to put code here as the exceptions which use these vectors should never occur
+   even with faulty hardware.
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=XHANDLER        INITIAL EXCEPTION HANDLER                                    ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³JOB:    To check for the presence of a RAM exception table, and if one is in  ³
+³        use then a jump is made to redirect the exception. On return a check  ³
+³        is made to see if it was an address error exception and if so the     ³
+³        extra information normally placed on the supervisor stack, under this ³
+³        condition, is compensated for prior to a normal return.               ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:  none                                                                  ³
+³                                                                              ³
+³EXIT:   none                                                                  ³
+³                                                                              ³
+³ERRORS: none                                                                  ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   In the following code, the value #2A is subtracted from the value on the
+   top of the stack as this value is the same as the return address of the
+   "BRS.S" instruction used to pass control to this routine as a result of an
+   address error exception.
+
+0050 XHANDLER      BRA.L    CHKRAMEX               ;check for the RAM exception table
+0054 NORAMEX       SUBI.L   #$2A,(A7)+             ;was it an address error exception ?
+                   BNE.S    IGNORE                 ;exit normally if not, otherwise step
+005C EXIT_HAN      ADDQ.W   #8,A7                  ;passed extra information placed on stack
+005E IGNORE        RTE                             ;by the address error exception type
+
+2.1.3 Interrupt Vectors.
+
+   Only two of the interrupt exceptions are usable. The main system one which is
+   interrupt level two, and of course the non-maskable one, interrupt level 7.
+   The system interrupt is used to control all of the real time aspects of the
+   machine such as the multitasking and peripheral communications facilities.
+
+0060 IVECTORS      DC.L     IGNORE                 ;spurious interrupt vector
+                   DC.L     IGNORE                 ;interrupt level 1 vector
+                   DC.L     SYSINT                 ;system interrupt vector (interrupt level 2)
+                   DC.L     IGNORE                 ;interrupt level 3 vector
+                   DC.L     IGNORE                 ;interrupt level 4 vector
+                   DC.L     IGNORE                 ;interrupt level 5 vector
+                   DC.L     IGNORE                 ;interrupt level 6 vector
+                   DC.L     XBRANCH + 14           ;user interrupt vector (non-maskable)
+
+2.1.4 Trap Vectors.
+
+   The first five TRAPS only are used for QDOS with the remaining 11 TRAPS free
+   for use by user routines, provided that they have a suitable table of RAM
+   exception vectors in force.
+
+0080 TVECTORS      DC.L     ENTER_SM               ;TRAP #0 enter supervisor mode
+                   DC.L     MT_TRAP1               ;TRAP #1 general memory management
+                   DC.L     IO_TRAP2               ;TRAP #2 I/O device allocation
+                   DC.L     IO_TRAP3               ;TRAP #3 actual I/O and graphics
+                   DC.L     SB_TRAP4               ;TRAP #4 basic interpreter
+                   DC.L     XBRANCH + 16           ;TRAP #5 (user TRAP vectors)
+                   DC.L     XBRANCH + 18           ;TRAP #6
+                   DC.L     XBRANCH + 20           ;TRAP #7
+                   DC.L     XBRANCH + 22           ;TRAP #8
+                   DC.L     XBRANCH + 24           ;TRAP #9
+                   DC.L     XBRANCH + 26           ;TRAP #10
+                   DC.L     XBRANCH + 28           ;TRAP #11
+                   DC.L     XBRANCH + 30           ;TRAP #12
+                   DC.L     XBRANCH + 32           ;TRAP #13
+                   DC.L     XBRANCH + 34           ;TRAP #14
+                   DC.L     XBRANCH + 36           ;TRAP #15
+
+2.1.5 QDOS System Vectors.
+
+   The following word sized vectors are used to access many of the QDOS system
+   utilities not covered by TRAPs #1,2 and 3 plus some which are. These all sit
+   in locations which would normally contain the floating point co-processor and
+   paged memory management co-processor exception vectors. Unfortunately the QL
+   contains neither of these "SEXY" devices and so it is reasonably safe to put
+   word sized data here.
+
+00C0 MM.ALCHP      DC.W     MM_ALCHP               ;allocate common heap space
+00C2 MM.RECHP      DC.W     MM_RECHP               ;release common heap space
+00C4 UT.WINDW      DC.W     UT_WINDW               ;create window channel
+00C6 UT.CON        DC.W     UT_CON                 ;create console channel
+00C8 UT.SCR        DC.W     UT_SCR                 ;create screen channel
+00CA UT.ERR0       DC.W     UT_ERR0                ;send error message to channel 0
+00CC UT.ERR        DC.W     UT_ERR                 ;send error message to channel
+00CE UT.MINT       DC.W     UT_MINT                ;print decimal number on channel
+00D0 UT.MTEXT      DC.W     UT_MTEXT               ;send message to channel
+00D2 UT.LINK       DC.W     UT_LINK                ;link item into list
+00D4 UT.UNLNK      DC.W     UT_UNLNK               ;unlink item from list
+                   DC.W     $0000                  ;not implemented
+00D8 MM.ALLOC      DC.W     MM_ALLOC               ;allocate heap space
+00DA MM.LNKFR      DC.W     MM_LNKFR               ;link free space back into heap
+00DC IO.QSET       DC.W     IO_QSET                ;set up a queue header
+00DE IO.QTEST      DC.W     IO_QTEST               ;test queue status
+00E0 IO.QIN        DC.W     IO_QIN                 ;put byte into queue
+00E2 IO.QOUT       DC.W     IO_QOUT                ;get byte from queue
+00E4 IO.QEOF       DC.W     IO_QEOF                ;put EOF marker in queue
+00E6 UT.CSTR       DC.W     UT_CSTR                ;string comparison
+00E8 IO.SERQ       DC.W     IO_SERQ                ;direct queue handling
+00EA IO.SERIO      DC.W     IO_SERIO               ;general I/O handling
+00EC CN.DATE       DC.W     CN_DATE                ;get date string
+00EE CN.DAY        DC.W     CN_DAY                 ;get day string
+00F0 CN.FTOD       DC.W     CN_FTOD                ;convert floating point to ascii
+00F2 CN.ITOD       DC.W     CN_ITOD                ;convert integer to ascii
+00F4 CN.ITOBB      DC.W     CN_ITOBB               ;convert binary byte to ascii
+00F6 CN.ITOBW      DC.W     CN_ITOBW               ;convert binary word to ascii
+00F8 CN.ITOBL      DC.W     CN_ITOBL               ;convert binary long to ascii
+00FA CN.ITOHB      DC.W     CN_ITOHB               ;convert hex byte to ascii
+00FC CN.ITOHW      DC.W     CN_ITOHW               ;convert hex word to ascii
+00FE CN.ITOHL      DC.W     CN_ITOHL               ;convert hex long to ascii
+0100 CN.DTOF       DC.W     CN_DTOF                ;convert ascii to floating point
+0102 CN.DTOI       DC.W     CN_DTOI                ;convert ascii to integer
+0104 CN.BTOIB      DC.W     CN_BTOIB               ;convert ascii to binary byte
+0106 CN.BTOIW      DC.W     CN_BTOIW               ;convert ascii to binary word
+0108 CN.BTOIL      DC.W     CN_BTOIL               ;convert ascii to binary long
+010A CN.HTOIB      DC.W     CN_HTOIB               ;convert ascii to hex byte
+010C CN.HTOIW      DC.W     CN_HTOIW               ;convert ascii to hex word
+010E CN.HTOIL      DC.W     CN_HTOIL               ;convert ascii to hex long
+0110 BP.INIT       DC.W     BP_INIT                ;add SuperBASIC resident procedures
+0112 CA.GTINT      DC.W     CA_GTINT               ;get word integers
+0114 CA.GTFP       DC.W     CA_GTFP                ;get floating points
+0116 CA.GTSTR      DC.W     CA_GTSTR               ;get strings
+0118 CA.GTLIN      DC.W     CA_GTLIN               ;get long integers
+011A BV.CHRIX      DC.W     BV_CHRIX               ;reserve space on maths stack
+011C RI.EXEC       DC.W     RI_EXEC                ;do a maths operation
+011E RI.EXECB      DC.W     RI_EXECB               ;do a list of maths operations
+0120 BP.LET        DC.W     BP_LET                 ;return parameter values
+0122 IO.NAME       DC.W     IO_NAME                ;decode device name
+0124 MD.READ       DC.W     MD_READ  - $4000       ;read a microdrive sector
+0126 MD.WRITE      DC.W     MD_WRITE - $4000       ;write a microdrive sector
+0128 MD.VERIN      DC.W     MD_VERIN - $4000       ;verify a microdrive sector
+012A MD.SECTR      DC.W     MD_SECTR - $4000       ;read a microdrive sector header
+
+   These vectors are for the SuperBASIC parser and are not guaranteed for any
+   subsequent versions of QDOS.
+
+012C SB.SNTX       DC.W     SB_SNTX  - $4000       ;basic syntax analyser
+012E SB.FSTFC      DC.W     SB_FSTFC - $4000       ;first syntax table for commands
+0130 SB.SSTFE      DC.W     SB_SSTFE - $4000       ;second syntax table for expressions
+0132 SB.FPCBL      DC.W     SB_FPCBL - $4000       ;format pre-compiled basic line
+0134 SB.CMPER      DC.W     SB_CMPER - $4000       ;error when compiling
+0136 SB.SPFBL      DC.W     SB_SPFBL - $4000       ;store pre-formated line
+0138 SB.CCBTA      DC.W     SB_CCBTA - $4000       ;convert pre-compiled basic to ascii
+
+2.1.6 Check For Ram Exception Table.
+
+   The following information is placed on the supervisor stack when an exception
+   occurs:-
+
+    1) One long word containing the old value of the program counter.
+    2) One word containing the old status register.
+    3) An additional three words if it was a bus or address error.
+    4) The return address for the BRS.S instruction.
+
+   RAM exception tables are used so that several of the system exceptions can be
+   re-directed to user defined routines to handle them. There can be only one
+   exception table for each job in the system and normally a job will use its
+   creators's RAM exception table. The exception table itself should contain the
+   following long word addresses:-
+
+    ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÂÄÄÄÄÄÄÄÄ¿
+    ³        Exception type hander         ³ Offset ³
+    ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÅÄÄÄÄÄÄÄÄ´
+    ³ address error handler address        ³  $00   ³
+    ³ illegal instruction handler address  ³  $04   ³
+    ³ division by zero handler address     ³  $08   ³
+    ³ CHK instruction handler address      ³  $0C   ³
+    ³ TRAPV instruction handler address    ³  $10   ³
+    ³ Privilege violation handler address  ³  $14   ³
+    ³ Trace exception handler address      ³  $18   ³
+    ³ Interrupt level 7 handler address    ³  $1C   ³
+    ³ TRAP #5 handler address              ³  $20   ³
+    ³ TRAP #6 handler address              ³  $24   ³
+    ³ TRAP #7 handler address              ³  $28   ³
+    ³ TRAP #8 handler address              ³  $2C   ³
+    ³ TRAP #9 handler address              ³  $30   ³
+    ³ TRAP #10 handler address             ³  $34   ³
+    ³ TRAP #11 handler address             ³  $38   ³
+    ³ TRAP #12 handler address             ³  $3C   ³
+    ³ TRAP #13 handler address             ³  $40   ³
+    ³ TRAP #14 handler address             ³  $44   ³
+    ³ TRAP #15 handler address             ³  $48   ³
+    ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÁÄÄÄÄÄÄÄÄÙ
+
+   RAM exception tables are really intended for programs such as Monitors as the
+   errors which would cause them to occur can rarely be recovered from with out
+   some sort of debugging facility being used when the error occurs.
+
+   The system variable SV.TRAPV is used to store the start address of the table
+   of exception vectors used by the current job. The address stored however is
+   for the "fictitious" start as the true start is given by this address plus
+   #A8 since the first vector is used for a vector number of #2A which is the
+   address error vector number. A similar variable, JB.TRAPV, is used in each
+   job control block to store the address of the exception table for that job.
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=CHKRAMEX        CHECK FOR RAM EXCEPTION TABLE                                ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³JOB:    To check for the presence of a RAM exception table, and if one is in  ³
+³        use then to redirect the exception according to the exception table.  ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:  none                                                                  ³
+³                                                                              ³
+³EXIT:   none                                                                  ³
+³                                                                              ³
+³ERRORS: none                                                                  ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+013A CHKRAMEX      TST.L    SV_TRAPV               ;is there a RAM exception table in use ?
+                   BEQ      NORAMEX                ;return if not
+                   MOVE.L   A6,-(A7)               ;save A6 temporarily
+                   MOVEA.W  6(A7),A6               ;get vector number word from return address
+                   ADDA.W   A6,A6                  ;form long word offset into table from word
+                   ADDA.L   SV_TRAPV,A6            ;and add to the "start" of the RAM table
+                   MOVE.L   (A6),4(A7)             ;place "return" address above saved register
+                   MOVEA.L  (A7)+,A6               ;and restore value of A6
+                   RTS                             ;"return" to the new exception handler
+
+2.1.7 Dynamic Stop On Memory Test Failure.
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=BADRAM          DYNAMIC STOP ON MEMORY TEST FAILURE                          ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³JOB:    To signal visually the reason for the memory test failure.            ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:  none                                                                  ³
+³                                                                              ³
+³EXIT:   none                                                                  ³
+³                                                                              ³
+³ERRORS: none                                                                  ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   This routine constitutes an endless loop and is called if the memory test
+   fails for whatever reason. It never terminates as the CPU is in supervisor
+   mode and interrupts are disabled. The main result of this is that the screen
+   clears and the machine locks up. The screen will clear to white if the ram
+   test fails during the first pass due to a single bit read or write error.
+   The screen will clear to green if the ram test fails as a result of a RAM
+   refresh error during the second pass. The screen clears to these values as
+   the least significant byte of D7 is set to #FFFF on the first pass and to
+   #FF00 on the second pass. When the screen is in mode 4, these values, if put
+   into each screen word, will result in the above colours appearing. The screen
+   is put into mode 4 at the start of each pass.
+
+015A BADRAM        MOVEA.L  A3,A5                  ;A5 points at beginning of screen RAM
+015C BADRAM2       MOVE.W   D7,(A5)+               ;fill screen with contents of D7 register
+                   CMPA.L   #SV_IDENT,A5           ;end of screen ?
+                   BNE.S    BADRAM2                ;continue if not
+                   BRA.S    BADRAM                 ;and fill screen again anyway even if it is
+
+2.1.8 Comprehensive main RAM and expansion RAM memory test.
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=MEMTEST         COMPREHENSIVE MAIN RAM & EXPANSION RAM MEMORY TEST           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³JOB:    To check for the presence of expansion RAM and to test the RAM found  ³
+³        initially for read and write errors, and then the refresh circuitry.  ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:  none                                                                  ³
+³                                                                              ³
+³EXIT:   none                                                                  ³
+³                                                                              ³
+³ERRORS: none                                                                  ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+    First of all check for the presence of any expansion RAM and set A4 to the
+    address of the last byte of expansion RAM + 1. The test is a very simple one
+    and this is why expansion RAM has to be added in 64K blocks. If this was not
+    done correctly then the memory test which follows would fail as soon as it
+    stepped over the break in memory within a 64K block.
+
+    NOTE here that the memory could in fact extend all the way up to the 1Mbyte
+    addressing limit without causing any failures. The Miracle Technology TRUMP
+    CARD probably uses this fact and places RAM in the peripheral ROM part of
+    the memory map which lies immediately after the normal expansion RAM slot.
+    It will therefore be found by the memory test.
+
+0168 MEMTEST       MOVEA.L  #$40000,A1             ;A1 points at expansion RAM area
+                   MOVEA.L  A1,A4                  ;copy address to A4
+0170 CHKRAM1       MOVE.L   A4,(A4)                ;copy data to first long word
+                   CMPA.L   (A4),A4                ;memory present ?
+                   BNE.S    CHKRAM2                ;jump forward if not
+                   CMPA.L   (A1),A1                ;testing first 64k ?
+                   BNE.S    CHKRAM2                ;branch if not
+                   ADDA.L   #65536,A4              ;move to next 64k block
+                   BRA.S    CHKRAM1
+
+   Now check the entire physical RAM two times. The first test checks for any
+   dubious single bit read and write errors and leaves the entire RAM containing
+   random data from the ROM. The second and final test checks this data to see
+   if the  refresh circuitry is working correctly. Since it takes an appreciable
+   time for each pass, the data would have changed if it wasn't. If the data was
+   preserved then every location in memory is cleared.
+
+0182 CHKRAM2       MOVEQ    #0,D0                  ;clear D0 to all zero's
+                   MOVEQ    #-1,D1                 ;then D1 to all one's
+                   MOVEQ    #-1,D7                 ;signal "pass 1"
+0188 TESTRAM       LEA      SCREEN,A3              ;A3 points at bottom of physical RAM
+                   MOVEA.L  A3,A5                  ;copy pointer
+                   MOVEA.L  D0,A1                  ;clear A1 for use as a ROM counter
+                   LEA      $1FE4(A1),A2           ;A2 points at ROM for part of RAM test
+                   SF       -$7F9D(A3)             ;zero MC_STAT (screen #0,on,mode 4)
+019A NXTLONG       CMPA.L   A1,A2                  ;end of ROM data ?
+                   BNE.S    ROM_END                ;jump forward if not
+                   MOVEA.L  D0,A1                  ;otherwise reset count
+01A0 ROM_END       MOVE.L   (A1)+,D2               ;get next long word of ROM as data
+                   TST.B    D7                     ;second pass ?
+                   BEQ.S    TESTED                 ;test refresh if so
+                   MOVE.L   D0,(A5)                ;set long word to all zero's
+                   CMP.L    (A5),D0                ;RAM ok ?
+                   BNE.S    BADRAM                 ;exit if not
+                   MOVE.L   D1,(A5)                ;set same long word to all one's
+                   CMP.L    (A5),D1                ;RAM ok ?
+                   BNE.S    BADRAM                 ;exit if not
+                   MOVE.L   D2,(A5)                ;finally set to random data and point at
+                   CMP.L    (A5)+,D2               ;next long word, RAM ok ?
+                   BNE.S    BADRAM                 ;exit if not
+                   CMPA.L   A5,A4                  ;end of physical RAM reached ?
+                   BNE.S    NXTLONG                ;check next long word if not
+
+   The next instruction has the following affect on the D7 register. During the
+   first pass, D7 goes from #FFFFFFFF to #FFFFFF00. During the second pass, D7
+   goes from #FFFFFF00 to #FFFF0000. Placing the least significant word of this
+   value in screen memory will cause a different visual affect depending on
+   which pass the test is in. This is used to signify to an operator which type
+   of memory defect the test has highlighted.
+
+                   LSL.W    #8,D7                  ;signal "pass 2"
+                   BRA.S    TESTRAM                ;reset registers ready for pass two
+
+   The RAM test is on its second pass so test the RAM refresh.
+
+01C0 TESTED        CMP.L    (A5),D2                ;long word data preserved ?
+                   BNE.S    BADRAM                 ;exit if not
+                   CLR.L    (A5)+                  ;clear it and point at next long word
+                   CMPA.L   A4,A5                  ;top of memory ?
+                   BNE.S    NXTLONG                ;test next long word if not
+
+   All of memory has been tested and found to be ok so set up some of the I/O
+   registers.
+
+01CA SETIO         MOVEA.L  #CHKPROMS,A1           ;routine to check for peripheral roms
+                   LEA      SV_IDENT,A6            ;A6 points at start of system variables
+                   LEA      SV.STACT(A6),A7        ;set SSP to highest allowed position
+                   LEA      PC_MCTRL,A3            ;A3 points at middle of I/O ports
+
+   set master chip status register to turn screen #0 on, in mode 8.
+
+                   MOVE.B   #%00001000,MC.STAT - 32(A3)
+
+   and clear the transmit control register after reading it
+
+                   SF       PC.TCTRL - 32(A3)
+
+   then send the value %00000110 to the microdrive control register followed by
+   the value %00011111 to the interrupt register and ending with zero to the
+   transmit register.
+
+                   MOVE.L   #$061F0000,PC.MCTRL - 32(A3)
+
+   write to the interrupt register again
+
+                   MOVE.B   #%01111111,PC.INTR - 32(A3)
+
+   and presumably tell the IPC that the main processor is just fine!
+
+                   MOVE.B   #%00000001,PC.IPCWR - 32(A3)
+
+   Set up most of the system variables.
+
+01FC SYSVAR        MOVE.B   #$C0,SV.PCINT(A6)      ;default value for interrupt acknowledgement
+                   JSR      MD_DESEL(PC)           ;switch off all the microdrive motors
+                   MOVE.W   #$D254,(A6)            ;standard identification word for variables
+                   MOVE.L   A5,SV.RAMT(A6)         ;top of physical memory + 1
+                   SUBA.L   #0,A5                  ;who knows ?
+
+   The resident procedure area, RESPR, is used to store any permanent pieces of
+   machine code which may be required. This could be resident procedures used to
+   extend SuperBASIC or new device drivers such as SPEEDSCREEN or it could be a
+   floppy disc or hard disc device driver linked into the I/O subsystem, IOSS.
+
+   It can also be used to store any other bits of machine code which may be
+   required but note that the area can only be contracted in one step and that
+   this is a dubious process.
+
+   The transient program area,TRNSP is used to hold executable code and possibly
+   data. It expands to make room for these and generally will only contract in
+   those cases where either no jobs are running or a contiguous block of memory
+   at the SuperBASIC end has been found by the memory manager.
+
+                   MOVE.L   A5,SV.RESPR(A6)        ;start of resident procedure area
+                   MOVE.L   A5,SV.TRNSP(A6)        ;start of transient procedure area
+                   MOVE.L   SV.RAMT(A6),D0         ;D0 points top of RAM + 1
+                   SUB.L    A6,D0                  ;subtract start of system variables
+                   LSR.L    #6,D0                  ;and divide by 64
+
+   The spare memory is used as slave blocks with each block being 512 bytes in
+   size. The slave block table occurs immediately after the supervisor stack and
+   consists of one 8 byte entry for every possible slave block which could be
+   used. Available memory is considered to start at $28000 and so the table size
+   is given by the formula:-
+
+    size = (SV.RAMT-SV.IDENT)/512 * 8 bytes
+              = memory/64
+
+   which gives $600 bytes on an un-expanded machine and $2600 bytes on a fully
+   expanded machine. Slave blocks are used to store as many copies of microdrive
+   sectors for the current microdrive as possible to speed up the access times
+   for microdrive operations.
+
+                   MOVEA.L  A7,A3                  ;A3 points at bottom of supervisor stack
+                   LEA      SV.BTPNT(A6),A4        ;A4 points at start of system table pointers
+                   BSR.S    BLOCKINF               ;set up SV_BTPNT to SV_BTTOP
+                   LSR.L    #1,D0                  ;D0 = memory/128
+                   ADD.L    D0,SV.BTPNT(A6)        ;set current entry to the middle one
+                   LSR.L    #2,D0                  ;D0 = memory/512
+                   ADDI.L   #32,D0                 ;D0 = memory/512 + 32
+
+   The job table comes next and consists of one long word pointer to the job
+   header in the transient program area for each job. Again the size of the
+   table is dictated by the amount of memory available and is given by:-
+
+    size = free memory / 512 + 32 bytes
+
+   which gives $E0 bytes on an un-expanded machine (128K) and $4E0 bytes on a
+   fully expanded one (640K). The maximum number of jobs allowed however is only
+   120 so the maximum size of the table is $1E0 or 480 bytes.
+
+                   CMPI.W   #480,D0                ;table length ok ?
+                   BLS.S    LENGTHOK               ;jump forward if not too long
+                   MOVE.W   #480,D0                ;otherwise set to maximum length
+0244 LENGTHOK      BSR.S    BLOCKINF               ;set up SV_JBPNT to SV_JBTOP
+
+   The final table created is the channel table which is set to three times the
+   size of the job table and consists of a long word pointer to the channel
+   definition block in the common heap for each open channel. It is three times
+   the size of the job table since each job must be able to have at least three
+   channels open to it. One channel for the error stream, one for I/O stream and
+   one for listings. In normal use most jobs will use the default channels.
+
+                   MULU     #3,D0                  ;D0 = job table size * 3
+                   BSR.S    BLOCKINF               ;set up SV_CHPNT to SV_CHTOP
+                   BRA.S    L0025A                 ;jump over following routine
+
+   Short routine to set up the three pointers for the system tables.
+
+024E BLOCKINF      MOVE.L   A3,(A4)+               ;set up variable for current entry
+                   MOVE.L   A3,(A4)+               ;set up variable for table base
+                   ADDA.W   D0,A3                  ;add length of area to base
+                   MOVE.L   A3,(A4)+               ;set up variable for end of table
+                   ADDQ.W   #4,A4                  ;jump over the following two words
+                   RTS
+
+   A3 now points at the end of the channel table. Because of the presence of the
+   system variables, the supervisor stack and the system tables, the first few
+   entries in the slave block table will be unused. The last entry will also be
+   unused because of SuperBASIC. So calculate the first entry that is available
+   and set this and all the entries after this to "available".
+
+025A L0025A        MOVE.L   A3,D0                  ;D0 points at the end of the channel table
+                   SUB.L    A6,D0                  ;then the amount of memory used so far
+                   LSR.L    #6,D0                  ;divide it by 64 to give entry number in
+                   MOVEA.L  D0,A4                  ;the slave block table and then add it
+                   ADDA.L   A7,A4                  ;to the start of the table
+                   MOVEA.L  SV.BTTOP(A6),A3        ;A3 points at end of slave block table
+                   MOVE.W   #512,D1                ;now compensate for the space used by
+                   LSR.W    #6,D1                  ;SuperBASIC at the top of RAM
+                   SUBA.W   D1,A3                  ;A3 = end of table - 8
+
+   Set the status byte, BT.STAT in each entry to "available". Note that memory
+   is cleared above and that this means that the status byte will normally read
+   "not available to OS".
+
+                   MOVEQ    #%00000001,D0
+0272 L00272        MOVE.B   D0,(A4)                ;signal "available to OS"
+                   ADDQ.W   #8,A4                  ;get address of next entry
+                   CMPA.L   A3,A4                  ;end of slave block table reached ?
+                   BLT.S    L00272                 ;process next entry if not
+
+   Now clear all the entries in the job and channel tables to "unused".
+
+                   MOVEA.L  SV.JBBAS(A6),A4        ;A4 points at start of job table
+                   MOVEA.L  SV.CHTOP(A6),A3        ;A3 points at end of channel table
+
+                   MOVEQ    #-1,D0                 ;set D0 to "no entry"
+0284 CLEARTAB      MOVE.B   D0,(A4)                ;set top byte of each entry
+                   ADDQ.W   #4,A4                  ;A4 points at top byte of next entry
+                   CMPA.L   A3,A4                  ;end of channel table reached ?
+                   BLT.S    CLEARTAB               ;set next entry if not
+
+   Now set the pointers for the common heap , slave blocks and SuperBASIC. The
+   common heap is a general workspace area and is normally used for holding
+   channel definition blocks and other data tables. It is allocated in multiples
+   of eight bytes and each block is preceded by a four long word header which
+   contains the following information:-
+
+    1.     CH.LEN   length of the block including the header
+    2.     CH.DRIVR either the address of the I/O driver to free the block or
+           CH.NEXT  a relative pointer to the next free block if unused.
+    3.     CH.OWNER channel ID (See under CHKCHID) of the owner job
+    4.     CH.RFLAG the release flag which is the address of a byte to be set
+                    when the space is released
+
+   This is the minimum amount of information required to reclaim the block when
+   it is no longer required which normally happens when the owner job is removed
+   from the system.
+
+                   MOVE.L   A3,SV.CHEAP(A6)        ;start of common heap
+                   MOVE.L   A3,SV.FREE(A6)         ;start of free memory (slave blocks)
+                   MOVEA.L  SV.RESPR(A6),A4        ;A4 points at resident procedure area
+                   LEA      -512(A4),A4            ;then 512 bytes below that for
+                   MOVE.L   A4,SV.BASIC(A6)        ;start of SuperBASIC area
+
+   Now do the pointers to the system linked lists except for the pointer to the
+   external interrupt list, SV.I2LST, which is already set to "end of list" by
+   the action of the memory test in clearing the memory.
+
+                   LEA      POLLTASK(PC),A5
+                   MOVE.L   A5,SV.PLIST(A6)        ;start of polled tasks list
+                   LEA      SCHDTASK(PC),A5
+                   MOVE.L   A5,SV.SHLST(A6)        ;start of scheduler tasks list
+                   LEA      SER_LB(PC),A5
+                   MOVE.L   A5,SV.DRLST(A6)        ;start of simple device driver list
+                   LEA      MDV_LB(PC),A5
+                   MOVE.L   A5,SV.DDLST(A6)        ;start of directory driver list
+
+   Next set the various remaining miscellaneous system variables.
+
+                   ADDQ.B   #1,SV.NETNR(A6)        ;set network station number to 1
+                   ADDQ.B   #8,SV.MCSTA(A6)        ;copy of MC_STAT
+                   ADDQ.B   #1,SV.TMODE(A6)        ;set baud rate to 9600
+                   ADDQ.W   #1,SV.TIMOV(A6)        ;timeout for serial output to 1
+                   MOVE.W   #30,SV.ARDEL(A6)       ;key repeat delay in ms
+                   ADDQ.W   #2,SV.ARFRQ(A6)        ;key repeat frequency
+                   ADDQ.W   #3,SV.CQCH(A6)         ;and finally change keyboard queue code
+
+   Finally set up the job table for SuperBASIC and its area. The SuperBASIC area
+   is rather unusual in that every system variable or other data item that it
+   contains is accessed relative to A6 which always points to the base of the
+   SuperBASIC system variables which occur after the normal $68 byte job header
+   (pointed to by the first entry in the job table). The whole area will move
+   down when space in the transient program is allocated and when more space is
+   required inside the area itself. It will only move up if the resident
+   procedure area is released as areas which were used for jobs are normally
+   linked together as free space when finished rather than totally reclaimed.
+
+                   MOVEA.L  SV.JBBAS(A6),A4        ;A4 points at start of job table
+                   MOVE.L   A4,SV.JBPNT(A6)        ;current job is job 0 (SuperBASIC)
+                   MOVEA.L  SV.TRNSP(A6),A3        ;A3 points at transient program area
+                   CLR.L    -(A3)                  ;push a zero onto SuperBASIC's stack
+                   MOVEA.L  SV.BASIC(A6),A0        ;A0 points at start of SuperBASIC area
+                   MOVE.L   A0,(A4)                ;set first entry to SuperBASIC
+                   MOVE.B   #32,JB.PRINC(A0)       ;set job's initial priority
+                   MOVE.L   A3,USP                 ;and user stack to end of the area
+                   LEA      JB.END(A0),A6          ;A6 points at start of SuperBASIC area
+                   MOVEA.L  A3,A5                  ;copy of USP
+                   SUBA.L   A6,A5                  ;A5 = top of stack (relative to A6)
+
+   The system is now potentially able to run a job if one was present since
+   SuperBASIC has yet to be initialised and jobs can only be started by issueing
+   a suitable command within SuperBASIC.
+
+   Note that since the memory test clears all of memory, the two relative free
+   space pointers, SV.TRNFR and SV.CHPFR, are set to "non existent". There is
+   also no current keyboard queue, no RAM exception vector table and no Capslock
+   subroutine. No pointers for the filing system have been set up either as
+   peripheral ROM's may want to set this up themselves if say a disc drive or
+   winchester was attached. All that remains to be done now is for a check for
+   the above ROMS to be carried out before setting up the SuperBASIC system
+   variables, and any resident procedures to be added if necessary prior to
+   adding the ROM resident ones.
+
+                   MOVE.W   #0,SR                  ;enter user mode and enable interrupts
+                   JMP      (A1)                   ;jump to routine to check for roms
+
+2.1.9 Trap handlers for TRAP'S #0,#1,#2,#3 and #4.
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=ENTER_SM        ENTER CPU SUPERVISOR MODE                                    ³
+³=MT_TRAP1        MEMORY MANAGEMENT, JOB CONTROL AND SYSTEM HOUSEKEEPING       ³
+³=IO_TRAP2        I/O DEVICE ALLOCATION                                        ³
+³=IO_TRAP3        ACTUAL I/O, FILE HANDLING AND GRAPHICS                       ³
+³=SB_TRAP4        USE ABSOLUTE INSTEAD OF RELATIVE VALUES IN THE NEXT TRAP     ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³JOB:    To check for the presence of a RAM exception table, and if one is in  ³
+³        use then to redirect the exception according to the exception table.  ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:  none                                                                  ³
+³                                                                              ³
+³EXIT:   none                                                                  ³
+³                                                                              ³
+³ERRORS: none                                                                  ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   These are the system TRAP's which are used for accessing all of the standard
+   QDOS facilities. Several are also pointed to by the word vector table which
+   starts at $000C0. This method of access ensures that any future versions of
+   the ROM will be upwards compatible with code written using them. The function
+   required is defined by the value of D0 and any parameters required are passed
+   in registers D1 to D3 and A0 to A3 with any errors signalled by the value of
+   D0 on exit (see the Appendix).
+
+0308 ENTER_SM      ADDQ.W   #2,A7                  ;jump over saved CCR and return still
+                   RTS                             ;in supervisor mode
+
+030C MT_TRAP1      BSR.S    SETUPTRA               ;set up registers for the TRAP handler
+                   BRA      CHKTRP1                ;and decode the function required
+
+0312 IO_TRAP2      BSR.S    SETUPTRA               ;set up registers for the TRAP handler
+                   BRA      CHKTRP2                ;and decode the function required
+
+0318 IO_TRAP3      BSR.S    SETUPTRA               ;set up registers for the TRAP handler
+                   BRA      CHKTRP3                ;and decode the function required
+
+031E SB_TRAP4      BSR.S    SETUPTRA               ;set up registers for the next TRAP #3
+                   BRA      CHKTRP4                ;and set the "Absolute value" bit
+
+   Set up the registers and stack for all off the individual TRAP handlers.
+
+0324 SETUPTRA      SUBQ.W   #8,A7                  ;create block of two long words
+                   MOVE.L   8(A7),-(A7)            ;restack old return address then
+                   MOVEM.L  D7/A5-6,4(A7)          ;save SuperBASIC's registers inside
+                   MOVEA.L  #SV_IDENT,A6           ;A6 points at the QDOS system variables
+                   LEA      4(A7),A5               ;and A5 points at the saved registers
+                   MOVEQ    #%01111111,D7          ;mask for bottom 7 bits
+                   AND.L    D7,D0                  ;prepare D0 as a long word offset
+                   RTS
+
+2.1.10 The interrupt handlers.
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=SYSINT          SYSTEM INTERRUPT HANDLER                                     ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³JOB:    To handle all the system interrupts by polling the interrupt register ³
+³        and directing control to the appropriate interupt handler.            ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:  none                                                                  ³
+³                                                                              ³
+³EXIT:   none                                                                  ³
+³                                                                              ³
+³ERRORS: none                                                                  ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   This one routine handles all the system interrupts. Each one caters for a
+   different aspect of the machine operation as follows:-
+
+    1. GAPINT   -   occurs each time the inter-sector gap on the surface of the
+                    tape in a microdrive cartridge passes under the read he
+                    and signifies the start of a sector header.
+
+    2. INTRFINT -   used for reading the keyboard and the serial ports.
+
+    3. TRNSMINT -   used to control transmission from both serial ports.
+
+    4. FRAMEINT -   used to execute the system housekeeping linked lists.
+
+    5. EXTNLINT -   only occurs with extra peripheral hardware attached.
+
+0340 SYSINT        MOVEM.L  D7/A5-6,-(A7)          ;save registers used by SuperBASIC
+                   MOVEA.L  A7,A5                  ;make a copy of the SSP
+                   MOVEA.L  #SV_IDENT,A6           ;A6 points at system variables
+                   MOVE.B   PC_INTR,D7             ;read the interrupt register
+                   LSR.B    #1,D7                  ;check bit 0
+                   BCS      GAPINT                 ;handle gap interrupts if set
+                   LSR.B    #1,D7                  ;check bit 1
+                   BCS      INTRFINT               ;handle interface interrupts if set
+                   LSR.B    #1,D7                  ;check bit 2
+                   BCS      TRNSMINT               ;handle transmit interrupts if set
+                   LSR.B    #1,D7                  ;check bit 3
+                   BCS      FRAMEINT               ;handle frame interrupts if set
+                   LSR.B    #1,D7                  ;check bit 4
+                   BCC.S    EXIT_INT               ;exit if not an external interrupt
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=EXTNLINT        EXTERNAL INTERRUPT HANDLER                                   ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³JOB:    To handle external interrupts.                                        ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:  none                                                                  ³
+³                                                                              ³
+³EXIT:   none                                                                  ³
+³                                                                              ³
+³ERRORS: none                                                                  ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   This interrupt will only occur if additional hardware is attached such as a
+   disc drive controller and merely executes a single linked list of tasks, so
+   any device driver would have to be set up as one of these.
+
+036E EXTNLINT      MOVEM.L  D0-6/A0-4,-(A7)        ;save remaining registers as well
+                   MOVEQ    #0,D0                  ;and signal "no errors"
+                   MOVEA.L  SV.I2LST(A6),A0        ;A0 points at external interrupt linked list
+                   JSR      EXECLIST(PC)           ;execute the linked list
+                   MOVE.B   SV.PCINT(A6),D7        ;get copy of interrupt register
+                   ORI.B    #%00010000,D7          ;set external interrupt bit of copy
+                   MOVE.B   D7,PC_INTR             ;and acknowledge the interrupt
+                   MOVEM.L  (A7)+,D0-6/A0-4        ;partially restore registers
+038E EXIT_INT      BRA      EXITTRAP
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=CLEANUP         CLEAN UP ROUTINE FOR ALL THE TRAP HANDLERS                   ³
+³=CHKSBIT         CHECK IF SUPERVISOR MODE BIT SET BEFORE TRAP                 ³
+³=EXITTRAP        GENERAL EXIT TO RESTORE SuperBASIC'S REGISTERS               ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³JOB:    To generally clean up and test the CPU status prior to the interrupt. ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:  none                                                                  ³
+³                                                                              ³
+³EXIT:   none                                                                  ³
+³                                                                              ³
+³ERRORS: none                                                                  ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   These three entry points are called throughout QDOS under the various exit
+   conditions which can occur to check the status of QDOS when the exception
+   occured.
+
+0392 CLEANUP       MOVEQ    #0,D0                  ;signal "no errors"
+0394 CHKSBIT       BTST     #5,12(A7)              ;check "S" bit of saved SR
+                   BNE.S    EXITTRAP               ;clean up stack and exit if set
+                   TST.W    SV.POLLM(A6)           ;check number of poll interrupts missed
+                   BNE      SCHEDULE               ;enter scheduler if any missed
+03A4 EXITTRAP      MOVEM.L  (A7)+,D7/A5-6          ;unstack registers saved on entry
+                   RTE
+
+2.1.11 Job ID handlers.
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=CHKJBID         CHECK JOB ID                                                 ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³JOB:                                                                          ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D1.L     job ID (-1 if current job)                          ³
+³                 A6.L     QDOS system variables                               ³
+³                                                                              ³
+³EXIT:            D1.L     job ID (Z flag set if ok , reset if not)            ³
+³                 A0.L     start of corresponding job header                   ³
+³                                                                              ³
+³ERRORS:          ERR.NJ   invalid job ID                                      ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   To help control multitasking, QDOS uses a large table of vectors known as the
+   job table, which contains a long word pointer to the job control header which
+   exists at the start of every job in the system. When a job is created, the
+   first unused entry in the job table is set to the start address of the job
+   header, but thereafter the only reference allowed to a job is its job ID.
+
+   This is essentially, the long word number of the entry in the job table for
+   that job and a number specifying how many jobs have been created since the
+   machine was switched on, known as the job tag. These are combined into a long
+   word as follows:-
+
+    JOB ID = JOB TAG * 65536 + JOB NO
+
+   Channels use a similar system where a channel's only reference is what is
+   known as a channel ID, made up from the channel number and the channel tag in
+   the same way.
+
+03AA CHKJBID       TST.W    D1                     ;check job number
+                   BGE.S    CHKJOB                 ;branch if not current job
+                   MOVE.L   SV.JBPNT(A6),D1        ;D1 points at the current job table entry
+                   MOVEA.L  D1,A0                  ;and copy to A0
+                   MOVEA.L  (A0),A0                ;A0 points at the current job's header
+                   SUB.L    SV.JBBAS(A6),D1        ;find entry number in job table
+                   LSR.L    #2,D1                  ;form job number
+                   SWAP     D1                     ;move job tag field into view
+                   MOVE.W   JB.TAG(A0),D1          ;copy job tag from header to low word
+                   SWAP     D1                     ;swap back
+03C4 ENDJCHK       RTS
+
+03C6 CHKJOB        BSR.S    CHKJBNO                ;check job number and job tag
+                   BEQ.S    ENDJCHK                ;return if job ID ok
+
+   All QDOS errors are signified by returning a negative value in DO. There are
+   21 of them altogether and all are detailed in the appendix.
+
+                   MOVEQ    #ERR.NJ,D0             ;signal "invalid job" if not
+                   ADDQ.W   #4,A7                  ;ignore return address
+                   BRA      CHKSBIT
+
+03D2 CHKJBNO       CMP.W    SV.JBMAX(A6),D1        ;compare with maximum job number to date
+                   BHI.S    ENDJCHK                ;exit if greater as this is impossible
+                   MOVEA.W  D1,A0                  ;then use the job number as an offset
+                   ADDA.W   A0,A0                  ;form long word offset
+                   ADDA.W   A0,A0
+                   ADDA.L   SV.JBBAS(A6),A0        ;and add offset to start of job table
+                   TST.B    (A0)                   ;valid job ? (contains $FF if unused)
+                   BLT.S    ENDJCHK                ;and return if invalid
+                   MOVEA.L  (A0),A0                ;A0 points at job header
+
+   Now check the job tag field just to be absolutely certain.
+
+                   SWAP     D1                     ;move job tag to low byte of D1
+                   CMP.W    JB.TAG(A0),D1          ;same job tag ?
+                   BNE.S    ENDJCHK                ;return if wrong job tag
+                   SWAP     D1                     ;swap job tag and job number back again
+                   CMP.B    D1,D1                  ;signal "job ID ok"
+                   RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=GETJBID         GET CURRENT JOB'S ID & HEADER ADDRESS                        ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³JOB:                                                                          ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A6.L     system variables                                    ³
+³                                                                              ³
+³EXIT:            D0.L     job ID                                              ³
+³                 A3.L     address of job header                               ³
+³                 D1,D2,D3,A1 and A2 preserved                                 ³
+³                                                                              ³
+³ERRORS:          none                                                         ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+03F6 GETJBID       MOVEA.L  SV.JBPNT(A6),A3        ;A3 points at current job table entry
+                   MOVE.L   A3,D0                  ;copy to D0
+                   SUB.L    SV.JBBAS(A6),D0        ;subtract base of table
+                   LSR.W    #2,D0                  ;form job number
+                   MOVEA.L  (A3),A3                ;get header address in A3
+                   SWAP     D0                     ;move tag field into view
+                   MOVE.W   JB.TAG(A3),D0          ;get job tag
+                   SWAP     D0                     ;swap back
+                   RTS
+
+2.1.12 I/O timers.
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=TIMER1          TIMER FOR SERIAL & MICRODRIVE I/O                            ³
+³=CLRTMODE        ENTRY POINT WHEN MICRODRIVE OPERATIONS FINISHED              ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³JOB:                                                                          ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D0.B     new serial I/O status                               ³
+³                 A6.L     start of QDOS system variables                      ³
+³                                                                              ³
+³EXIT:            D0.L     new ULA transmit mode                               ³
+³                 D1,D2,D3,A0,A1,A2 and A3 preserved                           ³
+³                                                                              ³
+³ERRORS:          none                                                         ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   This routine is the first one which if used an an MC68020 based machine,
+   would not operate correctly due to the dependency on the DBF instruction's
+   timing. Several others exist at the end of the ROM, in particular, the
+   microdrive routines as they also use a large number of timing loops.
+
+040E TIMER1        MOVE.B   D0,-(A7)               ;save the new status
+0410 TIMER2        SUBQ.W   #1,SV.TIMO(A6)         ;decrement timeout counter
+                   BLT.S    TIMER4                 ;exit timing loop if -ve
+                   MOVE.W   #$208B,D0              ;approximate value for ?ms
+041A TIMER3        DBF      D0,TIMER3              ;short delay
+                   BRA.S    TIMER2                 ;next millisecond worth
+0420 TIMER4        CLR.W    SV.TIMO(A6)            ;clear counter and serial I/O bits
+                   ANDI.B   #%11100111,SV.TMODE(A6)
+                   MOVE.B   (A7)+,D0               ;restore D0
+                   OR.B     D0,SV.TMODE(A6)        ;add in serial I/O status and reset register
+                   ANDI.B   #%01111111,SV.PCINT(A6)
+0436 EXITIMER      MOVE.B   SV.TMODE(A6),PC_TCTRL
+                   RTS
+
+0440 CLRTMODE      BCLR     #4,SV.TMODE(A6)        ;signal "microdrive not turning"
+                   ORI.B    #$80,SV.PCINT(A6)      ;clear copy of interrupt register
+                   BRA.S    EXITIMER               ;and send to transmit register
+
+                                MEMORY MANAGEMENT
+
+                                       AND
+
+                                   JOB CONTROL
+
+                                  TRAP HANDLERS
+
+2.2 Job control TRAP handlers.
+
+2.2.1 Handle TRAP #1 functions.
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=CHKTRP1         HANDLE TRAP #1 FUNCTIONS                                     ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³JOB:                                                                          ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D0.W     function number                                     ³
+³                                                                              ³
+³EXIT:            depends on function                                          ³
+³                                                                              ³
+³ERRORS:          ERR.BP   bad parameter if invalid function number            ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   All the TRAP #1 calls are concerned with aspects of memory management, job
+   control and the system linked lists.
+
+044E CHKTRP1       CMPI.W   #MT.RDD,D0             ;is it a valid TRAP #1 function ?
+                   BHI.S    BADPARAM               ;exit if not
+                   MOVE.W   D0,D7                  ;copy parameter to D0
+                   ADD.W    D7,D7                  ;and double it giving word offset
+                   MOVE.W   TABLE1(PC,D7.W),D7
+                   JMP      CHKTRP1(PC,D7.W)       ;jump to routine via vector offset
+
+   Table of vector offsets for the TRAP #1 fuctions.
+
+0460 TABLE1        DC.W     MT_INF   -CHKTRP1      ;get system information
+                   DC.W     MT_CJOB  -CHKTRP1      ;create job
+                   DC.W     MT_JINF  -CHKTRP1      ;get job information
+                   DC.W     BADPARAM -CHKTRP1      ;not implemented
+                   DC.W     MT_RJOB  -CHKTRP1      ;remove a job
+                   DC,W     MT_FRJOB -CHKTRP1      ;force remove a job
+                   DC.W     MT_FREE  -CHKTRP1      ;find amount of free space
+                   DC.W     MT_TRAPV -CHKTRP1      ;set RAM exception table
+                   DC.W     MT_SUSJB -CHKTRP1      ;suspend job
+                   DC.W     MT_RELJB -CHKTRP1      ;release a suspended job
+                   DC.W     MT_ACTIV -CHKTRP1      ;activate a job
+                   DC.W     MT_PRIOR -CHKTRP1      ;change job priority
+                   DC.W     MT_ALLOC -CHKTRP1      ;allocate heap space
+                   DC.W     MT_LNKFR -CHKTRP1      ;release heap space
+                   DC.W     MT_ALRES -CHKTRP1      ;allocate resident procedure space
+                   DC.W     MT_ALRES -CHKTRP1      ;release resident procedure area
+                   DC.W     MT_DMODE -CHKTRP1      ;set or read display mode
+                   DC.W     MT_IPCOM -CHKTRP1      ;send IPC command
+                   DC.W     MT_BAUD  -CHKTRP1      ;set serial port baud rate
+                   DC.W     MT_CLOCK -CHKTRP1      ;read clock (MT_RCLCK)
+                   DC.W     MT_CLOCK -CHKTRP1      ;set clock (MT_SCLCK)
+                   DC.W     MT_CLOCK -CHKTRP1      ;adjust clock (MT_ACLCK)
+                   DC.W     MT_ALBAS -CHKTRP1      ;allocate basic area
+                   DC.W     MT_REBAS -CHKTRP1      ;release basic area
+                   DC.W     MT_ALCHP -CHKTRP1      ;allocate common heap space
+                   DC.W     MT_RECHP -CHKTRP1      ;release common heap space
+                   DC.W     MT_LINK  -CHKTRP1      ;link in external interrupt handler
+                   DC.W     MT_UNLNK -CHKTRP1      ;unlink external interrupt handler
+                   DC.W     MT_LINK  -CHKTRP1      ;link in polled task (MT_LPOLL)
+                   DC.W     MT_UNLNK -CHKTRP1      ;unlink polled task (MT_RPOLL)
+                   DC.W     MT_LINK  -CHKTRP1      ;link in scheduler task (MT_LSCHD)
+                   DC.W     MT_UNLNK -CHKTRP1      ;unlink scheduler task (MT_RSCHD)
+                   DC.W     MT_LINK  -CHKTRP1      ;link in I/O driver (MT_LIOD)
+                   DC.W     MT_UNLNK -CHKTRP1      ;unlink I/O driver (MT_RIOD)
+                   DC.W     MT_LINK  -CHKTRP1      ;link in directory drive (MT_LDD)
+                   DC.W     MT_UNLNK -CHKTRP1      ;unlink directory driver (MT_RDD)
+
+04A8 BADPARAM      MOVEQ    #ERR.BP,D0             ;signal "bad parameter"
+                   BRA      CHKSBIT                ;exit via clean up routine
+
+2.2.2 Job details.
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=MT_INF          GET SYSTEM INFORMATION     (TRAP #1 WITH D0 = $00)           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³JOB:    To return primarily, the QDOS version, but also to return the current ³
+³        job ID and the start of the QDOS system variables. In earlier versions³
+³        of QDOS, the system variables were to be movable so that both screens ³
+³        could be used as screen #1 currently lies over the system variables.  ³
+³        The version number is returned as a string of the form "v.xx" where   ³
+³        "v" is the revision number and "xx" is the update number. No versions ³
+³        above "1.03" have been produced/sold, to the author's knowledge.      ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           none                                                         ³
+³                                                                              ³
+³EXIT:            D1.L     current job ID                                      ³
+³                 D2.L     QDOS version number as a four letter ASCII string   ³
+³                 A0.L     start of QDOS system variables                      ³
+³                 D3,D4,D5,D6,D7,A1,A2,A3,A4,A5 and A6 preserved               ³
+³                                                                              ³
+³ERRORS:          none                                                         ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+04AE MT_INF        MOVEQ    #-1,D1                 ;signal "get current job's info"
+                   JSR      CHKJBID(PC)            ;get current job's ID
+                   MOVE.L   #"1.03",D2             ;set D2 to ASCII version number string
+                   MOVEA.L  A6,A0                  ;A0 points at system variables
+                   BRA      CLEANUP
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=MT_JINF         GET JOB INFORMATION        (TRAP #1 WITH D0 = $02)           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D1.L     job ID (-1 if current job)                          ³
+³                 D2.L     ID of job at top of job tree                        ³
+³                                                                              ³
+³EXIT:            D1.L     next job in tree (or zero if no more)               ³
+³                 D2.L     owner job ID                                        ³
+³                 D3.L     priority (negative if suspended)                    ³
+³                 A0.L     location of actual job (after header)               ³
+³                 A1       corrupted                                           ³
+³                 A2,A3    preserved                                           ³
+³                                                                              ³
+³ERRORS:          ERR.NJ   invalid job ID                                      ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   Checks the status of jobs and can be used to traverse a complete tree of
+   them in job number order by using successive calls until D1 is zero.
+
+04C0 MT_JINF       JSR      CHKJBID(PC)            ;check job ID,A0 points at header on exit
+                   MOVEQ    #0,D3                  ;prepare D3 for the priority value
+                   TST.W    JB.STAT(A0)            ;check job status
+                   BEQ.S    POSSACTI               ;branch if possibly active
+                   MOVEQ    #-1,D3                 ;otherwise signal "suspended"
+04CE POSSACTI      MOVE.B   JB.PRINC(A0),D3        ;get priority increment in low byte
+                   MOVE.L   D2,D0                  ;move owner ID to D0
+                   MOVE.L   A0,-(A7)               ;save address of parent job's header
+                   JSR      FINDSUBS(PC)           ;find next job in the tree (0 if end)
+                   MOVEA.L  (A7)+,A0               ;get header address back
+                   MOVE.L   JB.OWNER(A0),D2        ;get owner ID
+                   LEA      JB.END(A0),A0          ;A0 points at start of code area
+                   BRA      CLEANUP
+
+2.2.3 Job creation and deletion.
+
+   In order for a job to exist at all, it must have, at the very least, some
+   memory for its code and data areas. In practice, space will also be set
+   aside for the extra information that QDOS requires to keep control of a
+   job and space to store the volatile state of the job such as the register
+   values, the program counter and the CPU status flags.
+
+   All this is taken care of by the job header which is a $68 byte area of
+   memory immediately preceding the area assigned to the code and data.
+
+      HIGH  MEMORY
+
+     ÃÄÄÄÄÄÄÄÄÄÄÄÄ´ <- (A6,A5)
+     ³      0     ³
+     ÃÄÄÄÄÄÄÄÄÄÄÄÄ´
+     ³      0     ³
+     ÃÄÄÄÄÄÄÄÄÄÄÄÄ´
+     ³            ³
+     ³    STACK   ³
+     ³            ³
+     ÃÄÄÄÄÄÄÄÄÄÄÄÄ´ <- (A7) { this moves as items are pushed and popped }
+     ³            ³
+     ³    DATA    ³
+     ³            ³
+     ÃÄÄÄÄÄÄÄÄÄÄÄÄ´ <- (A6,A4)
+     ³            ³
+     ³    CODE    ³
+     ³            ³
+     ÃÄÄÄÄÄÄÄÄÄÄÄÄ´ <- (A6)                              Job table
+     ³   HEADER   ³                                    ÃÄÄÄÄÄÄÄÄÄÄÄÄ´
+     ÃÄÄÄÄÄÄÄÄÄÄÄÄ´ <----------------------------------³            ³
+                                                       ÃÄÄÄÄÄÄÄÄÄÄÄÄ´
+       LOW MEMORY
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=MT_CJOB         CREATE A JOB               (TRAP #1 WITH D0 = $01)           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³JOB:    To create a new job in transient program area. The job itself is not  ³
+³        activated and this should be done with the MT.AJOB TRAP.              ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D1.L     owner job ID:                                       ³
+³                                                                              ³
+³                          0  = this job to be independant of all other jobs   ³
+³                          -1 = this job to be owned by the current job        ³
+³                                                                              ³
+³                 D2.L     length of code space required in bytes              ³
+³                 D3.L     length of data space required in bytes              ³
+³                 A1.L     start address of job                                ³
+³                                                                              ³
+³                          0   = start of job to be at JB.END                  ³
+³                          +ve = actual start address of job                   ³
+³                                                                              ³
+³EXIT:            D1.L     new job's ID                                        ³
+³                 A0.L     start of area in TRNSP allocated + $68              ³
+³                 D2,D3,D4,D5,D6,A1,A2,A3,A4,A5 and A6 preserved               ³
+³                                                                              ³
+³ERRORS:          ERR.NJ   invalid owner job ID or job table full              ³
+³                 ERR.OM   out of memory                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   This trap then creates a job by allocating space for the header, code and
+   data areas required memory permitting. It then sets up the standard values
+   for the registers as follows:-
+
+    1.     JB.A6    start of the area assigned to the code
+    2.     JB.A4    start of the area assigned to be data relative to A6
+    3.     JB.A5    end of the data area relative to A6
+    4.     JB.A7    end of the data area - 4
+
+   Note that the job is only created, it is up to the owner job to activate it
+   and give it a priority. The space allocated to the job remains until the job
+   is removed.
+
+   TRAP handler alters registers so that A6 now points at QDOS system variables.
+
+04E8 MT_CJOB       TST.L    D2                     ;any code space required ?
+                   BEQ.S    NOSPACE                ;branch if not
+                   JSR      CHKJBID(PC)            ;check job ID, A0 points at header on exit
+04F0 NOSPACE       MOVEM.L  D1-3/A1-4,-(A7)        ;save registers
+
+   For a job to exist it must have an entry in the job table so search for the
+   first free one.
+
+                   MOVEQ    #0,D7                  ;initialise job number counter
+                   MOVEA.L  SV.JBBAS(A6),A4        ;A4 points at first entry in job table
+04FA TESTENTR      TST.B    (A4)                   ;is entry free ?
+                   BLT.S    ENTRYFRE               ;jump forward if it is
+                   ADDQ.W   #1,D7                  ;otherwise increment job number
+                   ADDQ.W   #4,A4                  ;A4 points at next entry in job table
+                   CMPA.L   SV.JBTOP(A6),A4        ;end of job table reached ?
+                   BLT.S    TESTENTR               ;try next entry if not otherwise
+                   MOVEQ    #ERR.NJ,D0             ;signal "invalid job" as job table
+                   BRA.S    EXIT_CJB               ;is full and there are no free entries
+
+   First free entry found in job table so calculate parameters of area.
+
+050C ENTRYFRE      MOVEQ    #$68,D1                ;make room for job header
+                   ADD.L    D2,D1                  ;add length of code space required
+                   ADD.L    D3,D1                  ;and length of data space required
+                   JSR      MM_ALTPA(PC)           ;expand TRNSP, A0 points at area on exit
+                   BNE.S    EXIT_CJB               ;and exit if no room in memory
+                   MOVEM.L  (A7),D1-3/A1           ;restore registers with job data
+                   MOVE.L   A0,(A4)                ;enter address of header in job table
+                   CMP.W    SV.JBMAX(A6),D7        ;is job number > largest to date ?
+                   BLS.S    JBMAXOK                ;jump forward if not otherwise
+                   MOVE.W   D7,SV.JBMAX(A6)        ;update new maximum job number
+
+   Clear the job header from JB.START onwards.
+
+0528 JBMAXOK       ADDQ.W   #4,A0                  ;A0 points at start of header
+                   MOVEQ    #24,D0                 ;total of 100 bytes to clear
+052C CLRHEADR      CLR.L    (A0)+                  ;clear a long word and point at next one
+                   DBF      D0,CLRHEADR
+
+ A0 now points at JB_END so reset it so that it points at JB_OWNER.
+
+                   SUBA.W   #$60,A0                ;A0 points at start of header + 8
+                   MOVE.L   D1,(A0)                ;set JB_OWNER to owner job's ID
+                   ADDQ.W   #8,A0                  ;A0 points at JB_TAG
+                   SWAP     D7                     ;move job tag field into view
+                   MOVE.W   SV.JBTAG(A6),D7        ;set to latest job tag
+                   MOVE.W   D7,(A0)                ;insert into JB_TAG
+                   SWAP     D7                     ;move job number back into line
+                   ADDQ.W   #1,SV.JBTAG(A6)        ;increment job tag for next time
+
+                   MOVE.L   SV.TRAPV(A6),JB.TRAPV - 16(A0)      ;use owners table
+
+                   ADDA.W   #$40,A0                ;A0 points at variable JB_A4
+
+  Set initial contents of register storage area starting at JB_A4.
+
+                   MOVE.L   D2,(A0)+               ;set to value on entry to TRAP
+                   ADD.L    D2,D3                  ;form length of data + code space
+                   MOVE.L   D3,(A0)+               ;set JB_A5 to length
+                   MOVEQ    #$10,D0
+                   ADD.L    A0,D0                  ;D0 points at start of job area
+                   MOVE.L   D0,(A0)+               ;set JB_A6 to start of job
+                   ADD.L    D0,D3                  ;D3 points at end of job area for stack
+                   EXG      D3,A0
+                   CLR.L    -(A0)                  ;push zero value onto stack
+                   EXG      D3,A0
+                   MOVE.L   D3,(A0)                ;set JB_A7 to new top of stack
+                   ADDQ.W   #6,A0                  ;A0 points at JB_PC
+                   MOVE.L   A1,D3                  ;and D3 points at start address specified
+                   BEQ.S    NOSTART                ;branch if no address given
+                   MOVE.L   D3,D0                  ;copy start of job area to D0
+
+   If no start address given then use start of code area.
+
+0570 NOSTART       MOVE.L   D0,(A0)                ;set JB_PC to address
+                   MOVE.L   D0,JB.START-$62(A0)
+                   MOVEA.L  D0,A0                  ;A0 points at this address
+                   MOVEQ    #0,D0                  ;signal "no errors"
+057A EXIT_CJB      MOVEM.L  (A7)+,D1-3/A1-4        ;restore registers
+                   MOVE.L   D7,D1                  ;copy job number
+                   BRA      CHKSBIT
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=MT_RJOB         REMOVE A JOB               (TRAP #1 WITH D0 = $04)           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D1.L     job ID (-1 if current)                              ³
+³                 D3.L     error code to be passed to job                      ³
+³                                                                              ³
+³EXIT:            D1,D2,D3,A0,A1,A2 and A3 corrupted                           ³
+³                                                                              ³
+³ERRORS:          ERR.NC   job is active                                       ³
+³                 ERR.NJ   invalid job ID                                      ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   Removes a job and its subsiduaries from the transient program area if the
+   job is inactive. The status of the subsiduary jobs is irrelevant.
+
+0584 MT_RJOB       JSR      CHKJBID(PC)            ;check job ID, A0 points at header on exit
+                   MOVE.L   D1,D0                  ;copy ID to D0
+058A L0058A        TST.B    JB.PRINC(A0)           ;check priority (0 if inactive)
+                   BNE      EXIT_REM               ;exit immediately if job active
+                   JSR      FINDSUBS(PC)           ;find first job owned by this one
+                   TST.L    D1                     ;end if this branch ?
+                   BNE.S    L0058A                 ;check next branch of job tree if so
+                   MOVE.L   D0,D1                  ;reset job ID for force removal
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=MT_FRJOB        FORCE REMOVE A JOB         (TRAP #1 WITH D0 = $05)           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D1.L     job ID (-1 if current job)                          ³
+³                 D3.L     error code to be passed to job                      ³
+³                                                                              ³
+³EXIT:            D1,D2,D3,A0,A1,A2 and A3 corrupted                           ³
+³                                                                              ³
+³ERRORS:          ERR.NJ   invalid job ID                                      ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   Removes a job and its subsiduaries from the transient program area even if
+   the job is active. The status of the subsiduary jobs is irrelevant. TRAP
+   handler alters registers so that A6 now points at system variables.
+
+059C MT_FRJOB      JSR      CHKJBID(PC)            ;check job ID, A0 points at header on exit
+                   MOVE.L   D1,D0                  ;save job ID and check if SUPERBASIC
+                   BEQ      EXIT_REM               ;exit if so or job ID invalid
+
+   Traverse job tree forwards and mark each subsiduary job found by setting the
+   MSB of the job table entry to 1 which corresponds to an invalid address (it
+   is normally zero).
+
+                   MOVEA.W  D1,A1                  ;copy job number to A1
+                   ADDA.W   A1,A1                  ;form offset into table from job number
+                   ADDA.W   A1,A1
+                   ADDA.L   SV.JBBAS(A6),A1        ;add to start of job table
+05B0 MARKJOB       ADDQ.B   #1,(A1)                ;set top byte to 1 to mark job
+                   JSR      FINDSUBS(PC)           ;get next job in tree
+                   TST.L    D1                     ;end of branch ?
+                   BNE.S    MARKJOB                ;mark this job and find rest
+                   SF       -(A7)                  ;signal "current job not cleared"
+
+   All the jobs owned by one to be removed have been found so start the process
+   of removing the subsiduary jobs by traversing tree again.
+
+                   MOVEQ    #0,D1                  ;reset job number to 0
+                   MOVEA.L  SV.JBBAS(A6),A1        ;A1 points at job table
+05C2 CHKJOBS       ADDQ.W   #4,A1                  ;ignore first job
+                   ADDQ.W   #1,D1                  ;increment job number
+                   CMP.W    SV.JBMAX(A6),D1        ;job number > than maximum to date ?
+                   BHI      CHKCURNT               ;exit if so
+                   TST.B    (A1)                   ;is it a subsiduary job (= 1 if so)
+                   BLE.S    CHKJOBS                ;check next entry in table if not
+                   SF       (A1)                   ;restore entry to old value
+                   MOVEA.L  (A1),A0                ;A0 points at header
+                   SWAP     D1                     ;move job tag field into line
+                   MOVE.W   JB.TAG(A0),D1          ;set to job tag of owner
+                   SWAP     D1                     ;swap back fields back
+                   CMPA.L   SV.JBPNT(A6),A1        ;is it the current job ?
+                   BNE.S    NOTCURNT               ;jump forward if not
+                   ST       (A7)                   ;signal "current job cleared"
+05E6 NOTCURNT      TST.B    JB.WFLAG(A0)           ;bit 7 set if another job waiting
+                   BEQ.S    NOTWAIT                ;jump forward if not waiting
+                   MOVE.L   JB.WJOB(A0),D0         ;get ID of waiting job
+                   EXG      D0,D1                  ;save ID
+                   JSR      CHKJBNO(PC)            ;check ID of waiting job
+                   EXG      D1,D0
+                   BNE.S    NOTWAIT                ;exit if invalid (may have finished)
+                   CMPI.W   #-2,JB.STAT(A0)        ;is job still waiting for I/O ?
+                   BNE.S    NOTWAIT                ;jump forward if not
+                   CLR.W    JB.STAT(A0)            ;signal "not waiting"
+                   MOVE.L   D3,JB.D0(A0)           ;copy error code to waiting job area
+
+   Now check the common heap for any channel definition blocks owned by the job
+   or subsiduary to be removed and reclaim the space.
+
+060A NOTWAIT       MOVEA.L  SV.CHEAP(A6),A0        ;A0 points at start of common heap
+060E CHKBLOCK      CMP.L    CH.OWNER(A0),D1        ;is block owned by this job ?
+                   BNE.S    NOTOWNED               ;branch forward if not
+                   MOVEM.L  D1/D3/A0-1,-(A7)
+                   MOVE.L   CH.RFLAG(A0),D1        ;address to be set if space removed
+                   BEQ.S    NOLOC                  ;branch forward if no location given
+                   MOVEA.L  D1,A1                  ;copy address to D1
+                   ST       (A1)                   ;set the address
+0622 NOLOC         MOVEA.L  CH.DRIVR(A0),A1        ;A1 points at linkage block of channel
+                   LEA      -$18(A1),A3            ;set up relative pointer for routines
+                   MOVEA.L  DEV.CLOS(A1),A1        ;routine to close this channel
+                   JSR      (A1)                   ;call it
+                   MOVEM.L  (A7)+,D1/D3/A0-1
+0634 NOTOWNED      ADDA.L   (A0),A0                ;A0 points at next definition block
+                   CMPA.L   SV.FREE(A6),A0         ;end of common heap reached ?
+                   BLT.S    CHKBLOCK               ;check next definition block if not
+                   MOVEM.L  D1/D3/A1,-(A7)
+                   MOVEA.L  (A1),A0                ;A0 points at area to be reclaimed
+                   JSR      MM_RETPA(PC)           ;reclaim TRNSP of subsiduary
+                   MOVEM.L  (A7)+,D1/D3/A1
+                   ST       (A1)                   ;and finally clear job table entry
+                   BRA      CHKJOBS                ;check next subsiduary job if any
+
+0650 CHKCURNT      TST.B    (A7)+                  ;was the current job cleared ?
+                   BEQ      CLEANUP                ;exit via clean up routine if not
+                   BRA      CHKPOLLM               ;otherwise call the scheduler
+
+065A EXIT_REM      MOVEQ    #ERR.NC,D0             ;signal "not complete"
+                   BRA      CHKSBIT                ;exit via clean up routine
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=FINDSUBS        FIND SUBSIDUARY IN JOB TREE                                  ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D1.L     job ID of parent                                    ³
+³                 A6.L     system variables                                    ³
+³                                                                              ³
+³EXIT:            D1.L     ID of sibling (0 if no subsiduary found)            ³
+³                                                                              ³
+³ERRORS:          none                                                         ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   Trees are probably the most complex of all the standard data structures and
+   QDOS uses a slightly non-standard implementation of them. Basically each
+   item in a tree should have pointers to what is known as its children and each
+   child in turn contains pointers to its children. In QDOS the pointers
+   refered to here point to the parent from the child instead of to the child
+   from the parent and in practise, this makes finding items in a tree of this
+   type much more difficult. The reason it is used however is simply to preserve
+   space since in the standard approach there must be one pointer for every
+   possible child. For a binary tree this would be 2, for denary tree this would
+   be 10 etc. By adopting the scheme used here only one pointer is required
+   regardless of the number of children. The pointer used is actually the job ID
+   of the owner or parent job.
+
+0660 FINDSUBS      MOVE.L   D1,D2                  ;copy ID to D2
+                   MOVEQ    #0,D1                  ;start with job number 0
+0664 CHKENTRY      ADDQ.W   #1,D1                  ;increment job number (ignore job 0)
+                   CMP.W    SV.JBMAX(A6),D1        ;end of branch ?
+                   BGT.S    CHKPARNT               ;if so
+                   BSR.S    GETHEAD                ;A0 points at entry and A1 at header
+                   TST.B    (A1)                   ;entry free ?
+                   BLT.S    CHKENTRY               ;check next entry if so
+                   CMP.L    JB.OWNER(A0),D2        ;subsiduary found ?
+                   BEQ.S    EXIT_FIN               ;finished if so
+                   BRA.S    CHKENTRY               ;check next entry if not
+
+067A CHKPARNT      CMP.W    D2,D0                  ;owned by parent job ?
+                   BEQ.S    NOSUBSID               ;exit if it is
+                   MOVE.W   D2,D1                  ;save ID
+                   BSR.S    GETHEAD                ;get pointer to header
+                   MOVE.L   JB.OWNER(A0),D2        ;get owner ID (ie move up tree)
+                   BRA.S    CHKENTRY               ;check next branch of tree
+
+0688 GETHEAD       MOVEA.W  D1,A1                  ;move ID to A1
+                   ADDA.W   A1,A1                  ;form offset
+                   ADDA.W   A1,A1
+                   ADDA.L   SV.JBBAS(A6),A1        ;add to base of table
+                   MOVEA.L  (A1),A0                ;A0 points at header
+                   RTS
+
+0696 NOSUBSID      MOVEQ    #0,D1                  ;signal "no subsiduary"
+                   RTS
+
+069A EXIT_FIN      SWAP     D1                     ;move job tag field into veiw
+                   MOVE.W   JB.TAG(A0),D1          ;get job tag
+                   SWAP     D1                     ;swap fields again
+                   RTS
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=MT_TRAPV        SET UP RAM EXCEPTION TABLE (TRAP #1 WITH D0 = $07)           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D1.L     job ID (or -1 if current)                           ³
+³                 A1.L     location of table                                   ³
+³                                                                              ³
+³EXIT:            D1.L     job ID                                              ³
+³                 A0.L     start of job header                                 ³
+³                 A1       corrupted                                           ³
+³                 D2,D3,A2 and A3 preserved                                    ³
+³                                                                              ³
+³ERRORS:          ERR.NJ   invalid job ID                                      ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   TRAP handler alters registers so that A6 now points at system variables.
+
+06A4 MT_TRAPV      JSR      CHKJBID(PC)            ;check job ID, A0 points at header on exit
+                   SUBA.W   #$54,A1                ;compensate for vector return address
+                   MOVE.L   A1,SV.TRAPV(A6)        ;current ram vector table
+                   MOVE.L   A1,JB.TRAPV(A0)        ;creating job's ram table
+                   BRA      CLEANUP
+
+2.3 Memory management TRAP handlers.
+
+   The following set of routines are for memory management and implement the
+   basic mechanisms to acheive this result. All off the memory in a QL is under
+   the control of QDOS and every byte is carefully accounted for. If this was
+   not done by QDOS then eventually a user routine would try to use memory which
+   QDOS may subsequently use for something else since it could not be aware of
+   its use by the users routine. By passing complete control over to QDOS this
+   cannot happen unless a user routine does not stick to its allocated memory.
+
+   In more advanced systems, there would be memory management hardware attached
+   designed to prevent even this from occuring. When a job is finished with some
+   space, or the job is to be removed from the system, the space is connected to
+   other similar areas in a long list with pointers in each section to the next
+   section in the list. This is known as a linked list data structure and is a
+   very good way of keeping track of memory in a multitasking operating system.
+
+   Each linked list has a system variable to point at the first entry or in the
+   case where there is no free space, usually at switch on, this pointer often
+   contains a null or zero value and any other value gives the relative
+   displacement to the next entry. The following two pointers are used for
+   free space memory management under QDOS:-
+
+    1. SV.CHPFR first free space in common heap
+    2. SV.TRNFR first free space in transient program area
+
+2.3.1 Common heap.
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=MT_ALLOC        ALLOCATE HEAP SPACE        (TRAP #1 WITH D0 = $0C)           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D1.L     length of space required                            ³
+³                 A0.L     pointer to pointer to space (relative to A6)        ³
+³                                                                              ³
+³EXIT:            D1.L     amount of bytes allocated                           ³
+³                 A0.L     start of area allocated (relative to A6)            ³
+³                 D2,D3,A1,A2 and A3 CORRUPTED                                 ³
+³                                                                              ³
+³ERRORS:          ERR.OM   no free space large enough                          ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   The same mechanisms that apply to QDOS memory management can also be applied
+   to user specified areas of memory. This TRAP allows a user heap which as a
+   section of memory in one of the users data areas, to be set up as an
+   independant structure pointed to, as are the normal areas, by a pointer which
+   must be stored elsewhere by the user.
+
+   Space is allocated in multiples of eight bytes and each block is preceded by
+   two long words. The first long word gives the length, including the header,
+   of the area allocated. The second gives the relative displacement to the next
+   block in the linked list.
+
+   Note that the different blocks may be spaced apart in memory in a random
+   manner and yet be treated as one structure. This is one very important aspect
+   of memory management normally only used in more advanced operating systems
+   such as those for mainframe computers and it is unusual to find it in a home
+   computer.
+
+   TRAP handler alters registers so that A6 now points at system variables and
+   A5 points at saved SUPERBASIC registers.
+
+06B8 MT_ALLOC      ADDA.L   8(A5),A0               ;make A0 absolute by using saved A6
+                   JSR      MM_ALLOC(PC)           ;find the space, A0 points at area on exit
+                   SUBA.L   8(A5),A0               ;make A0 relative again
+                   BRA.S    EXIT_RER
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=MT_LNKFR        RELEASE HEAP SPACE         (TRAP #1 WITH D0 = $0D)           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D1.L     length to link in                                   ³
+³                 A0.L     base of new space (relative to A6)                  ³
+³                 A1.L     pointer to pointer to space (relative to A6)        ³
+³                                                                              ³
+³EXIT             D1,D2,D3,A0,A1,A2 and A3 corrupted                           ³
+³                                                                              ³
+³ERRORS:          none                                                         ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   Links a user heap section back into the users free space linked list. TRAP
+   handler alters registers so that A6 now points at the system variables and
+   A5 points at the saved SUPERBASIC registers.
+
+06C6 MT_LNKFR      ADDA.L   8(A5),A0               ;make A0 and A1 absolute using saved A6
+                   ADDA.L   8(A5),A1
+                   JSR      MM_LNKFR(PC)           ;release the space by linking it in
+                   BRA.S    EXIT_RER               ;to a free space list
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=MT_ALCHP        ALLOCATE COMMON HEAP SPACE (TRAP #1 WITH D0 = $18)           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D1.L     number of bytes required                            ³
+³                 D2.L     owner job ID (-1 if current job)                    ³
+³                                                                              ³
+³EXIT:            D1.L     number of bytes allocated                           ³
+³                 A0.L     base of area allocated (after header)               ³
+³                 D2,D3,A1,A2 and A3 corrupted                                 ³
+³                                                                              ³
+³ERRORS:          ERR.NJ   invalid job ID                                      ³
+³                 ERR.OM   out of memory                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   Memory permitting, space in the common heap is allocated to the nearest
+   multiple of 8 bytes plus the 4 word header. The routine will first of all try
+   to allocate the required space from the free space linked list. If it cannot
+   manage this then the space is allocated at the end of the common heap, eating
+   into the slave block area. The corresponding entries in the slave block table
+   are than set to "unavailable to OS". When any job is removed from the system,
+   all the common heap space that was used by that job is also released for use
+   by other jobs.
+
+06D4 MT_ALCHP      EXG      D2,D1                  ;copy owner ID
+                   JSR      CHKJBID(PC)            ;check job ID, A0 points at header on exit
+                   MOVE.L   D1,-(A7)               ;save ID
+                   MOVEQ    #16,D1                 ;allow for header of 4 long words
+                   ADD.L    D2,D1                  ;calculate total number of bytes
+                   JSR      MM_ALCHP(PC)           ;find the space, A0 points at header on
+                   BNE.S    L00756                 ;and exit if not found
+                   ADDQ.W   #4,A0                  ;ignore length long word
+
+   Note that the following three instructions have a different effect which
+   depends on whether the space is being allocated or released. In the first
+   instance, the address of the routine to release the space is inserted in the
+   appropriate long word of the header. In the second case, because of the
+   action of the close routine, the address of the next free area in the free
+   space linked list, is inserted instead.
+
+06E8 RELEASE       MOVE.L   #RELEASE,(A0)+         ;jump here when space is released
+                   MOVE.L   (A7)+,(A0)+            ;set owner ID long word
+                   CLR.L    (A0)+                  ;and signal "no address to clear"
+                   BRA.S    EXIT_REC               ;A0 now points at base of area after header
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=MT_RECHP        RELEASE COMMON HEAP SPACE  (TRAP #1 WITH D0 = $19)           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A0.L     start of area to be released                        ³
+³                                                                              ³
+³EXIT:            D1,D2,D3,A0,A1,A2 and A3 corrupted                           ³
+³                                                                              ³
+³ERRORS:          none                                                         ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   Will release common heap space as long as A0 is a valid value. The free space
+   is actually linked into the common heap free space linked list and this is
+   pointed to by the QDOS system variable, SV.CHPFR. The other free space linked
+   lists also have their corresponding pointers.
+
+                   ORI.B    #%01110000,D0          ;this instruction appears to be unused
+06F8 MT_RECHP      LEA      -16(A0),A0             ;A0 now points at 4 long word header
+                   JSR      MM_RECHP(PC)           ;release the space
+0700 EXIT_REC      BRA      CLEANUP                ;and exit
+
+2.3.2 Resident Procedure area.
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³!MT_ALRES        ALLOCATE RESPR SPACE       (TRAP #1 WITH D0 = $0E)           ³
+³!MT_RERES        RELEASE RESPR AREA         (TRAP #1 WITH D0 = $0F)           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³=MT_ALRES        ALLOCATE RESIDENT PROCEDURE SPACE                            ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D1.L     number of bytes required                            ³
+³                                                                              ³
+³EXIT:            A0.L     start of area allocated                             ³
+³                 D1,D2,D3,A1,A2 and A3 corrupted                              ³
+³                                                                              ³
+³ERRORS:          ERR.NC   not complete as TRNSP not empty                     ³
+³                 ERR.OM   out of memory                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   This routine allocates space in the resident procedures area provided that
+   the transient program area is empty as jobs cannot be relocated.
+
+   MT_RERES releases the whole area, again as long as TRNSP is empty, in one
+   step but is faulty such that in some cases, more space may in fact be
+   allocated instead of released. Finally, the TRAP handler alters the entry
+   conditions so that A6 now points at the system variables.
+
+0704 MT_ALRES      MOVEA.L  SV.RESPR(A6),A0        ;A0 points at start of RESPR area
+                   CMPA.L   SV.TRNSP(A6),A0        ;is TRNSP empty ?
+                   BNE.S    NOTEMPTY               ;exit immediately if not
+                   CMPI.B   #MT.RERES,D0           ;is it a TRAP call to release area ?
+                   BEQ.S    MT_RERES               ;jump forward if so
+                   TST.L    D1                     ;check amount requested
+                   BLE.S    EXIT_REC               ;and exit if negative or zero
+                   JSR      MM_ALTPA(PC)           ;find the space, A0 points at area on exit
+                   BLT.S    EXIT_REB               ;and exit if out of memory etc
+                   BRA.S    SETPOINT               ;otherwise update the pointers
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=MT_RERES        RELEASE RESIDENT PROCEDURE AREA                              ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           none                                                         ³
+³                                                                              ³
+³EXIT:            D1,D2,D3,A0,A1,A2 and A3 corrupted                           ³
+³                                                                              ³
+³ERRORS:          ERR.NC   TRNSP not empty                                     ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   This is meant to reduce the resident procedure area to zero but due to the
+   action of MM_RETPA, more space can be allocated instead. Note that
+   extensions to SUPERBASIC and the I/O file system may be using this area for
+   pointers and/or links which if corrupted by releasing the space, whould cause
+   the machine to crash when used at a later time. The TRAP is therefore
+   potentially dangerous and should be used with extreme caution.
+
+0720 MT_RERES      MOVE.L   SV.RAMT(A6),D1         ;D1 points at end of RESPR area (top of RAM)
+                   SUB.L    SV.RESPR(A6),D1        ;form its length in bytes
+                   JSR      MM_RETPA(PC)           ;try to release the space
+
+072C SETPOINT      MOVE.L   SV.TRNSP(A6),SV.RESPR(A6)
+                   CLR.L    SV.TRNFR(A6)           ;signal "no free space list for TRNSP"
+                   BRA      CLEANUP
+
+073A NOTEMPTY      MOVEQ    #ERR.NC,D0             ;signal "not complete"
+073C EXIT_RER      BRA.S    EXIT_REB
+
+2.3.3 SuperBASIC area.
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=MT_ALBAS        ALLOCATE BASIC AREA        (TRAP #1 WITH D0 = $16)           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D1.L     length of area required                             ³
+³                 A6.L     usual SUPERBASIC value                              ³
+³                                                                              ³
+³EXIT:            D1.L     length of area allocated                            ³
+³                 A6.L     updated SUPERBASIC pointer                          ³
+³                 A7.L     new user stack pointer                              ³
+³                 D2,D3,A0,A1,A2 and A3 corrupted                              ³
+³                                                                              ³
+³ERRORS:          ERR.OM   out of memory                                       ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+073E MT_ALBAS      JSR      MM_ALBAS(PC)           ;jump forward to proper routine
+                   BRA.S    EXIT_REB
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=MT_REBAS        RELEASE BASIC AREA         (TRAP #1 WITH D0 = $17)           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D1.L     number of bytes to release                          ³
+³                 A6.L     usual SUPERBASIC value                              ³
+³                                                                              ³
+³EXIT:            D1.L     number of bytes released                            ³
+³                 A6.L     updated SUPERBASIC pointer                          ³
+³                 A7.L     new user stack pointer                              ³
+³                 D2,D3,A0,A1,A2 and A3 corrupted                              ³
+³                                                                              ³
+³ERRORS:          none                                                         ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+0744 MT_REBAS      MOVE.L   BV.PFP(A6),-(A7)       ;save relative pointer to top
+                   SUB.L    D1,BV.PFP(A6)          ;reduce by specified amount
+                   JSR      MM_REBAS(PC)           ;release the space
+                   MOVE.L   (A7)+,BV.PFP(A6)       ;restore pointer
+                   BRA.S    EXIT_REB
+
+0756 L00756        ADDQ.W   #4,A7                  ;ignore saved pointer
+0758 EXIT_REB      BRA      CHKSBIT
+
+2.3.4 Device modes.
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=MT_DMODE        SET OR READ DISPLAY MODE   (TRAP #1 WITH D0 = $10)           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D1.B     display mode:                                       ³
+³                                                                              ³
+³                          0  = set mode 512(4)                                ³
+³                          8  = set mode 256(8)                                ³
+³                          -1 = read mode                                      ³
+³                                                                              ³
+³                 D2.B     display type:                                       ³
+³                                                                              ³
+³                          0  = set "monitor" type                             ³
+³                          1  = set "tv" type                                  ³
+³                          -1 = read type                                      ³
+³                                                                              ³
+³EXIT:            D1.B     mode number ( 4 or 8 )                              ³
+³                 D2.B     display type ( 0 or 1 )                             ³
+³                 A4       corrupted                                           ³
+³                 D3,A0,A1,A2 and A3 preserved                                 ³
+³                                                                              ³
+³ERRORS:          none                                                         ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   TRAP handler alters registers so that A6 now points at system variables.
+
+075C MT_DMODE      MOVE.B   SV.MCSTA(A6),D0        ;get copy of master chip status
+                   TST.B    D1                     ;read or write mode ?
+                   BLT      READ_DM                ;jump forward if read required
+                   ANDI.B   #%11110111,D0          ;clear mode bit of status only
+                   ANDI.B   #%00001000,D1          ;and get requested mode
+                   OR.B     D1,D0                  ;then merge together
+                   MOVE.B   D0,SV.MCSTA(A6)        ;update status copy
+                   MOVE.B   D0,MC_STAT             ;and set chip to new mode
+                   MOVE.L   A6,-(A7)               ;save pointer
+                   MOVE.W   #$1FFF,D0              ;length of screen in long words - 1
+
+   Clear the screen to all black.
+
+0780 CLSCREEN      CLR.L    -(A6)                  ;clear the screen
+                   DBF      D0,CLSCREEN
+
+   Now scan through the channel table and redo the colour masks and redraw the
+   windows for all the screen or console channels found.
+
+                   MOVEA.L  (A7)+,A6               ;restore pointer
+                   MOVEA.L  SV.CHBAS(A6),A4        ;A4 points at channel table
+078C L0078C        MOVE.L   (A4)+,D0               ;D0 points at channel definition block
+                   MOVEM.L  D1-6/A0-6,-(A7)        ;save all the general registers
+                   BLT.S    L007EC                 ;jump forward if "not used"
+                   MOVEA.L  D0,A0                  ;copy pointer
+                   CMPI.L   #CON_LB,CH.DRIVR(A0)   ;is it a console channel ?
+                   BNE.S    L007EC                 ;jump forward if not
+                   MOVE.B   D1,-(A7)               ;save requested mode and border width
+                   MOVE.W   SD.BORWD(A0),-(A7)
+                   MOVEQ    #0,D2
+                   JSR      SD_BORDE(PC)           ;set window border
+                   LEA      SD.PMASK(A0),A1        ;A1 points at paper colour mask
+                   LEA      SD.PCOLR(A0),A5        ;and A5 at the paper colour byte
+
+   As the colour masks required for one mode are different for the other then
+   redo the three colour masks using SD_PCOLR,SD_SCOLR and SD_ICOLR.
+
+                   MOVEQ    #2,D0                  ;three bytes to process
+07B6 L007B6        MOVE.B   (A5)+,D1               ;get a colour byte and point at next one
+                   JSR      COLRMASK(PC)           ;redo its corresponding mask
+                   ADDQ.W   #4,A1                  ;point at next mask
+                   DBF      D0,L007B6              ;repeat for next two colour bytes
+
+   A5 now points at SD_BCOLR.
+
+                   JSR      SD_CLEAR(PC)           ;clear the window with new colours
+                   MOVE.B   (A5),D1                ;get border colour byte
+                   MOVE.W   (A7)+,D2               ;and saved border width
+                   JSR      SD_BORDR(PC)           ;set window border
+                   SUBQ.W   #5,A5                  ;A5 points at SD_CATTR
+                   ANDI.B   #0,(A5)                ;clear all the attributes
+
+   Set cursor width to 6 and height to 10.
+
+                   MOVE.L   #$6000A,SD.XINC(A0)
+                   TST.B    (A7)+                  ;check saved mode
+                   BEQ.S    REQ_M4                 ;jump forward if mode 4 requested
+                   BSET     #6,(A5)+               ;signal "double width"
+                   LSL      SD.XINC(A0)            ;and double cursor width
+07E8 REQ_M4        TST.B    (A5)                   ;was cursor active ?
+                   SNE      (A5)                   ;switch it on if not
+07EC L007EC        MOVEM.L  (A7)+,D1-6/A0-6        ;restore registers
+                   CMPA.L   SV.CHTOP(A6),A4        ;end of channel table ?
+                   BLT.S    L0078C                 ;check remaining channels if not
+                   BRA.S    L007FC
+
+07F8 READ_DM       MOVEQ    #%00001000,D1          ;create mask for mode bit
+                   AND.B    D0,D1                  ;extract the bit
+07FC L007FC        TST.B    D2                     ;read or write monitor type ?
+                   BGE.S    WRITE_TY               ;jump if write
+                   MOVE.B   SV.TVMOD(A6),D2        ;read type
+0804 WRITE_TY      MOVE.B   D2,SV.TVMOD(A6)        ;alter (if write)
+                   BRA      CLEANUP
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=MT_IPCOM        SEND IPC COMMAND           (TRAP #1 WITH D0 = $11)           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A3.L     pointer to command                                  ³
+³                                                                              ³
+³EXIT:            D1.B     return parameter                                    ³
+³                 D5 and D7  corrupted                                         ³
+³                 D2,D3,A0,A1,A2 and A3 preserved                              ³
+³                                                                              ³
+³ERRORS:          none                                                         ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+080C MT_IPCOM      MOVEM.L  D4/D6/A0-1/A3,-(A7)    ;save registers
+                   JSR      IPC_CMND(PC)           ;do the command
+                   MOVEM.L  (A7)+,D4/D6/A0-1/A3    ;restore registers
+                   BRA      CLEANUP
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³=MT_BAUD         SET SERIAL PORT BAUD RATE  (TRAP #1 WITH D0 = $12)           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           D1.W     required baud rate                                  ³
+³                                                                              ³
+³EXIT:            D1       corrupted                                           ³
+³                 D2,D3,A0,A1,A2 and A3 preserved                              ³
+³                                                                              ³
+³ERRORS:          ERR.BP   rate not recognised                                 ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   TRAP handler alters registers so that A6 now points at system variables.
+   Search the table of valid baud rates for correct value.
+
+081C MT_BAUD       MOVEM.L  D2/D6/A0-2,-(A7)       ;save registers
+                   LEA      BAUDTABLE(PC),A0       ;A0 points at valid baud rate table
+                   MOVEQ    #7,D2                  ;table has 8 entries
+0826 L00826        CMP.W    (A0)+,D1               ;is a valid mode requested ?
+                   BEQ.S    BAUDOK                 ;exit if ok
+                   DBF      D2,L00826              ;check rest of table if not
+
+   The table has exhausted so the requested mode was not a valid one.
+
+                   MOVEQ    #ERR.BP,D0             ;signal "bad parameter"
+0830 EXIT_BAU      MOVEM.L  (A7)+,D2/D6/A0-2       ;restore registers
+                   BRA      CHKSBIT
+
+0838 BAUDOK        MOVE.L   #1200,D0               ;form 1200/baud + 1 for rate number
+                   DIVU     D1,D0                  ;to be used as a crude timer during
+                   ADDQ.W   #1,D0                  ;transmit interrupts
+                   MOVE.W   D0,SV.TIMOV(A6)        ;value of timeout for serial O/P
+                   ORI.W    #$0700,SR              ;enter user mode and disable interrupts
+                   JSR      IPC_SET(PC)            ;set up command, A1 points at string
+                   LEA      SV.TMODE(A6),A2        ;A2 points at SV_TMODE
+                   ANDI.B   #%11111000,(A2)        ;clear bottom three bits of it
+                   OR.B     D2,(A2)                ;and add in the baud rate number
+                   MOVE.B   (A2),-1(A1)            ;copy to command string
+                   MOVEQ    #$0D,D0                ;IPC command D: "change baud rate"
+                   JSR      IPC_SEND(PC)           ;do command
+                   MOVE.B   D2,D0                  ;copy rate number to D0
+                   JSR      IPC_SEND(PC)           ;finally set the baud rate
+                   ANDI.W   #$F8FF,SR              ;enable interupts
+                   MOVEQ    #0,D0                  ;signal "no errors"
+                   BRA.S    EXIT_BAUD
+
+   Table of valid baud rates.
+
+0870 BAUDTABL      DC.W     75,300,600,1200,2400,4800,9600,19200
+
+2.3.5 Linked lists.
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³!MT_LXINT        LINK IN EXT INT HANDLER    (TRAP #1 WITH D0 = $1A)           ³
+³!MT_LPOLL        LINK IN POLLED TASK        (TRAP #1 WITH D0 = $1C)           ³
+³!MT_LSCHD        LINK IN SCHEDULER TASK     (TRAP #1 WITH D0 = $1E)           ³
+³!MT_LIOD         LINK IN I/O DRIVER         (TRAP #1 WITH D0 = $20)           ³
+³!MT_LDD          LINK IN DIRECTORY DRIVER   (TRAP #1 WITH D0 = $22)           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³=MT_LINK         LINK ITEM INTO LIST                                          ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A0.L     address of link                                     ³
+³                                                                              ³
+³EXIT:            D0 and A1  corrupted                                         ³
+³                 D1,D2,D3,A0,A2,A2 and A3 preserved                           ³
+³                                                                              ³
+³ERRORS:          none                                                         ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   TRAP handler alters registers so that A6 now points at system variables.
+
+0880 MT_LINK       ADD.W    D0,D0                  ;double function number
+                   LEA      4(A6,D0.W),A1          ;A1 points at appropriate linked list
+                   JSR      UT_LINK(PC)            ;link item into list
+                   BRA.S    EXIT_UNL
+
+ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+³!MT_RXINT        UNLINK EXT INT HANDLER     (TRAP #1 WITH D0 = $1B)           ³
+³!MT_RPOLL        UNLINK POLLED TASK         (TRAP #1 WITH D0 = $1D)           ³
+³!MT_RSCHD        UNLINK SCHEDULER TASK      (TRAP #1 WITH D0 = $1F)           ³
+³!MT_RIOD         UNLINK I/O DRIVER          (TRAP #1 WITH D0 = $21)           ³
+³!MT_RDD          UNLINK DIRECTORY DRIVER    (TRAP #1 WITH D0 = $23)           ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³=MT_UNLNK        UNLINK ITEM FROM LIST                                        ³
+ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´
+³ENTRY:           A0.L     address of link to be removed                       ³
+³                                                                              ³
+³EXIT:            D0 and A1  corrupted                                         ³
+³                 D1,D2,D3,A0,A2,A2 and A3 preserved                           ³
+³                                                                              ³
+³ERRORS:          none                                                         ³
+ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+   TRAP handler alters registers so that A6 now points at system variables.
+
+088C MT_UNLNK      ADD.W    D0,D0                  ;double function number
+                   LEA      2(A6,D0.W),A1          ;A1 points at appropriate linked list
+                   JSR      UT_UNLNK(PC)           ;unlink item from list
+0896 EXIT_UNL      BRA      CLEANUP
+
